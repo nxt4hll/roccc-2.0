@@ -1,0 +1,11 @@
+This repository contains both the precompiled distributions, and the source code for the ROCCC project.
+
+Using one of the precompiled distributions is the easiest way to install and use ROCCC. They can be found under the distributions/ folder. We provide 3:
+   OS X     (Snow Leopard, Lion, Mountain Lion, Maverick)
+   Ubuntu   (14.04 Trusty Tahr)
+   CentOS   (5.x, 6.x)
+
+   The source code can be found under the roccc-compiler/ folder, and the compilation steps are outlined in the INSTALL file. Installation from source has only been verified on OS X Snow Leopard, and CentOS 5.9. 
+
+   We recommend that users compile all ROCCC code through Eclipse with the provided plugin instead of through the command line. Source code for the plugin can be found under the eclipse-plugin/ folder, but the JAR files can be found in any precompiled distribution. The plugin requires a very specific setup in the ROCCC installation directory.  We recommend anybody wishing to compile from source to install a precompiled distribution in a separate folder. Then update its bin/ and lib/ folders with the compiled execution files, and object files. This will ensure the install directory is correctly setup.
+
