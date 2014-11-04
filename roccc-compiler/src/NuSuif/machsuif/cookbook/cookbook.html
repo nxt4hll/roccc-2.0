@@ -1,0 +1,984 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>The Machine-SUIF Cookbook</title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+
+           <!-- Omit \clearpage for new source file-->
+<p>
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>The Machine-SUIF Cookbook</a></h1>
+<address><em>Release version 2.02.07.15</em> <br><br>Glenn Holloway and Michael D. Smith <br>{holloway,smith}@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+
+This cookbook contains several complete (runnable) examples of a
+variety of simple Machine-SUIF compiler passes.  Along with the <em>OPI User's Guide</em>, these examples should help you to start writing
+Machine-SUIF optimization passes quickly.  We also provide a target
+library for a very simple machine.  Please feel free to use these
+examples as the starting point for your work.
+<p>
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">Ex1 -- A Simple Pass</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc5">File structure.</a></li>
+      <li><a href="#toc6">Inputs and outputs.</a></li>
+      <li><a href="#toc7">The OPI pass.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc8">Ex2 -- Analyzing an Instruction List</a></li>
+<li><a href="#toc9">Ex3 -- Manipulating an Instruction List</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc10">Description of pass function.</a></li>
+      <li><a href="#toc11">Additions to SUIF-specific files.</a></li>
+      <li><a href="#toc12">Setup.</a></li>
+      <li><a href="#toc13">Finding a register to reserve.</a></li>
+      <li><a href="#toc14">Initializing the note keys.</a></li>
+      <li><a href="#toc15">Building a stack location.</a></li>
+      <li><a href="#toc16">Manipulating the InstrList.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc17">Ex4 -- Operand Mapping</a></li>
+<li><a href="#toc18">Ex5 -- Removing Instructions from an Instruction List</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc19">Removing Operands from an Instruction</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc20">Ex6 -- AnyBody Converters</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc21">Il2Cfg::do_opt_unit.</a></li>
+      <li><a href="#toc22">Cfg2il::do_opt_unit.</a></li>
+      <li><a href="#toc23">AnyBody code in a pass.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc24">Acknowledgments</a></li>
+<li><a href="#toc25">Copyright</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+As stated in our overview document, Machine SUIF is a flexible,
+extensible, and easily-understood infrastructure for constructing
+compiler back ends.  We built Machine SUIF with the philosophy that
+the ``textbook'' portions, i.e. the optimization and analysis passes,
+should be coded in a way that makes them as independent of the
+compiler environment and compilation targets as possible. To achieve
+this goal, we have defined an interface layer that we refer to as the
+<em>Optimization Programming Interface</em> (OPI).  All of the examples
+in this cookbook adhere to this interface.
+<p>
+This cookbook leads you through a number of complete and working
+Machine-SUIF passes.  We start with an extremely simple pass, the
+equivalent of the C ``Hello World'' program.  This example illustrates
+the structure of every Machine-SUIF pass.  We build from there adding
+a few new OPI features in every example.  By the time you have
+completed the last example, you should have enough knowledge to
+understand one of the ``real'' analysis or optimization passes
+distributed with Machine SUIF.  If you are looking for one of our
+<a name="NWDfCAWZ-2">simpler ``real'' passes to investigate next, we encourage you to read</a>
+through the <code>peep</code> pass.  It serves as an good example of how
+to use our control-flow-graph library and our bit-vector dataflow
+classes.
+<p>
+If you think that you have a ``cookbook'' example pass that
+illustrates a particularly tricky concept, please send it to us.
+We'll be happy to include it in this cookbook for the benefit of
+others.
+<p><h2><a name=toc4>Ex1 -- A Simple Pass</a></h2>
+<p>
+The first example in our cookbook simply reads in an Machine-SUIF
+intermediate representation (IR) file and prints the name of each
+procedure in this file.  The main purpose of this example is to
+illustrate the source file structure of a Machine-SUIF pass and
+the nesting of an OPI-pass object within a SUIF-pass object.
+<p>
+<h5><a name=toc5>File structure.</a></h5>
+<p>
+There are five source files in the directory <code>ex1</code>, not including
+the <code>Makefile</code>.  The files <code>ex1.h</code> and <code>ex1.cpp</code> define the
+OPI pass.  Except for the SUIF copyright include, these two files
+are what we call ``substrate independent''; they do not make any
+explicit references to SUIF data structures or functions.
+<p>
+To build a pass that will run under SUIF, we add the three source files
+starting with the prefix <code>suif_</code>.  The file <code>suif_main.cpp</code> is used
+to build the stand-alone program called <code>do_ex1</code>.  To adapt this
+source file for your pass, use a text editor to change all instances of
+<code>ex1</code> to the name of your pass.
+<p>
+The files <code>suif_pass.h</code> and <code>suif_pass.cpp</code> define the SUIF pass
+built as the dynamically loadable library <code>libex1.so</code>.  Adapting
+these files to your purpose again requires changing <code>ex1</code> to your pass
+name throughout.  When copying the file
+<code>ex1/suif_pass.cpp</code>, you may also need to change the list of include
+files and the list of <code>init_&lt;library&gt;</code> calls at the end of
+<code>init_ex1</code>.  Our <code>ex1</code> pass requires only the Machine-SUIF
+<code>machine</code> library.  A pass like <code>peep</code> requires this library along
+with the Machine-SUIF <code>cfg</code> and <code>bvd</code> libraries.  In summary,
+<code>suif_pass.cpp</code> should include and initialize the full set of
+libraries required by your pass.  (Don't forget to list these same
+libraries on the <code>LIBS</code> line in the <code>Makefile</code>.)
+<p>
+For further information about the contents of the SUIF files, please
+see Appendix A in our <em>OPI User's Guide</em>.
+<p>
+
+<h5><a name=toc6>Inputs and outputs.</a></h5>
+<p>
+In addition to whatever command line options you define, the command line
+of a Machine-SUIF pass may end with 1 or 2 file names.  The processing
+of a pass's inputs and outputs adheres to the following rules:
+<p>
+<ol>
+
+<li>If you do not specify any file names on the command line, the
+pass assumes that this is an in-memory pass and that it will receive
+an already-constructed <code>file_set_block</code> containing the input files.
+<p>
+<li>If you specify only a single file name on the command line, the
+pass uses the existence or absence of a <code>file_set_block</code> to determine
+if the file represents an input or output.
+<p>
+<ul>
+
+<li>If the pass receives an already-constructed <code>file_set_block</code>,
+then the file name on the command line is used as the output file.
+<p>
+<li>If no <code>file_set_block</code> exists when this pass starts, the file
+name on the command line is assumed to be an input file, and the
+output IR file is left in a newly-created <code>file_set_block</code>.  This
+option is useful when your pass starts a string of in-memory
+optimization passes, or when the pass simply analyzes an IR file and
+does not change the IR in any way.  This is what <code>do_ex1</code> does.
+<p>
+</ul>
+
+<li>If you specify two file names on the command line, the pass
+assumes that the first file name is the input file and the second is
+where the optimized IR is to be written when the pass completes.
+<p>
+</ol>
+
+If you want your pass to process more than one input file in a single
+command, you must use the scripting feature in SUIF to <code>load</code>
+multiple files into a single <code>file_set_block</code> and then run your pass
+in in-memory mode.  Please note that SUIF does not allow you to
+specify multiple output files.  When you <code>save</code> the
+<code>file_set_block</code> containing multiple files, you can specify only a
+single file name.
+<p>
+With respect to our example pass <code>ex1</code>, once you have compiled <code>ex1</code>
+to create <code>do_ex1</code>, you can run this pass on any Machine-SUIF IR file
+by typing, for example:
+<p>
+<pre>
+    do_ex1 wc.svm
+</pre>
+
+Here <code>wc.svm</code> is the output of <code>do_s2m</code> for the UNIX benchmark
+<code>wc</code>.  Please remember to setup your environment variables as
+described in the Machine-SUIF overview document before compiling or
+<a name="NWD1xE1Kn-3">running any Machine-SUIF pass.</a>
+<p>
+
+<h5><a name=toc7>The OPI pass.</a></h5>
+<p>
+Given that <code>ex1</code> is such a simple pass, the declaration of
+class <code>Ex1</code> is nothing more than the OPI pass interface described
+in our <em>OPI User's Guide</em>.
+<p>
+<pre><a name="NW1xE1Kn-2HM6sZ-1" href="#NWD1xE1Kn-3"><dfn>&lt;class <code>Ex1</code>&gt;=</dfn></a>
+// This defines the substrate-independent OPI class.
+class Ex1 {
+  public:
+    Ex1() { }
+
+    void initialize() { printf(&quot;Running initialize()\n&quot;); }
+    void do_opt_unit(OptUnit*);
+    void finalize() { printf(&quot;Running finalize()\n&quot;); }
+};
+
+</pre><p>
+
+<a name="NWD1xE1Kn-4">All of the work of the optimization pass occurs in </a><code>do_opt_unit</code>.
+Under Machine SUIF, an <code>OptUnit</code> is a SUIF <code>ProcedureDefinition</code>.
+Thus, we just grab the name of the procedure from the procedure
+symbol and print it.
+<p>
+<pre><a name="NW1xE1Kn-2Kzgro-1" href="#NWD1xE1Kn-4"><dfn>&lt;<code>Ex1::do_opt_unit</code>&gt;=</dfn></a>
+void
+Ex1::do_opt_unit(OptUnit *unit)
+{
+    IdString name = get_name(get_proc_sym(unit));
+    printf(&quot;Processing procedure \&quot;%s\&quot;\n&quot;, name.chars());
+}
+</pre><p>
+<h2><a name=toc8><a name="NWD1xhAY6-5">Ex2 -- Analyzing an Instruction List</a></a></h2>
+<p>
+Now that you know how to build and run a Machine-SUIF pass, we will
+now begin to focus on the interesting stuff: what you can do in
+<code>do_opt_unit</code>.  All of the files in this example are identical to
+those in <code>ex1</code> <b>[</b>We have, of course, changed all strings of
+the form <code>ex1</code> to <code>ex2</code>.<b>]</b>  except that we've added some more code
+to <code>do_opt_unit</code>.
+<p>
+<pre><a name="NW1xhAY6-HRHlS-1" href="#NWD1xhAY6-5"><dfn>&lt;<code>Ex2::do_opt_unit</code>&gt;=</dfn></a>
+void
+Ex2::do_opt_unit(OptUnit *unit)
+{
+    IdString name = get_name(get_proc_sym(unit));
+    printf(&quot;Processing procedure \&quot;%s\&quot;\n&quot;, name.chars());
+
+    // get the body of the OptUnit
+    AnyBody *body = get_body(unit);
+
+    // verify that it is an InstrList
+    claim (is_a&lt;InstrList&gt;(body),
+           &quot;expected OptUnit's body in InstrList form&quot;);
+    InstrList *mil = (InstrList *)body;
+
+    printf(&quot; ... has %d total instructions\n&quot;, size(mil));
+
+    // loop through all instructions counting some different kinds
+    int tot_cti = 0, tot_dot = 0, tot_label = 0, tot_other = 0;
+    for (InstrHandle mi_h = start(mil); mi_h != end(mil); ++mi_h) {
+        Instr *mi = *mi_h;
+
+        if (is_cti(mi))         // control-transfer instructions
+            tot_cti++;
+        else if (is_dot(mi))    // assember directives
+            tot_dot++;
+        else if (is_label(mi))  // labels
+            tot_label++;
+        else
+            tot_other++;
+    }
+
+    printf(&quot; ...     %d control-transfer instructions\n&quot;, tot_cti);
+    printf(&quot; ...     %d assembler directives\n&quot;, tot_dot);
+    printf(&quot; ...     %d code labels\n&quot;, tot_label);
+    printf(&quot; ...     %d other instructions\n&quot;, tot_other);
+}
+</pre><p>
+
+After printing the name of the current procedure (as was done in
+<code>ex1</code>), the code above grabs the procedure's body and casts it to an
+<code>InstrList</code>.  Remember that the body of an <code>OptUnit</code> may be in
+several different forms, from a simple list of instructions to many
+separate instruction lists connected by explicit control-flow
+information (i.e., CFG form) to other forms that you may add.
+<p>
+<a name="NWD1xhAY6-6">We can apply several kinds of OPI functions to </a><code>InstrList</code>, and
+we've illustrated a few here.  We use <code>size</code>, which indicates the
+number of total <code>Instr</code> elements in the <code>InstrList</code>, and
+<code>start</code>, which provides us with a handle at the beginning of the
+<code>InstrList</code>.  This handle allows us to iterate through the entire
+<code>Instr</code> sequence and use some of the <code>Instr</code> predicates to collect
+information about the distribution of instruction kinds in this
+procedure.
+<p><h2><a name=toc9>Ex3 -- Manipulating an Instruction List</a></h2>
+<p>
+You should now understand the basic operation and structure of
+a Machine-SUIF pass.  In this and the next several examples, we
+will investigate a more realistic pass and show you how to
+modify the input Machine-SUIF IR.  These examples continue to
+view the body of a procedure (or optimization unit) as a simple
+instruction list.  Other later examples investigate operations
+on other kinds of bodies.
+<p>
+<h5><a name=toc10>Description of pass function.</a></h5>
+<p>
+Suppose that you want to write a pass that takes a register-allocated
+instruction list and rewrites that list to reserve a register.  In
+other words, we will create a memory location that will become the
+``home'' of the contents of the reserved register.  Whenever we
+encounter an instruction that uses the reserved register, we will have
+to load it with the contents of our memory location.  When an
+instruction writes the reserved register, we will have to store the
+result into our memory location.  Once this has been done, we are
+free to use the reserved register for our own purposes anywhere
+between the program's uses of the reserved register.  You might, for
+example, wish to do this to prepare an instruction list for
+instrumentation by a profiler.
+<p>
+We will assume that the pass is only run after register allocation,
+and we will provide the user with the option of specifying a specific
+register to reserve.
+<p>
+
+<h5><a name=toc11>Additions to SUIF-specific files.</a></h5>
+<p>
+The files <code>suif_main.cpp</code>, <code>suif_pass.h</code>, and <code>suif_pass.cpp</code>
+are largely unchanged from our previous examples.  We added a small
+amount of code to the <code>Ex3SuifPass</code> methods <code>initialize</code> and
+<code>parse_command_line</code> so that we could grab the user-specified
+reserved register name, if one was supplied.  We refer you to the SUIF
+documentation to learn more about the specification and processing of
+<a name="NWD1xhAWt-7">command line options in SUIF.</a>
+<p>
+
+<h5><a name=toc12>Setup.</a></h5>
+<p>
+Below, we present the declaration of class <code>Ex3</code>.  It is the same
+as the trivial OPI class declarations that you've seen previously, except
+for the fact that we've included a few instance variables.
+<p>
+<pre><a name="NW1xhAWt-2HMDyJ-1" href="#NWD1xhAWt-7"><dfn>&lt;class <code>Ex3</code>&gt;=</dfn></a>
+class Ex3 {
+  public:
+    Ex3() { }
+
+    void initialize();
+    void do_opt_unit(OptUnit*);
+    void finalize();
+
+    // set pass options
+    void set_reserved_reg(IdString n)   { reserved_reg_name = n; }
+
+  protected:
+    // pass-option variables
+    IdString reserved_reg_name; // name of register to reserve (optional)
+
+    // initialization variables
+    int reserved_reg;           // its abstract number
+    TypeId reserved_reg_type;   // its generic type
+    Opnd reserved_reg_opnd;     // its register operand
+
+    // markers for inserted instructions
+    NoteKey k_reserved_reg_load;
+    NoteKey k_store_reserved_reg;
+};
+
+</pre><p>
+
+Most of the variables deal with properties or IR objects related
+to the reserved register.  The variables <code>k_reserved_reg_load</code> and
+<code>k_store_reserved_reg</code> declare new <code>NoteKey</code> variables for use by
+this pass in its annotations.
+<p>
+
+<h5><a name=toc13>Finding a register to reserve.</a></h5>
+<p>
+<a name="NWD1xhAWt-8">The </a><code>initialize</code> method of the class <code>Ex3</code> identifies the register
+we wish to reserve, and it builds several IR components related to
+this choice.  The abstract register number for the register that we
+wish to reserve is a simple <code>int</code>.  If the user specified a
+particular register by name, we use the <code>reg_lookup</code> function to
+determine the abstract number corresponding to this register name.
+Note that the user should be aware of the target architecture because
+the name is target dependent.
+<p>
+<pre><a name="NW1xhAWt-2Tt8pg-1" href="#NWD1xhAWt-8"><dfn>&lt;set <code>reserved_reg</code>&gt;=</dfn></a>
+    // determine register to reserve
+    int reserved_reg = -1;
+    if (reserved_reg_name != empty_id_string) {
+        // get abstract register number for user-specified reg name
+        reserved_reg = reg_lookup(reserved_reg_name.chars());
+
+    } else {
+        // Since the user didn't specify a register to reserve, we use
+        // the first temporary (caller-save) register.
+        const NatSet *caller_saves = reg_caller_saves();
+        claim(!caller_saves-&gt;is_empty(),
+              &quot;No caller-save regs and so nothing to do&quot;);
+        reserved_reg = caller_saves-&gt;iter().current();
+    }
+
+</pre><p>
+
+On the other hand, if the user did not specify a register name on the
+command line, the pass chooses one of the caller-saved registers.  The
+OPI function <code>reg_caller_saves</code> returns a pointer to a <code>NatSet</code>
+containing the abstract register numbers of all registers obeying this
+convention.  If the set is empty, we abort the pass.  Otherwise, we
+simply choose the first one that we find and make it the reserved
+register.
+<p>
+<a name="NWD1xhAWt-9">To create a register operand for this register number, Machine SUIF</a>
+requires a <code>TypeId</code>.  This <code>TypeId</code> describes the type of the data
+in the register.  Since we're simply going to spill and reload the
+contents of this register as an untyped bit pattern, we could define
+<code>reserved_reg_type</code> as some void type.  The code below is a bit more
+intelligent (mostly for illustrative purposes) in that it queries the
+width of the reserved register and then sets <code>reserved_reg_type</code> to
+the type for an unsigned integral value of that width.
+<p>
+<pre><a name="NW1xhAWt-3JfgOu-1" href="#NWD1xhAWt-9"><dfn>&lt;set <code>reserved_reg_type</code>&gt;=</dfn></a>
+    // inspect reg width to get a generic type for this register
+    int sz = reg_width(reserved_reg);
+    switch (sz) {
+      case  8: reserved_reg_type = type_u8;  break;
+      case 16: reserved_reg_type = type_u16; break;
+      case 32: reserved_reg_type = type_u32; break;
+      case 64: reserved_reg_type = type_u64; break;
+      default:
+        claim(false, &quot;unexpected register width = %d&quot;, sz);
+    }
+
+</pre><p>
+
+<a name="NWD1xhAWt-A">Given a register number and a </a><code>TypeId</code>, we can now build the hard
+register operand <code>reserved_reg_opnd</code>.
+<p>
+<pre><a name="NW1xhAWt-kofx4-1" href="#NWD1xhAWt-A"><dfn>&lt;set <code>reserved_reg_opnd</code>&gt;=</dfn></a>
+    // build a hard register operand
+    reserved_reg_opnd = opnd_reg(reserved_reg, reserved_reg_type);
+
+</pre><p>
+
+
+<h5><a name=toc14><a name="NWD1xhAWt-B">Initializing the note keys.</a></a></h5>
+<p>
+The last thing done in <code>Ex3::initialize</code> is to define the values of
+our pass's <code>NoteKey</code>s.
+<p>
+<pre><a name="NW1xhAWt-2K1qwq-1" href="#NWD1xhAWt-B"><dfn>&lt;set the note keys&gt;=</dfn></a>
+    // initialize note key variables for my annotations
+    k_reserved_reg_load = &quot;reserved_reg_LOAD&quot;;
+    k_store_reserved_reg = &quot;STORE_reserved_reg&quot;;
+</pre><p>
+
+You should consider the type <code>NoteKey</code> to be an opaque type.  We
+usually define the value of a <code>NoteKey</code> outside the OPI pass
+that we're writing, since its type depends upon the substrate and may
+change from one substrate to another.  In Machine SUIF, a note key is
+<a name="NWD1xhAWt-C">a string (</a><code>IdString</code>, in particular).
+<p>
+
+<h5><a name=toc15>Building a stack location.</a></h5>
+<p>
+The <code>do_opt_unit</code> routine begins as it did in <code>Ex2</code>.  Before we
+begin walking the instruction list however, we build a stack location
+to store the current contents of the reserved register.
+<p>
+<pre><a name="NW1xhAWt-1w5BW6-1" href="#NWD1xhAWt-C"><dfn>&lt;build a stack location&gt;=</dfn></a>
+    // build a stack location to hold the reserved register's contents
+    VarSym *var_reserved_reg = new_unique_var(reserved_reg_type,
+                                              &quot;_var_reserved_reg&quot;);
+    // build an effective-address operand for var_reserved_reg
+    Opnd ea_var_reserved_reg = opnd_addr_sym(var_reserved_reg);
+
+</pre><p>
+
+The OPI function <code>new_unique_var</code> returns a pointer to a new variable
+symbol of the right type that is local to the current <code>OptUnit</code>.  We
+supply a name (<code>_var_reserved_reg</code>) that will help us to recognize the
+function of this stack location.
+<p>
+Once we have a variable symbol, we can construct an address-symbol
+operand that represents the address of this variable symbol for use
+<a name="NWD1xhAWt-D">in load and store operations.  We often refer to these kinds of</a>
+operands as ``effective addresses'' (ea).
+<p>
+
+<h5><a name=toc16>Manipulating the <code>InstrList</code>.</a></h5>
+<p>
+The loop that walks the instruction list is structured the same way
+as the one that we used in <code>Ex2</code>.
+<p>
+<pre><a name="NW1xhAWt-3uQuzG-1" href="#NWD1xhAWt-D"><dfn>&lt;<code>Ex3</code> walk of <code>InstrList</code>&gt;=</dfn></a>
+    for (InstrHandle h = start(mil); h != end(mil); ++h) {
+        Instr *mi = *h;
+
+        if (is_label(mi) || is_dot(mi) || has_note(mi, k_store_reserved_reg))
+            continue;
+
+        bool found_reserved_reg_as_src = false;
+        <a name="NW1xhAWt-3uQuzG-1-u1" href="#NWD1xhAWt-E"><i>&lt;inspect source operands&gt;</i></a>
+
+        if (found_reserved_reg_as_src) {
+            <a name="NW1xhAWt-3uQuzG-1-u2" href="#NWD1xhAWt-F"><i>&lt;insert load of reserved register&gt;</i></a>
+        }
+
+        bool found_reserved_reg_as_dst = false;
+        <a name="NW1xhAWt-3uQuzG-1-u3" href="#NW1xhAWt-2kC0DV-1"><i>&lt;inspect destination operands&gt;</i></a>
+
+        if (found_reserved_reg_as_dst) {
+            <a name="NW1xhAWt-3uQuzG-1-u4" href="#NWD1xhAWt-G"><i>&lt;insert spill of reserved register&gt;</i></a>
+        }
+    }
+</pre><p>
+
+<a name="NWD1xhAWt-E">The current instruction </a><code>mi</code> is inspected only if it is interesting,
+i.e. it is an active instruction that we didn't insert.  As you will
+see, we will be inserting instructions after as well as before the one
+corresponding to the handle <code>h</code>.
+<p>
+For each active instruction, we inspect its source and destination
+operand list looking for occurrences of the reserved register.  The
+code to perform these inspections is nearly identical.
+<p>
+<pre><a name="NW1xhAWt-xc3ff-1" href="#NWD1xhAWt-E"><dfn>&lt;inspect source operands&gt;=</dfn></a> <b>(<a href="#NWD1xhAWt-D">&lt;-U</a>)</b>
+        for (i = 0; (i &lt; srcs_size(mi) &amp;&amp; !found_reserved_reg_as_src); i++) {
+            Opnd o = get_src(mi, i);
+            found_reserved_reg_as_src = is_reg(o) &amp;&amp; (o == reserved_reg_opnd);
+        }
+
+</pre><pre><a name="NW1xhAWt-2kC0DV-1" href="#NW1xhAWt-2kC0DV-1"><dfn>&lt;inspect destination operands&gt;=</dfn></a> <b>(<a href="#NWD1xhAWt-D">&lt;-U</a>)</b>
+        for (i = 0; (i &lt; dsts_size(mi) &amp;&amp; !found_reserved_reg_as_dst); i++) {
+            Opnd o = get_dst(mi, i);
+            found_reserved_reg_as_dst = is_reg(o) &amp;&amp; (o == reserved_reg_opnd);
+        }
+
+</pre><p>
+
+<a name="NWD1xhAWt-F">If we find an occurrence of the reserved register in the source</a>
+operand list, we insert a load operation before the current
+instruction.  We use the OPI function <code>opcode_load</code> to find the
+correct target-specific load opcode for the restore operation, and
+we mark this new instruction with one of our flag annotations.
+<p>
+<pre><a name="NW1xhAWt-F1Kdu-1" href="#NWD1xhAWt-F"><dfn>&lt;insert load of reserved register&gt;=</dfn></a> <b>(<a href="#NWD1xhAWt-D">&lt;-U</a> <a href="#NWD1vI83h-I">U-&gt;</a>)</b>
+            Instr *ld_tmp0;
+            ld_tmp0 = new_instr_alm(reserved_reg_opnd,
+                                    opcode_load(reserved_reg_type),
+                                    clone(ea_var_reserved_reg));
+            set_note(ld_tmp0, k_reserved_reg_load, note_flag());
+            insert_before(mil, h, ld_tmp0);
+
+</pre><p>
+
+<a name="NWD1xhAWt-G">For occurrences of the reserved register in the destination operand</a>
+list, we insert a store operation after the current instruction.  This
+instruction is built and marked in an analogous manner.
+<p>
+<pre><a name="NW1xhAWt-4cowse-1" href="#NWD1xhAWt-G"><dfn>&lt;insert spill of reserved register&gt;=</dfn></a> <b>(<a href="#NWD1xhAWt-D">&lt;-U</a> <a href="#NWD1vI83h-I">U-&gt;</a>)</b>
+            Instr *st_tmp0;
+            st_tmp0 = new_instr_alm(clone(ea_var_reserved_reg),
+                                    opcode_store(reserved_reg_type),
+                                    reserved_reg_opnd);
+            set_note(st_tmp0, k_store_reserved_reg, note_flag());
+            insert_after(mil, h, st_tmp0);
+</pre><p>
+
+<a name="NWD1xhAWt-H">Finally, please note that we clone the address-symbol operand</a>
+<code>ea_var_reserved_reg</code> before inserting it into either the
+load or store instruction.  This ensures that each instruction
+has a unique copy of the address operand.  In this way, if later
+pass modifies a component of one of these address operands, we
+will not inadvertently affect the others.  This is necessary
+because some implementations of the OPI (e.g., Machine SUIF)
+define the type <code>Opnd</code> to have reference semantics.
+<p><h2><a name=toc17>Ex4 -- Operand Mapping</a></h2>
+<p>
+The code in Example 3 walked an instruction's operands looking for a
+register operand that matched the one for our reserved register.  An
+astute reader might have noticed a problem with the output of
+<code>do_ex3</code>: it did not identify occurrences of the reserved register
+in address expressions.  This is because address expressions are
+considered operands, and an address-expression operand is never equal
+to a register operand.  To find all occurrences of our reserved
+register in an instruction, we must search not only the instruction's
+<a name="NWD1vI83h-I">operands but also the suboperands of all encountered address</a>
+expressions.  We will accomplish this feat with the use of the OPI
+function <code>map_opnds</code> and the OPI class <code>OpndFilter</code>.
+<p>
+In particular, this example starts with the code from Example 3 and
+makes a just few small modifications to class <code>Ex3</code> and its
+implementations.  We begin by listing the loop that walks over
+the <code>InstrList</code>.
+<p>
+<pre><a name="NW1vI83h-3MCbb-1" href="#NWD1vI83h-I"><dfn>&lt;<code>Ex4</code> walk of <code>InstrList</code>&gt;=</dfn></a>
+    for (InstrHandle h = start(mil); h != end(mil); ++h) {
+        Instr *mi = *h;
+        MyOpndFilter filter(reserved_reg_opnd);
+
+        if (is_label(mi) || is_dot(mi) || has_note(mi, k_store_reserved_reg))
+            continue;
+
+        map_opnds(mi, filter);
+
+        if (filter.found_reserved_reg_as_input()) {
+            <a name="NW1vI83h-3MCbb-1-u1" href="#NWD1xhAWt-F"><i>&lt;insert load of reserved register&gt;</i></a>
+        }
+
+        if (filter.found_reserved_reg_as_output()) {
+            <a name="NW1vI83h-3MCbb-1-u2" href="#NWD1xhAWt-G"><i>&lt;insert spill of reserved register&gt;</i></a>
+        }
+    }
+</pre><p>
+
+This loop is nearly identical to the
+<code><a href="#NWD1xhAWt-D"><i>&lt;<code>Ex3</code> walk of <code>InstrList</code>&gt;</i></a></code>.
+The one important difference is that we have
+replaced the two code snippets
+<code><a href="#NWD1xhAWt-E"><i>&lt;inspect source operands&gt;</i></a></code> and
+<code><a href="#NW1xhAWt-2kC0DV-1"><i>&lt;inspect destination operands&gt;</i></a></code> with a
+call to <code>map_opnds</code>.  Also, the insertion
+of our load and store instructions is now
+protected by Boolean values set in <code>map_opnds</code>.
+Notice that the code to <code><a href="#NWD1xhAWt-F"><i>&lt;insert load of reserved register&gt;</i></a></code>
+and <code><a href="#NWD1xhAWt-G"><i>&lt;insert spill of reserved register&gt;</i></a></code> is the same as
+that which we used in <code>Ex3</code>.
+<p>
+The work to inspect the inputs and outputs of an instruction is done
+<a name="NWD1vI83h-J">by </a><code>filter</code>.  This object is an instance of
+<code><a href="#NWD1vI83h-J"><i>&lt;class <code>MyOpndFilter</code>&gt;</i></a></code>,
+which is a derived class of <code>OpndFilter</code>.  The
+class defines the two flags we need: one indicating that the reserved
+register was seen as an input to this instruction and the other
+indicating that the register was an instruction output.  Instances
+of this class are also initialized with a value indicating the
+register operand to match against.
+<p>
+<pre><a name="NW1vI83h-204u5b-1" href="#NWD1vI83h-J"><dfn>&lt;class <code>MyOpndFilter</code>&gt;=</dfn></a>
+class MyOpndFilter : public OpndFilter {
+  public:
+    MyOpndFilter(Opnd r) : reserved_reg_opnd(r),
+        in_flag(false), out_flag(false) { }
+
+    Opnd operator()(Opnd, InOrOut);
+
+    bool found_reserved_reg_as_input() { return in_flag; }
+    bool found_reserved_reg_as_output() { return out_flag; }
+
+  protected:
+    Opnd reserved_reg_opnd;
+    bool in_flag, out_flag;
+};
+
+<a name="NW1vI83h-204u5b-1-u1" href="#NWD1vI83h-K"><i>&lt;<code>MyOpndFilter::operator()</code>&gt;</i></a>
+</pre><p>
+
+<a name="NWD1vI83h-K">The OPI function </a><code>map_opnds</code> invokes the method
+<code><a href="#NWD1vI83h-K"><i>&lt;<code>MyOpndFilter::operator()</code>&gt;</i></a></code> on each operand and suboperand in
+the instruction.  It indicates whether the operand is an input or an
+output via the formal parameter <code>in_or_out</code>.
+<p>
+<pre><a name="NW1vI83h-3WQnWi-1" href="#NWD1vI83h-K"><dfn>&lt;<code>MyOpndFilter::operator()</code>&gt;=</dfn></a> <b>(<a href="#NWD1vI83h-J">&lt;-U</a>)</b>
+Opnd
+MyOpndFilter::operator()(Opnd opnd, InOrOut in_or_out)
+{
+    if (is_reg(opnd) &amp;&amp; (opnd == reserved_reg_opnd)) {
+        // found a reference to the reserved reg; update flags
+        in_flag  |= (in_or_out == IN);
+        out_flag |= (in_or_out == OUT);
+    }
+
+    return opnd;
+}
+
+</pre><p>
+
+The method returns an <code>Opnd</code> so that you can walk over an
+instruction's operands and conditionally replace some of them.
+Whatever you return replaces the current input operand <code>opnd</code> in the
+instruction.  For this example, we simply return what we were passed
+since we don't want to change any of the instruction's operands.
+<p>
+Finally, you should be aware that address-expression operands can
+<a name="NWD1vI83h-L">appear in either the source or destination operand list.  An</a>
+address-expression operand in the destination list represents a memory
+location where the instruction is going to write a result.  The
+suboperands of an address-expression operand are always considered
+instruction inputs.  It would be incorrect to use the function
+<code>map_dst_opnds</code> and consider an occurrence of the reserved register
+in the destination operand list as unconditionally requiring the
+insertion of a store operation.
+<p>
+<h2><a name=toc18>Ex5 -- Removing Instructions from an Instruction List</a></h2>
+<p>
+To this point, our examples have only inserted instructions.  This
+example demonstrates how to remove safely one or more instructions
+from an instruction list.  In particular, since removing anything in
+<a name="NWD1vI80G-M">C/C++ is always exciting, we'll show you how to do this without</a>
+invalidating your <code>InstrHandle</code>.
+<p>
+The <code>do_opt_unit</code> method of <code>Ex5</code> searches the <code>InstrList</code>
+of an <code>OptUnit</code> for instructions annotated with either our
+<code>k_reserved_reg_load</code> or <code>k_store_reserved_reg</code> flag notes.
+When it finds such an instruction, it calls the OPI function
+<code>remove</code> and deletes the returned instruction.
+<p>
+<pre><a name="NW1vI80G-1tkoJL-1" href="#NWD1vI80G-M"><dfn>&lt;<code>Ex5</code> walk of <code>InstrList</code>&gt;=</dfn></a>
+    for (InstrHandle h = start(mil); h != end(mil); ) {
+        InstrHandle cur_h = h++;        // advance before possible instr removal
+        Instr *mi = *cur_h;
+
+        if (has_note(mi, k_reserved_reg_load) ||
+            has_note(mi, k_store_reserved_reg))
+            delete remove(mil, cur_h);
+    }
+</pre><p>
+
+The <code>for</code> loop is carefully constructed to increment the
+instruction handle <code>h</code> (the loop's induction variable)
+before calling <code>remove</code>.  Because of the implementation
+of <code>InstrHandle</code> in Machine SUIF, we are not guaranteed
+to be able to increment <code>h</code> correctly if we have removed
+the instruction associated with it.
+<p>
+
+<h5><a name=toc19>Removing Operands from an Instruction</a></h5>
+<p>
+Unlike an <code>InstrList</code>, you should view the source and destination
+operand dequences as implemented as arrays.  Even though the OPI
+provides you with equivalents of <code>remove</code>, called <code>remove_src</code> and
+<code>remove_dst</code>, that are able to remove an operand from an operand
+sequence given its handle, we typically do not use these functions.
+They are relatively expensive and are not generally needed.
+<p>
+As an example of where you might use this functionality, consider code
+generation.  During code generation, we change one instruction of
+target <i>X</i> into one or more instructions of target <i>Y</i>.  For
+translations that map one <i>X</i> instruction to one <i>Y</i> instruction, you
+might be tempted to reuse the storage container for the first
+instruction.  For instance, translating a SUIFvm integer AND
+instruction into an Alpha AND instruction requires only that we change
+the opcode from <code>AND</code> to <code>AND</code>.  Both take the same number
+of source and destination operands, and Machine SUIF uses the same
+data structure for both target architectures.
+<p>
+<a name="NWD1vI80G-N">Suppose however that the SUIFvm AND instruction specified three source</a>
+operands while the Alpha AND required only two of these
+operands. <b>[</b>This example is a bit hokey, but we did warn you
+that <code>remove_src</code> was generally not needed.<b>]</b>   During code
+generation, you would want to remove one of the SUIFvm AND source
+operands in addition to changing the opcode.  Instead of this
+approach, we recommend that you construct the Alpha AND instruction
+from the needed components of the SUIFvm AND using the appropriate
+instruction creator function.
+<p><h2><a name=toc20>Ex6 -- <code>AnyBody</code> Converters</a></h2>
+<p>
+This section describes the contents of the two converters associated with 
+class <code>Cfg</code>, a derived class of <code>AnyBody</code>.  If you create a new kind
+of <code>OptUnit</code> body, you should provide two converters like these.
+<p>
+For each converter, we present only the OPI pass method
+<code>do_opt_unit</code>.  The rest of the files in the source directories are,
+except for the pass name strings and the parsing of some command line
+arguments, identical to those explained in <code>Ex1</code>.
+<p>
+<h5><a name=toc21><code><a name="NWD1vC4xr-O">Il2Cfg::do_opt_unit</a></code>.</a></h5>
+<p>
+To convert the body of an <code>OptUnit</code> from an <code>InstrList</code> to a
+<code>Cfg</code>, we invoke the OPI function <code>new_cfg</code>.  This function
+modifies the input <code>InstrList</code> during the <code>Cfg</code> creation.  You can
+think of this as ``recycling'' whatever <code>InstrList</code> contents
+the new <code>Cfg</code> object can use.
+<p>
+<pre><a name="NW1vC4xr-1WsnGx-1" href="#NWD1vC4xr-O"><dfn>&lt;<code>Il2cfg::do_opt_unit</code>&gt;=</dfn></a>
+void
+Il2cfg::do_opt_unit(OptUnit *unit)
+{
+    IdString name = get_name(get_proc_sym(unit));
+    debug(1, &quot;Processing procedure \&quot;%s\&quot;&quot;, name.chars());
+
+    // get the body of the OptUnit
+    AnyBody *orig_body = get_body(unit);
+
+    if (is_kind_of&lt;Cfg&gt;(orig_body)) {
+        // just make sure that the options are correct
+        canonicalize((Cfg*)orig_body, keep_layout,
+                     break_at_call, break_at_instr);
+        return;
+    }
+
+    claim(is_kind_of&lt;InstrList&gt;(orig_body),
+          &quot;expected OptUnit body in InstrList form&quot;);
+
+    // convert input body to a Cfg
+    Cfg *cfg = new_cfg((InstrList*)orig_body, keep_layout,
+                       break_at_call, break_at_instr);
+        
+    // replace original body
+    copy_notes(orig_body, cfg);
+    set_body(unit, cfg);
+
+    if_debug(5)
+        fprint(stderr, cfg, false, true);               // no layout, just code
+
+    // clean up
+    delete orig_body;
+}
+</pre><p>
+
+We explicitly copy the annotations attached to the <code>InstrList</code> to
+the <code>Cfg</code> since we may (in the future) not wish to copy all of the
+annotations on the original <code>AnyBody</code> to the <code>Cfg</code>.  Finally, we
+replace the original body with the new <code>Cfg</code> and delete the
+original body.
+<p>
+You can also use this function to ensure that a body in <code>Cfg</code> form
+has the specific form you want.  For bodies already in <code>Cfg</code> form,
+we invoke the OPI function <code>canonicalize</code> with the user-specified
+<code><a name="NWD1vC4xr-P">Cfg</a></code> options and then return.
+<p>
+
+<h5><a name=toc22><code>Cfg2il::do_opt_unit</code>.</a></h5>
+<p>
+To convert the body of an <code>OptUnit</code> from a <code>Cfg</code> to an
+<code>InstrList</code>, we invoke the OPI function <code>to_instr_list</code>.  As with
+<code>new_cfg</code>, this function modifies the input <code>Cfg</code>.
+<p>
+<pre><a name="NW1vC4xr-4NUl3-1" href="#NWD1vC4xr-P"><dfn>&lt;<code>Cfg2il::do_opt_unit</code>&gt;=</dfn></a>
+void
+Cfg2il::do_opt_unit(OptUnit *unit)
+{
+    IdString name = get_name(get_proc_sym(unit));
+    debug(1, &quot;Processing procedure \&quot;%s\&quot;&quot;, name.chars());
+
+    // get the body of the OptUnit
+    AnyBody *orig_body = get_body(unit);
+
+    if (is_kind_of&lt;InstrList&gt;(orig_body))
+        return;         // nothing to do
+
+    claim(is_kind_of&lt;Cfg&gt;(orig_body),
+          &quot;expected OptUnit body in Cfg form&quot;);
+
+    // print the CFG if debugging verbosely
+    if_debug(5)
+        fprint(stderr, static_cast&lt;Cfg*&gt;(orig_body), false, true);
+
+    // convert input body to an InstrList
+    InstrList *instr_list = to_instr_list(orig_body);
+
+    // replace original body
+    copy_notes(orig_body, instr_list);
+    set_body(unit, instr_list);
+
+    // clean up
+    delete orig_body;
+}
+</pre><p>
+
+This converter ends in the same way as above.  For convenience, it
+quietly leaves an <code>OptUnit</code> body alone if the body is already in
+<code>InstrList</code> form.
+<p>
+
+<h5><a name=toc23><code>AnyBody</code> code in a pass.</a></h5>
+<p>
+As we mentione in <em>The Extender's Guide</em>, it is the responsibility
+of the person stringing together optimization passes to ensure that the
+input needs of a pass are satisfied.  In the <code>do_opt_unit</code> method of
+an OPI optimization pass, we include only the following code for casting
+the <code>OptUnit</code>'s body to the appropriate type.  Note that this example
+assumes that the pass wants the body as a <code>Cfg</code>.
+<p>
+<pre>
+    // get the body of the OptUnit
+    AnyBody *body = get_body(unit);
+
+    <a name="NWD1vC4xr-Q">// verify that it is a Cfg</a>
+    claim (is_a&lt;Cfg&gt;(body),
+           &quot;expected OptUnit's body in Cfg form&quot;);
+    Cfg *cfg = (Cfg *)body;
+</pre>
+
+When done, this pass writes the <code>OptUnit</code> body as a <code>Cfg</code>.  It
+is not expected that an individual pass would convert the body back to
+a ``standard'' form.
+<p><h2><a name=toc24>Acknowledgments</a></h2>
+<p>
+This work was supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).  We also gratefully
+<a name="NWD48cQ5P-R">acknowledge the generous support of this research by Advanced Micro</a>
+Devices, Compaq, Digital Equipment, Hewlett-Packard, International
+Business Machines, Intel, and Microsoft.
+<p>
+
+
+<h2><a name=toc25>Copyright</a></h2>
+All of our code is protected by the following copyright notice.
+<p>
+<pre><a name="NW48cQ5P-23xQrt-1" href="#NWD48cQ5P-R"><dfn>&lt;Machine-SUIF copyright&gt;=</dfn></a>
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard College
+
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the &quot;machine/copyright.h&quot; include file.
+*/
+</pre><p>
+
+
+<!-- Make \end{document} a chunk by itself to allow cross-reference info-->
+<!-- to be dumped in before it (noweave -delay).-->
+<a name="NWD48cQ5P-S">*</a>
+
+
+
+
+<ul>
+<li><a href="#NWD1vC4xr-P"><i>&lt;<code>Cfg2il::do_opt_unit</code>&gt;</i></a>: <a href="#NWD1vC4xr-P">D1</a>
+<li><a href="#NWD1xE1Kn-4"><i>&lt;<code>Ex1::do_opt_unit</code>&gt;</i></a>: <a href="#NWD1xE1Kn-4">D1</a>
+<li><a href="#NWD1xhAY6-5"><i>&lt;<code>Ex2::do_opt_unit</code>&gt;</i></a>: <a href="#NWD1xhAY6-5">D1</a>
+<li><a href="#NWD1xhAWt-D"><i>&lt;<code>Ex3</code> walk of <code>InstrList</code>&gt;</i></a>: <a href="#NWD1xhAWt-D">D1</a>
+<li><a href="#NWD1vI83h-I"><i>&lt;<code>Ex4</code> walk of <code>InstrList</code>&gt;</i></a>: <a href="#NWD1vI83h-I">D1</a>
+<li><a href="#NWD1vI80G-M"><i>&lt;<code>Ex5</code> walk of <code>InstrList</code>&gt;</i></a>: <a href="#NWD1vI80G-M">D1</a>
+<li><a href="#NWD1vC4xr-O"><i>&lt;<code>Il2cfg::do_opt_unit</code>&gt;</i></a>: <a href="#NWD1vC4xr-O">D1</a>
+<li><a href="#NWD1vI83h-K"><i>&lt;<code>MyOpndFilter::operator()</code>&gt;</i></a>: <a href="#NWD1vI83h-J">U1</a>, <a href="#NWD1vI83h-K">D2</a>
+<li><a href="#NWD1xhAWt-C"><i>&lt;build a stack location&gt;</i></a>: <a href="#NWD1xhAWt-C">D1</a>
+<li><a href="#NWD1xE1Kn-3"><i>&lt;class <code>Ex1</code>&gt;</i></a>: <a href="#NWD1xE1Kn-3">D1</a>
+<li><a href="#NWD1xhAWt-7"><i>&lt;class <code>Ex3</code>&gt;</i></a>: <a href="#NWD1xhAWt-7">D1</a>
+<li><a href="#NWD1vI83h-J"><i>&lt;class <code>MyOpndFilter</code>&gt;</i></a>: <a href="#NWD1vI83h-J">D1</a>
+<li><a href="#NWD1xhAWt-F"><i>&lt;insert load of reserved register&gt;</i></a>: <a href="#NWD1xhAWt-D">U1</a>, <a href="#NWD1xhAWt-F">D2</a>, <a href="#NWD1vI83h-I">U3</a>
+<li><a href="#NWD1xhAWt-G"><i>&lt;insert spill of reserved register&gt;</i></a>: <a href="#NWD1xhAWt-D">U1</a>, <a href="#NWD1xhAWt-G">D2</a>, <a href="#NWD1vI83h-I">U3</a>
+<li><a href="#NW1xhAWt-2kC0DV-1"><i>&lt;inspect destination operands&gt;</i></a>: <a href="#NWD1xhAWt-D">U1</a>, <a href="#NW1xhAWt-2kC0DV-1">D2</a>
+<li><a href="#NWD1xhAWt-E"><i>&lt;inspect source operands&gt;</i></a>: <a href="#NWD1xhAWt-D">U1</a>, <a href="#NWD1xhAWt-E">D2</a>
+<li><a href="#NWD48cQ5P-R"><i>&lt;Machine-SUIF copyright&gt;</i></a>: <a href="#NWD48cQ5P-R">D1</a>
+<li><a href="#NWD1xhAWt-8"><i>&lt;set <code>reserved_reg</code>&gt;</i></a>: <a href="#NWD1xhAWt-8">D1</a>
+<li><a href="#NWD1xhAWt-A"><i>&lt;set <code>reserved_reg_opnd</code>&gt;</i></a>: <a href="#NWD1xhAWt-A">D1</a>
+<li><a href="#NWD1xhAWt-9"><i>&lt;set <code>reserved_reg_type</code>&gt;</i></a>: <a href="#NWD1xhAWt-9">D1</a>
+<li><a href="#NWD1xhAWt-B"><i>&lt;set the note keys&gt;</i></a>: <a href="#NWD1xhAWt-B">D1</a>
+</ul>
+</body></html>
+

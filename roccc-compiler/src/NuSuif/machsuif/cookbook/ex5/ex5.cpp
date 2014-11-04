@@ -1,0 +1,66 @@
+/* file "ex5/ex5.cpp" */
+
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard College
+
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the "machine/copyright.h" include file.
+*/
+
+#include <machine/copyright.h>
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma implementation "ex5/ex5.h"
+#endif
+
+#include <machine/machine.h>
+
+#include "ex5.h"
+
+#ifdef USE_DMALLOC
+#include <dmalloc.h>
+#define new D_NEW
+#endif
+
+void
+Ex5::initialize()
+{
+    printf("Running initialize()\n");
+
+    // initialize note key variables for my annotations
+    k_reserved_reg_load = "reserved_reg_LOAD";
+    k_store_reserved_reg = "STORE_reserved_reg";
+}
+
+void
+Ex5::do_opt_unit(OptUnit *unit)
+{
+    IdString name = get_name(get_proc_sym(unit));
+    printf("Processing procedure \"%s\"\n", name.chars());
+
+    // get the body of the OptUnit
+    AnyBody *body = get_body(unit);
+
+    // verify that it is an InstrList
+    claim (is_a<InstrList>(body),
+           "expected OptUnit's body in InstrList form");
+    InstrList *mil = (InstrList *)body;
+
+    for (InstrHandle h = start(mil); h != end(mil); ) {
+	InstrHandle cur_h = h++;	// advance before possible instr removal
+        Instr *mi = *cur_h;
+
+	if (has_note(mi, k_reserved_reg_load) ||
+	    has_note(mi, k_store_reserved_reg))
+	    delete remove(mil, cur_h);
+    }
+}
+
+
+void
+Ex5::finalize()
+{
+    printf("Running finalize()\n");
+}

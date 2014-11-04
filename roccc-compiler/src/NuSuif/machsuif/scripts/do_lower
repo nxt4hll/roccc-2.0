@@ -1,0 +1,54 @@
+#!/bin/sh -f
+
+# Apply lowering transformations to a SUIF intermediate file in preparation
+# for back-end processing.
+#
+# do_lower INPUTFILE OUTPUTFILE
+#
+
+infile="$1"
+outfile="$2"
+
+usage() {
+   echo "Usage: $0 INPUTFILE OUTPUTFILE"
+   exit 1;
+}
+
+if [ -z "$infile" -o -z "$outfile" ]
+then
+    usage
+fi
+
+me=`basename $0`
+tmpdir=`dirname $2`
+
+tmp=$tmpdir/$me$$
+
+status=1
+trap "rm -f $tmp; exit \$status;" 0 1 2 3 15
+
+cat <<EOF > $tmp
+require basicnodes
+require suifnodes
+require cfenodes
+load $infile
+require transforms
+dismantle_field_access_expressions
+dismantle_structured_returns
+compact_multi_way_branch_statements
+dismantle_scope_statements
+dismantle_ifs_and_loops
+flatten_statement_lists
+rename_colliding_symbols
+insert_struct_padding
+insert_struct_final_padding
+set_address_taken
+save $outfile
+EOF
+
+suifdriver -f $tmp
+status=$?
+if [ $status != 0 ]
+   then echo "$0 failed"
+   exit						# trap handler cleans up
+fi

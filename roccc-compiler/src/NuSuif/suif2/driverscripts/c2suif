@@ -1,0 +1,8 @@
+#!/bin/bash 
+
+if [ "$(echo $HOSTNAME)" == 'erson.cs.ucr.edu' ]
+    then c2suif_original $@
+else
+    c2suif_call_erson_v2 $@
+fi
+

@@ -1,0 +1,11 @@
+2007-Jun-13: 
+    * Added MAX2 and MIN2 to replace MAX, and MIN respectively
+    * Added two new opcodes: LAND, BAND to discern between logical and bitwise AND.
+    * Changed Logical OR to LOR and bitwise IOR or XOR to BIOR and BXOR
+    * All above were edited in suifvm/{opcodes.h,cpp, c_printer.cpp, instr.cpp, code_gen.cpp} and s2m/s2m.cpp
+    * added instr_claim to add printing of instruction with assertion failure.  Makes it easier to recognize problems
+
+2007-Jun-14:
+    * Fixed weird problem with machine/problems.h where claim() would not print correct file and linenum if you called another
+      claim() within the assertion code.  I fixed it by implementing a stack which is popped off if the assertion fails and restores
+      the correct filename and linenum. 

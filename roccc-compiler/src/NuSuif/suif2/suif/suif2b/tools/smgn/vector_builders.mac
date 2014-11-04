@@ -1,0 +1,343 @@
+#	===================================
+#	vector
+#	===================================
+
+<def vector_extra_constraints_imp the_type field_id class_name parent_name parent_type>
+  <notice_linefeeds>
+  <let  par_type be [<suitable_par_type the_type.template_part.type_specifications.type_specification>],
+	parent_par_type be [<suitable_par_type parent_type.template_part.type_specifications.type_specification>]>
+	// overrides of parent mthods
+        virtual void append_<field_id>(<parent_par_type> x);
+        virtual void insert_<field_id>(size_t pos,<parent_par_type> x);
+        virtual void replace_<field_id>(size_t pos,<parent_par_type> x);
+	// new methods specialized to this class
+        virtual void append_<field_id>(<par_type> x);
+        virtual void insert_<field_id>(size_t pos,<par_type> x);
+        virtual void replace_<field_id>(size_t pos,<par_type> x);
+  <endlet>
+<enddef>
+
+<def vector_list_extra_constraints_imp the_type field_id class_name parent_name parent_type>
+  <notice_linefeeds>
+  <let  par_type be [<suitable_par_type the_type.template_part.type_specifications.type_specification>],
+	parent_par_type be [<suitable_par_type parent_type.template_part.type_specifications.type_specification>]>
+        // overrides of parent mthods
+        void <class_name>::append_<field_id>(<parent_par_type> x) {</+2>
+	    suif_assert(is_kind_of\<<parent_par_type.identifier>\>(x));
+	    <parent_name>::append_<field_id>(x);
+	    }</-2>
+
+        void <class_name>::insert_<field_id>(size_t pos,<parent_par_type> x) {</+2>
+            suif_assert(is_kind_of\<<parent_par_type.identifier>\>(x));
+	    <parent_name>::insert_<field_id>(pos,x);
+	    }</-2>
+
+        void <class_name>::replace_<field_id>(size_t pos,<parent_par_type> x) {</+2>
+            suif_assert(is_kind_of\<<parent_par_type.identifier>\>(x));
+	    <parent_name>::replace_<field_id>(pos,x);
+	    }</-2>
+
+        // new methods specialized to this class
+
+        virtual void <class_name>::append_<field_id>(<par_type> x) { <parent_name>::append_<field_id>(x);}
+        virtual void <class_name>::insert_<field_id>(size_t pos,<par_type> x) { <parent_name>::insert_<field_id>(pos,x};}
+        virtual void <class_name>::replace_<field_id>(size_t pos,<par_type> x) { <parent_name>::replace_<field_id>(pos,x);}
+  <endlet>
+<enddef>
+
+<def vector_extras_dec field_dec>
+  <notice_linefeeds>
+  <let 	field_id be [<!SING field_dec.identifier>],
+	the_type be field_dec.type_specification.type_spec,
+	virtual  be [<?field_dec.virtual.text virtual >],
+	par_type be [<suitable_par_type the_type.template_part.type_specifications.type_specification>]
+        >
+        <virtual>Iter\<<par_type>\> get_<field_id>_iterator() const;
+	<if (exists field_dec.virtual.text)>  
+        <else>
+          <virtual>void append_<field_id>(<par_type> x);
+    	  <virtual>size_t get_<field_id>_count() const; 
+    	  <virtual>void insert_<field_id>(size_t pos,<par_type> x);
+    	  <virtual>void remove_<field_id>(size_t pos);
+     	  <virtual><par_type> get_<field_id> (size_t pos) const;
+	  <virtual>void replace_<field_id>(size_t pos,<par_type> x);
+        <endif>
+  <endlet>
+<enddef>
+
+<def vector_forwarder trid fid field_dec>
+  <let  field_id be [<!SING field_dec.identifier>],
+	rid be trid.identifier,
+        the_type be field_dec.type_specification.type_spec,
+        virtual  be [<?field_dec.virtual.text virtual >],
+        par_type be [<suitable_par_type the_type.template_part.type_specifications.type_specification>]
+        >
+    <if (equal rid = [append_<field_id>])>
+        void <fproc_name trid>(<par_type> x);
+    <elseif (equal rid = [get_<field_id>_count])>
+        size_t <fproc_name trid>() const;
+    <elseif (equal rid = [insert_<field_id>])>
+        void <fproc_name trid>(size_t pos,<par_type> x);
+    <elseif (equal rid = [remove_<field_id>])>
+        void <fproc_name trid>(size_t pos);
+    <elseif (equal rid = [get_<field_id>])>
+        <par_type> <fproc_name trid>(size_t pos);
+    <elseif (equal rid = [replace_<field_id>])>
+        void <fproc_name trid>(size_t pos,<par_type> x);
+    <endif>
+  <endlet>
+<enddef>
+
+<def vector_forwarder_imp trid fid field_dec class_id>
+  <let  field_id be [<!SING field_dec.identifier>],
+	rid be trid.identifier,
+        the_type be field_dec.type_specification.type_spec,
+        virtual  be [<?field_dec.virtual.text virtual >],
+        par_type be [<suitable_par_type the_type.template_part.type_specifications.type_specification>]
+        >
+    <if (equal rid = [append_<field_id>])>
+        void <class_id>::<fproc_name trid>(<par_type> x) { _<fid>append_<field_id>(x);}
+    <elseif (equal rid = [get_<field_id>_count])>
+        size_t <class_id>::<fproc_name trid>() const {return _<fid>get_<field_id>_count();}
+    <elseif (equal rid = [insert_<field_id>])>
+        void <class_id>::<fproc_name trid>(size_t pos,<par_type> x) { _<fid>insert_<field_id>(_<fid>.begin() + pos,x);}
+    <elseif (equal rid = [remove_<field_id>])>
+        void <class_id>::<fproc_name trid>(size_t pos) { _<fid>remove_<field_id>(pos);}
+    <elseif (equal rid = [get_<field_id>])>
+        <par_type> <class_id>::<fproc_name trid>(size_t pos) {return  _<fid>get_<field_id> (_<fid>.begin + pos);}
+    <elseif (equal rid = [replace_<field_id>])>
+        void <class_id>::<fproc_name trid>(size_t pos,<par_type> x) { _<fid>replace_<field_id>(pos,x);}
+    <endif>
+  <endlet>
+<enddef>
+
+
+<def vector_extras_imp field_dec>
+   <let field_id be [<!SING field_dec.identifier>],
+	plural_field be [<field_dec.identifier>],
+        the_type be field_dec.type_specification.type_spec,
+	temp_type be the_type.template_part.type_specifications.type_specification,
+        par_type be [<suitable_par_type temp_type>],
+	class_id be class_dec.identifier
+	>
+	<notice_linefeeds>
+	<if (exists field_dec.virtual.text)>
+	        void <class_id>::append_<field_id>(<par_type> x)
+			{ suif_assert_message(false,( "attempting to add to virtual field") ); }
+		size_t <class_id>::get_<field_id>_count() const { </+2>
+	 		Iter\<<par_type>\> s_iter = ((<class_id> *)this)->get_<field_id>_iterator();
+			return s_iter.length();
+			}</-2></>
+		void  <class_id>::replace_<field_id>(size_t pos,<par_type> x)
+			{ suif_assert_message(false,( "attempting to replace in virtual field") ); }
+		void <class_id>::insert_<field_id>(size_t pos,<par_type> x)
+			{ suif_assert_message(false,( "attempting to add to virtual field") ); }
+		void <class_id>::remove_<field_id>(size_t pos)
+			{ suif_assert_message(false,( "attempting to add to virtual field") ); }
+		<par_type> <class_id>::get_<field_id> (size_t pos) const
+			{suif_assert_message(false,( "attempting to get element of virtual list" ) );return 0;}
+		# <suitable_par_type the_type.template_part.type_specification>\  
+		# 	<class_id>::get_<field_id>_element(size_t i) { throw 0; }
+	    Iter\<<par_type>\>
+		<class_id>::get_<field_id>_iterator()  const{</+2>
+		return get_aggregate_meta_class()->get_virtual_iterator(this,"<plural_field>");
+		}</-2></>
+	  <else>
+		void <class_id>::append_<field_id>(<par_type> x) {</>
+			_<field_dec.identifier>.push_back(x);
+                         <if ([<owns_object temp_type>])>
+                                if(x)x->set_parent(this);
+			  <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                                _<field_dec.identifier>.back().set_parent(this);
+                          <endif>
+			<if (exists field_dec.notify.text)>
+                    	    x<connector temp_type>notifier(true,this);
+                	<endif>
+
+			}</>
+                size_t <class_id>::get_<field_id>_count() const { return _<field_dec.identifier>.size(); }
+		 # <par_type>\  
+                 #       <class_id>::get_<field_id>_element(size_t i) const { return _<field_dec.identifier>[i]; }
+	 	Iter\<<par_type>\> <class_id>::get_<field_id>_iterator() const { </+2>
+			  static const LString field_name("_<field_dec.identifier>");
+			  FieldDescription* field = ((AggregateMetaClass *)get_meta_class())->get_field_description(field_name);
+			  return new STLIterator\<suif_vector\<<par_type>\> \>( (Address)&_<field_dec.identifier>,field->get_meta_class());
+			  // a very inefficient way to do this?
+			  }</-2></>
+
+		void <class_id>::replace_<field_id>(size_t pos,<par_type> x) {</+2>
+                    suif_assert_message(pos >= 0, ( "Invalid index value" ) );
+                    suif_assert_message(pos < _<field_dec.identifier>.size(), ( "Index too large" ) );
+                    <if ([<owns_object temp_type>])>
+			if (_<field_dec.identifier>[pos])_<field_dec.identifier>[pos]->set_parent(0);
+                    <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+			  _<field_dec.identifier>[pos].set_parent(0);
+                    <endif>
+
+		    <if (exists field_dec.notify.text)>
+			if (_<field_dec.identifier>[pos])_<field_dec.identifier>[pos]<connector temp_type>notifier(false,this);
+			x<connector temp_type>notifier(true,this);
+		    <endif>
+		    _<field_dec.identifier>[pos] = x;
+                   <if ([<owns_object temp_type>])>
+                        if(x)x->set_parent(this);
+                    <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                          _<field_dec.identifier>[pos].set_parent(this);
+                    <endif>
+
+		    }</-2>
+
+		void <class_id>::insert_<field_id>(size_t pos,<par_type> x) {</+2>
+		    suif_assert_message(pos >= 0,( "Invalid index value" ) );
+		    suif_assert_message_on_object(pos <= _<field_dec.identifier>.size(), ( this, "Index %d too large\n", pos) );
+			
+		    _<field_dec.identifier>.insert(_<field_dec.identifier>.begin() + pos,x);
+		   <if ([<owns_object temp_type>])>
+                          if(x)x->set_parent(this);
+                   <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                          _<field_dec.identifier>[pos].set_parent(this);
+                   <endif>
+                   <if (exists field_dec.notify.text)>
+                        x<connector temp_type>notifier(true,this);
+                   <endif>
+
+                   }</-2>
+
+                void <class_id>::remove_<field_id>(size_t pos) {</+2>
+                    suif_assert_message(pos >= 0, ( "Invalid index value" ) );
+                    suif_assert_message(pos < _<field_dec.identifier>.size(),( "Index too large" ) );
+		    <if (exists field_dec.notify.text)>
+                        _<field_dec.identifier>[pos]<connector temp_type>notifier(false,this);
+                    <endif>
+		     <if ([<owns_object temp_type>])>
+                          if(_<field_dec.identifier>[pos])_<field_dec.identifier>[pos]->set_parent(0);
+                     <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                          _<field_dec.identifier>[pos].set_parent(0);
+                     <endif>
+
+		     _<field_dec.identifier>.erase(_<field_dec.identifier>.begin() + pos);
+		     }</-2></>
+
+		<par_type> <class_id>::get_<field_id> (size_t pos) const {</+2>
+                    suif_assert_message(pos >= 0,( "Invalid index value" ) );
+                    suif_assert_message(pos < _<field_dec.identifier>.size(),( "Index too large" ) );
+
+			return _<field_dec.identifier>[pos];
+			}</-2></>
+
+	  <endif>
+	<endlet>
+<enddef>
+
+#	And the print macros
+
+<def vector_print_helper field_id element_type subfield subfield_name>
+    <notice_linefeeds>
+    <type_spec element_type> &item = <subfield>;
+    <if (exists element_type.pointer_qual)>
+        <if (element_type.pointer_qual.text = "owner")>
+            <if (exists is_inbuilt[<element_type.type_spec.identifier>])>
+                  x.start_block(String("_<field_id>[") + String(i) + "]<subfield_name>=");
+                  if(item) x.set_value(*(item));
+                  else x.set_value("NULL");
+                <else>
+                  x.start_block(x.pointer_header(String("_<field_id>[") + String(i) + "]<subfield_name>",item));
+                  if(item)item->print(x);
+                  else x.set_value("NULL");
+                <endif>
+             <else>
+                  x.start_block(String("_<field_id>[") + String(i) + "]");
+                  x.set_value(item);
+             <endif>
+
+           <elseif (exists is_inbuilt[<element_type.type_spec.identifier>])>
+                x.start_block(String("_<field_id>[") + String(i) + "].");
+                x.set_value(item);
+           <else>
+                x.start_block(String("_<field_id>[") + String(i) + "]=");
+                item.print(x);
+           <endif>
+	x.end_block();
+<enddef>
+
+<def vector_print field_dec>
+   <notice_linefeeds>
+   <let the_type be field_dec.type_specification>
+     {</+2>
+     int i = 0;
+
+     <type_spec the_type>::const_iterator iter =<>
+                   _<field_dec.identifier>.begin();
+
+     while (iter != _<field_dec.identifier>.end()) {</+2>
+	<list_print_helper field_dec.identifier the_type.type_spec.template_part.type_specifications.type_specification "(*iter)" "">
+	iter ++;
+	i ++;
+	}</-2>
+      }</-2>
+   <endlet>
+<enddef>
+
+#	and the list meta builder
+
+<def vector_meta_builder the_type>
+
+    <foreach type in the_type.type_spec.template_part.type_specifications.type_specification>
+      <output_descriptor_if_needed type>
+    <endfor>
+
+   STLMetaClass* <meta_name the_type> = mcof->get_stl_meta_class
+	 (String("LIST:<the_type.type_spec.identifier>\<") + 
+	  <meta_name the_type.type_spec.template_part.type_specifications.type_specification>->get_instance_name() + 
+	  String("\>"),
+          new STLDescriptor\< <imp_name the_type.type_spec.identifier>\<<type_spec the_type.type_spec.template_part.type_specifications.type_specification>\> >
+            (<meta_name the_type.type_spec.template_part.type_specifications.type_specification>));</>
+   
+ 
+    <notice_linefeeds>
+   
+<enddef>
+
+#	and the list add_virtual fields builder
+
+<def vector_add_virtual the_class the_type_spec field_id>
+  <let ctype be the_type_spec.template_part.type_specifications.type_specification>
+    <if (exists ctype.pointer_qual.text)>
+      <add_virtual_fields_inner the_class ctype.type_spec, [<field_id>/*]>
+    <else>
+      <add_virtual_fields_inner the_class ctype.type_spec, [<field_id>/*]>
+    <endif>
+  <endlet>
+<enddef>
+
+<def vector_add_virtual_fields_in_clause the_class the_type_spec field_id in_id>  
+  <let ctype be the_type_spec.template_part.type_specifications.type_specification>
+    <if (exists ctype.pointer_qual.text)>
+      <add_virtual_value the_class, in_id, [<field_id>/*]>
+    <else>
+      <add_virtual_value the_class,  in_id, [<field_id>/*]>
+    <endif>
+  <endlet>
+<enddef>
+
+<def vector_delete_all_entries field_dec>
+  <notice_linefeeds>
+  <let  the_type be field_dec.type_specification,
+        temp_type be the_type.type_spec.template_part.type_specifications.type_specification>
+        <if (!([<owns_object temp_type>]))>
+            <endmac>
+        <endif>
+
+        {</+4>
+            <type_spec the_type>::iterator iter =<>
+                   _<field_dec.identifier>.begin();
+
+            while (iter != _<field_dec.identifier>.end()) {</+2>
+                delete (*iter);
+                iter ++;
+                }</-2>
+
+            }</-4>
+   <endlet>
+<enddef>
+

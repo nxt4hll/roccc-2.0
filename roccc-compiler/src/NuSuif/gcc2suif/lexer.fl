@@ -1,0 +1,383 @@
+
+DIGIT [0-9]
+DIGITS {DIGIT}+
+NODENUM "@"{DIGITS}
+SIGNEDNUMBER ("-"|"+")?{DIGITS}
+NUMBERCOLON {DIGITS}":"
+
+REALNUMBER ("-")?(({DIGITS}"."{DIGITS}"e"("+"|"-"){DIGITS})|({DIGITS}.{DIGITS}))
+
+ALPHA [a-zA-Z]
+NUMERIC [0-9]
+WHITESPACE ("\n"|"\t"|" ")
+OTHERCHARACTERS ("."|":"|"_"|"<"|">"|","|"*"|"!"|"="|"/"|"("|")"|"["|"]"|"-")
+IDENTIFIER ({ALPHA}|{NUMERIC}|{OTHERCHARACTERS})+
+BADCHARACTERS ("("|")"|";"|"~"|"&"|"["|"]")
+
+%{
+
+  #include <common/lstring.h>
+  #include <cstdlib>
+  #include <iostream>
+  #include "nodes.h"
+
+  #include "ir.tab.hh"
+
+  using namespace std;
+
+  extern "C" int yywrap() { return 0; }
+  extern "C" int fileno(FILE* fd) ;
+
+%}
+
+%x inHeader
+
+%%
+
+	/* Keywords */
+
+error_mark		     { return ERROR_MARK; }
+identifier_node		     { return IDENTIFIER_NODE; }
+tree_list		     { return TREE_LIST; }
+tree_vec		     { return TREE_VEC; }
+block			     { return BLOCK; }
+offset_type		     { return OFFSET_TYPE; }
+enumeral_type		     { return ENUMERAL_TYPE; }
+boolean_type		     { return BOOLEAN_TYPE; }
+char_type		     { return CHAR_TYPE; }
+integer_type		     { return INTEGER_TYPE; }
+real_type		     { return REAL_TYPE; }
+pointer_type		     { return POINTER_TYPE; }
+reference_type		     { return REFERENCE_TYPE; }
+complex_type		     { return COMPLEX_TYPE; }
+vector_type		     { return VECTOR_TYPE; }
+array_type		     { return ARRAY_TYPE; }
+record_type		     { return RECORD_TYPE; }
+union_type		     { return UNION_TYPE; }
+qual_union_type		     { return QUAL_UNION_TYPE; }
+void_type		     { return VOID_TYPE; }
+function_type		     { return FUNCTION_TYPE; }
+method_type		     { return METHOD_TYPE; }
+file_type		     { return FILE_TYPE; }
+lang_type		     { return LANG_TYPE; }
+integer_cst		     { return INTEGER_CST; }
+real_cst		     { return REAL_CST; }
+complex_cst		     { return COMPLEX_CST; }
+vector_cst		     { return VECTOR_CST; }
+string_cst		     { return STRING_CST; }
+function_decl		     { return FUNCTION_DECL; }
+label_decl		     { return LABEL_DECL; }
+field_decl		     { return FIELD_DECL; }
+var_decl		     { return VAR_DECL; }
+const_decl		     { return CONST_DECL; }
+parm_decl		     { return PARM_DECL; }
+type_decl		     { return TYPE_DECL; }
+result_decl		     { return RESULT_DECL; }
+namespace_decl		     { return NAMESPACE_DECL; }
+translation_unit_decl	     { return TRANSLATION_UNIT_DECL; }
+component_ref		     { return COMPONENT_REF; }
+bit_field_ref		     { return BIT_FIELD_REF; }
+indirect_ref		     { return INDIRECT_REF; }
+align_indirect_ref	     { return ALIGN_INDIRECT_REF; }
+misaligned_indirect_ref	     { return MISALIGNED_INDIRECT_REF; }
+array_ref		     { return ARRAY_REF; }
+array_range_ref		     { return ARRAY_RANGE_REF; }
+obj_type_ref		     { return OBJ_TYPE_REF; }
+exc_ptr_expr		     { return EXC_PTR_EXPR; }
+filter_expr		     { return FILTER_EXPR ; }
+constructor		     { return CONSTRUCTOR; }
+compound_expr		     { return COMPOUND_EXPR; }
+modify_expr		     { return MODIFY_EXPR; }
+init_expr		     { return INIT_EXPR; }
+target_expr		     { return TARGET_EXPR; }
+cond_expr		     { return COND_EXPR; }
+vec_cond_expr		     { return VEC_COND_EXPR; }
+bind_expr		     { return BIND_EXPR; }
+call_expr		     { return CALL_EXPR; }
+with_cleanup_expr	     { return WITH_CLEANUP_EXPR; }
+cleanup_point_expr	     { return CLEANUP_POINT_EXPR; }
+placeholder_expr	     { return PLACEHOLDER_EXPR; }
+plus_expr		     { return PLUS_EXPR; }
+minus_expr		     { return MINUS_EXPR; }
+mult_expr		     { return MULT_EXPR; }
+trunc_div_expr		     { return TRUNC_DIV_EXPR; }
+ceil_div_expr		     { return CEIL_DIV_EXPR; }
+floor_div_expr		     { return FLOOR_DIV_EXPR; }
+round_div_expr		     { return ROUND_DIV_EXPR; }
+trunc_mod_expr		     { return TRUNC_MOD_EXPR; }
+ceil_mod_expr		     { return CEIL_MOD_EXPR; }
+floor_mod_expr		     { return FLOOR_MOD_EXPR; }
+round_mod_expr		     { return ROUND_MOD_EXPR; }
+rdiv_expr		     { return RDIV_EXPR; }
+exact_div_expr		     { return EXACT_DIV_EXPR; }
+fix_trunc_expr		     { return FIX_TRUNC_EXPR; }
+fix_ceil_expr		     { return FIX_CEIL_EXPR; }
+fix_floor_expr		     { return FIX_FLOOR_EXPR; }
+fix_round_expr		     { return FIX_ROUND_EXPR; }
+float_expr		     { return FLOAT_EXPR; }
+negate_expr		     { return NEGATE_EXPR; }
+min_expr		     { return MIN_EXPR; }
+max_expr		     { return MAX_EXPR; }
+abs_expr		     { return ABS_EXPR; }
+lshift_expr		     { return LSHIFT_EXPR; }
+rshift_expr		     { return RSHIFT_EXPR; }
+lrotate_expr		     { return LROTATE_EXPR; }
+rrotate_expr		     { return RROTATE_EXPR; }
+bit_ior_expr		     { return BIT_IOR_EXPR; }
+bit_xor_expr		     { return BIT_XOR_EXPR; }
+bit_and_expr		     { return BIT_AND_EXPR; }
+bit_not_expr		     { return BIT_NOT_EXPR; }
+truth_andif_expr	     { return TRUTH_ANDIF_EXPR; }
+truth_orif_expr		     { return TRUTH_ORIF_EXPR; }
+truth_and_expr		     { return TRUTH_AND_EXPR; }
+truth_or_expr		     { return TRUTH_OR_EXPR; }
+truth_xor_expr		     { return TRUTH_XOR_EXPR; }
+truth_not_expr		     { return TRUTH_NOT_EXPR; }
+lt_expr			     { return LT_EXPR; }
+le_expr			     { return LE_EXPR; }
+gt_expr			     { return GT_EXPR; }
+ge_expr			     { return GE_EXPR; }
+eq_expr			     { return EQ_EXPR; }
+ne_expr			     { return NE_EXPR; }
+unordered_expr		     { return UNORDERED_EXPR; }
+ordered_expr		     { return ORDERED_EXPR; }
+unlt_expr		     { return UNLT_EXPR; }
+unle_expr		     { return UNLE_EXPR; }
+unge_expt		     { return UNGE_EXPR; }
+ungt_expr		     { return UNGT_EXPR; }
+uneq_expr		     { return UNEQ_EXPR; }
+ltgt_expr		     { return LTGT_EXPR ; }
+range_expr		     { return RANGE_EXPR; }
+convert_expr		     { return CONVERT_EXPR; }
+nop_expr		     { return NOP_EXPR; }
+non_lvalue_expr		     { return NON_LVALUE_EXPR; }
+view_convert_expr	     { return VIEW_CONVERT_EXPR; }
+save_expr		     { return SAVE_EXPR; }
+addr_expr		     { return ADDR_EXPR; }
+fdesc_expr		     { return FDESC_EXPR; }
+complex_expr		     { return COMPLEX_EXPR; }
+conj_expr		     { return CONJ_EXPR; }
+realpart_expr		     { return REALPART_EXPR; }
+imagpart_expr		     { return IMAGPART_EXPR; }
+predecrement_expr	     { return PREDECREMENT_EXPR; }
+preincrement_expr	     { return PREINCREMENT_EXPR; }
+postdecrement_expr	     { return POSTDECREMENT_EXPR; }
+postincrement_expr	     { return POSTINCREMENT_EXPR; }
+va_arg_expr		     { return VA_ARG_EXPR; }
+try_catch_expr		     { return TRY_CATCH_EXPR; }
+try_finally_expr	     { return TRY_FINALLY_EXPR; }
+decl_expr		     { return DECL_EXPR; }
+label_expr		     { return LABEL_EXPR; }
+goto_expr		     { return GOTO_EXPR; }
+return_expr		     { return RETURN_EXPR; }
+exit_expr		     { return EXIT_EXPR; }
+loop_expr		     { return LOOP_EXPR; }
+switch_expr		     { return SWITCH_EXPR; }
+case_label_expr		     { return CASE_LABEL_EXPR; }
+resx_expr		     { return RESX_EXPR ; }
+asm_expr		     { return ASM_EXPR ; }
+ssa_name		     { return SSA_NAME ; }
+phi_node		     { return PHI_NODE ; }
+catch_expr		     { return CATCH_EXPR ; } 
+eh_filter_expr		     { return EH_FILTER_EXPR ; }
+scev_known		     { return SCEV_KNOWN ; }
+scev_not_known		     { return SCEV_NOT_KNOWN ; }
+polynomial_chrec	     { return POLYNOMIAL_CHREC ; }
+statement_list		     { return STATEMENT_LIST ; }
+value_handle		     { return VALUE_HANDLE ; }
+tree_binfo		     { return TREE_BINFO ; } 
+with_size_expr		     { return WITH_SIZE_EXPR ; }
+realign_load_expr	     { return REALIGN_LOAD_EXPR ; }
+sizeof_expr		     { return SIZEOF_EXPR ; } 
+arrow_expr		     { return ARROW_EXPR ; }
+alignof_expr		     { return ALIGNOF_EXPR ; }
+expr_stmt		     { return EXPR_STMT; }
+for_stmt		     { return FOR_STMT; }
+while_stmt		     { return WHILE_STMT; }
+do_stmt			     { return DO_STMT; }
+break_stmt		     { return BREAK_STMT; }
+continue_stmt		     { return CONTINUE_STMT; }
+switch_stmt		     { return SWITCH_STMT; }
+stmt_expr		     { return STMT_EXPR; }
+compound_literal_expr	     { return COMPOUND_LITERAL_EXPR ; }
+offset_ref		     { return OFFSET_REF ; }
+ptrmem_cst		     { return PTRMEM_CST ; }
+nw_expr			     { return NW_EXPR ; }
+vec_nw_expr		     { return VEC_NW_EXPR ; }
+dl_expr			     { return DL_EXPR ; }
+vec_dl_expr	             { return VEC_DL_EXPR ; } 
+scope_ref		     { return SCOPE_REF ; }
+member_ref		     { return MEMBER_REF ; }
+type_expr		     { return TYPE_EXPR ; }
+aggr_init_expr		     { return AGGR_INIT_EXPR ; }
+throw_expr		     { return THROW_EXPR ; }
+empty_class_expr	     { return EMPTY_CLASS_EXPR ; }
+baselink		     { return BASELINK ; }
+template_decl		     { return TEMPLATE_DECL ; }
+template_parm_index	     { return TEMPLATE_PARM_INDEX ; }
+template_template_parm	     { return TEMPLATE_TEMPLATE_PARM ; }
+template_type_parm	     { return TEMPLATE_TYPE_PARM ; }
+typename_type		     { return TYPENAME_TYPE ; }
+typeof_type		     { return TYPEOF_TYPE ; }
+bound_template_template_parm { return BOUND_TEMPLATE_TEMPLATE_PARM ; }
+unbound_class_template       { return UNBOUND_CLASS_TEMPLATE ; }
+using_decl	             { return USING_DECL ; }
+using_stmt                   { return USING_STMT ; }
+default_arg		     { return DEFAULT_ARG ; } 
+template_id_expr	     { return TEMPLATE_ID_EXPR ; }
+overload		     { return OVERLOAD ; }
+pseudo_dtor_expr             { return PSEUDO_DTOR_EXPR ; }
+modop_expr		     { return MODOP_EXPR ; }
+cast_expr		     { return CAST_EXPR ; }
+reinterpret_cast_expr	     { return REINTERPRET_CAST_EXPR ; }
+const_cast_expr		     { return CONST_CAST_EXPR ; }
+static_cast_expr	     { return STATIC_CAST_EXPR ; }
+dynamic_cast_expr	     { return DYNAMIC_CAST_EXPR ; }
+dotstar_expr		     { return DOTSTAR_EXPR ; }
+typeid_expr		     { return TYPEID_EXPR ; }
+non_dependent_expr	     { return NON_DEPENDENT_EXPR ; }
+if_stmt			     { return IF_STMT ; }
+binfo 			     { return BINFO ; }
+"0   :"			     { return ZERO; }
+"1   :"			     { return ONE; }
+"2   :"			     { return TWO; }
+"3   :"			     { return THREE; }
+"4   :"			     { return FOUR; }
+"5   :"			     { return FIVE; }
+"8   :"			     { return EIGHT; }
+"9   :"			     { return NINE; }
+"10  :"			     { return TEN; }
+"0:"			     { return ZEROCOLON; }
+"1:"			     { return ONECOLON; }
+"2:"			     { return TWOCOLON; }
+{NODENUM}		     { 
+			       yylval.intValue = atoi(&(yytext[1]));
+			       return NODENUMBER; 
+			     }
+{SIGNEDNUMBER}		     {
+			       yylval.intValue = atoi(yytext); 
+			       return NUMBER; 
+			     }
+{NUMBERCOLON}		     {
+			       /* atoi automatically strips away the colon */
+			       yylval.intValue = atoi(yytext) ;
+			       return NUMBERCOL ;
+			     }
+{REALNUMBER}		     {
+			       yylval.realValue = atof(yytext) ;
+			       return REALCONSTANT ;
+			     }
+"name:"			     { return NAME; }
+"type:"			     { return TYPE; }
+"srcp:"			     { return SRCP; }
+"dlta:"			     { return DLTA; }
+"vcll:"			     { return VCLL; }
+"C"			     { return COP; }
+"args:"			     { return ARGS; }
+"eq"			     { return EQ; }
+"extern"		     { return EXTERN; }
+"struct"		     { return STRUCT; }
+"artificial"		     { return ARTIFICIAL; }
+"public"		     { return PUBLIC; }
+"operator"		     { return OPERATOR; }
+"assign"		     { return ASSIGN; }
+"member"		     { return MEMBER; }
+"private"		     { return PRIVATE; }
+"protected"		     { return PROTECTED; }
+"mutable"		     { return MUTABLE; }
+"class"			     { return CLASS; }
+"virtual"		     { return VIRTUAL; }
+"destructor"		     { return DESTRUCTOR; }
+"undefined"		     { return UNDEFINED; }
+"new"			     { return NEW; }
+"unsigned"		     { return UNSIGNED; }
+"pure"			     { return PURE; }
+"thunk"			     { return THUNK; }
+"ptrmem"		     { return PTRMEM; }
+"static"		     { return STATIC; }
+"null"			     { return NULLTOKEN; }
+"delete"		     { return DELETE; }
+"conversion"		     { return CONVERSION; }
+"ref"			     { return REF; }
+"subs"			     { return SUBS; }
+"global init"		     { return GLOBALINIT;}
+"call"	                     { return CALL; }
+"unsigned char"		     { return STRING; /* BIG HACK!!!! */ }
+"unsigned int"		     { return STRING; /* BIG HACK!!!! */ }
+"short unsigned int"	     { return STRING; /* BIG HACK!!!! */ }
+"end"			     { return END; }
+"prio:"			     { return PRIO; }
+"body:"			     { return BODY; }
+"strg:"			     { return STRG; }
+"lngt:"			     { return LNGT; }
+"size:"			     { return SIZE; }
+"algn:"			     { return ALGN; }
+"retn:"			     { return RETN; }
+"prms:"			     { return PRMS; }
+"argt:"			     { return ARGT; }
+"used:"			     { return USED; }
+"line:"			     { return LINE; }
+"low :"			     { return LOW; }
+"high:"			     { return HIGH; }
+"prec:"			     { return PREC; }
+"min :"			     { return MIN; }
+"max :"			     { return MAX; }
+"valu:"			     { return VALU; }
+"chan:"			     { return CHAN; }
+"qual:"			     { return QUAL; }
+"unql:"			     { return UNQL; }
+"csts:"			     { return CSTS; }
+"ptd :"			     { return PTD; }
+"refd:"			     { return REFD; }
+"clas:"			     { return CLAS; }
+"elts:"			     { return ELTS; }
+"domn:"			     { return DOMN; }
+"vfld:"			     { return VFLD; }
+"flds:"			     { return FLDS; }
+"fncs:"			     { return FNCS; }
+"binf:"			     { return BINF; }
+"scpe:"			     { return SCPE; }
+"cnst:"			     { return CNST; }
+"mngl:"			     { return MNGL; }
+"bpos:"			     { return BPOS; }
+"next:"			     { return NEXT; }
+"decl:"			     { return DECL; }
+"expr:"			     { return EXPR; }
+"cond:"			     { return COND; }
+"then:"			     { return THEN; }
+"else:"			     { return ELSE; }
+"labl:"			     { return LABL; }
+"op"			     { return OP; }
+"fn  :"			     { return FN; }
+"cls :"			     { return CLS;}
+":"			     { return yytext[0]; }
+"clnp"			     { return CLNP; }
+"clnp:"			     { return CLNPCOLON;}
+"begn"			     { return BEGN; }
+"spec"			     { return SPEC; }
+"lshift"		     { return LSHIFT; }
+"base:"			     { return BASE; }
+"bases:" 		     { return BASES ; }
+"stmt:"			     { return STMT; }
+"init:"			     { return INIT; }
+"purp:"			     { return PURP; }
+"dest:"			     { return DEST; }
+"vars:"                      { return VARS; }
+{WHITESPACE}		     { ; }
+{ALPHA}			     { yylval.charValue = yytext[0];
+			       return CHARACTER; }
+{IDENTIFIER}		     { strncpy(yylval.stringValue, yytext, 1023); 
+			       return STRING; }
+
+
+
+";;"			          { BEGIN(inHeader); }
+<inHeader>"-tree-original"        { BEGIN(0); return JUNK; }
+<inHeader>"zEvilEOF"		  { BEGIN(0); return MYEOF; }
+<inHeader>{BADCHARACTERS}	  { ; }
+<inHeader>{IDENTIFIER}		  { ; }
+<inHeader>{WHITESPACE}		  { ; }
+
+
+
+%%

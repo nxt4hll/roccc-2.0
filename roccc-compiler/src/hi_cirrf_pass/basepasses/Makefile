@@ -1,0 +1,6 @@
+PACKAGES = transforms roccc_extra_types roccc_utils control_flow_analysis \
+bit_vector_data_flow_analysis data_dependence_analysis array_transforms \
+global_transforms loop_transforms preprocessing_transforms gcc_preprocessing_transforms \
+utility_transforms jasonOutputPass libraryOutputPass verifyPass fifoIdentification
+
+include $(NCIHOME)/Makefile.std

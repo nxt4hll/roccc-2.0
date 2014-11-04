@@ -1,0 +1,122 @@
+#
+#	Grammar for hoof files
+#
+<description> ::= <modules> 
+
+<inbuilts> ::= <inbuilt> | <inbuilt> <inbuilts>
+
+<inbuilt> ::= inbuilt <identifier> ; |
+
+<modules> ::= <module_spec> | <module_spec> <modules>
+
+<module_spec> ::= module <identifier> "{" <inbuilts> <includes> <cppincludes> <imports> <init_fn_hooks> <declarations> "}"
+
+<includes> ::= <include> | <include> <includes>
+
+<include> ::= include <verbatim> ";" | 
+
+<cppincludes> ::= <cppinclude> | <cppinclude> <cppincludes>
+
+<cppinclude> ::= cppinclude <verbatim> ";" | 
+
+<init_fn_hooks> ::= <init_fn_hook> | <init_fn_hook> <init_fn_hooks>
+
+<init_fn_hook> ::= initialize <identifier>; |
+
+<imports> ::= <import> | <import> <imports>
+
+<import> ::= from <identifier> import <type_list>; | import <identifier>; |
+
+<type_list> ::= <identifier> <type_list> | <identifier>
+
+<declarations> ::= <declaration> | <declaration> <declarations>
+
+<declaration> ::= <construct_declaration> | <value_declaration> | ;
+
+<construct_declaration> ::= <construct_type>  <identifier> <rename> <parent>
+         "{" <construct_parts> <construct_forwarders> <constraints> <member_declarations> <member_definitions> "}" ;
+
+<constraints> ::= <constraint_list> |
+
+<constraint_list> ::= <constraint> | <constraint> <constraint_list>
+
+<constraint> ::= constrain <identifier> to <type_specification> <build_value>;
+	       | constrain <identifier> to <type_specification>;
+
+<construct_forwarders> ::= <cons_forwarders> |
+
+<cons_forwarders> ::= <construct_forwarder> | <construct_forwarder> <cons_forwarders>
+
+<construct_forwarder> ::= from <identifier> forward <proc_list> ";"
+
+<proc_list> ::= <identifier> <as_clause>| <proc_list> <identifier> <as_clause>
+
+<as_clause> ::= as <identifier> |
+
+<construct_type> ::= abstract | concrete
+
+<rename> ::= [ <identifier> ] | 
+
+<parent> ::= : <identifier> |
+
+<construct_parts> ::= <construct_part> | <construct_part> <construct_parts>
+
+<construct_part> ::= <regular_field_declaration> | <friend_declaration> | <alias> |
+
+<alias> ::= alias <access_fcn> <type_specification> <identifier> ; 
+
+<access_fcn>::= <identifier>
+
+<regular_field_declaration> ::= <virtual> <type_specification> 
+        <identifier> <in_clause> <containing_clauses> <implements_clause> <may_be_present> <key_dec> <notify>;
+
+<virtual> ::= virtual | virtual default "{" <verbatim> "}" | 
+
+<notify> ::= notify |
+
+<in_clause> ::= in <identifier> |
+
+<containing_clauses> ::= <containing_clause> | 
+
+<containing_clause> ::= <contains> | <contains> <containing_clause>
+
+<contains> ::= containing <identifier>
+
+<implements_clause> ::= implements <identifier> |
+
+<may_be_present> ::= optional | <default_value> | <build_value> | <omitted> |
+
+<omitted> ::= omitted
+
+<default_value> ::= default "{"<verbatim>"}" 
+
+<key_dec> ::= key |
+
+<build_value> ::= build "{"<verbatim>"}"
+
+<concrete_declaration> ::= concrete <identifier> ;
+
+<type_spec> ::= <identifier> <template_part>
+
+<template_part> ::= "<" <type_specifications> ">" | 
+
+<type_specifications> ::= <type_specification> | <type_specification> "," <type_specifications>
+
+<type_specification> ::= <type_spec> | <type_spec> * <pointer_qual>
+
+<pointer_qual> ::=  owner | reference | definer
+
+<friend_declaration> ::= friend <verbatim> ;
+
+<member_declarations> ::= CPP_DECLARE <verbatim> CPP_DECLARE |
+
+<member_definitions> ::= CPP_BODY <verbatim> CPP_BODY |
+
+<value_declaration> ::= value <identifier> = <clauses> <member_declarations> <member_definitions>;
+
+<forwarders> ::= forward <type_specification> <identifier> <from_clause> |
+
+<from_clause> ::= from <identifier> |
+
+<clauses> ::= <type_specification> <forwarders> | <type_specification> <forwarders> "|" <clauses>
+

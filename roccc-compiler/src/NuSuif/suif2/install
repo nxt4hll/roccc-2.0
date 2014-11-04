@@ -1,0 +1,314 @@
+#!/bin/sh
+
+get_compiler_name()
+    {
+       cname=''
+       case x$1 in
+	x*gcc | x*g++)
+          val=`$1 -v 2>&1 | grep egcs | wc -l`
+	  if [ $val -gt 0 ]
+	     then cname=egcs
+          else
+	     cname=gcc
+	  fi  ;;
+        *CC)
+           if [ $ARCH = "SunOS" ] ; then cname=sun_procompiler ;
+           elif [ $ARCH = "IRIX" ] ; then cname=sgi_c++ ;
+	   fi ;;
+	*) ;;
+	esac
+    }
+
+set_arch()
+    {
+    ARCH=$1
+    }
+
+set_pwd()
+    {
+    PWD=`pwd`
+    }
+
+emitmake()
+    {
+    echo "ifeq (,\$(NCI_${1}))" >> Makefile.std
+    echo $1 = $2 >> Makefile.std
+    echo else >> Makefile.std
+    echo $1 = "\$(NCI_${1})" >> Makefile.std
+    echo endif >> Makefile.std
+    echo >> Makefile.std
+    }
+
+emit()
+    {
+    echo "ifeq (,\$($1))" >> Makefile.std
+    echo $1 = $2 >> Makefile.std
+    echo endif >> Makefile.std
+    echo >> Makefile.std
+    }
+
+emitgc()
+    {
+    echo "ifeq (,\$(GC_DIRS_SET))" >> Makefile.std
+    echo "GC_DIRS_SET = 1" >> Makefile.std
+    echo "GC_INCLDIRS = ${NCI_GC_INCLDIRS}" >> Makefile.std
+    echo "GC_LIBDIRS = ${NCI_GC_LIBDIRS}" >> Makefile.std
+    echo endif >> Makefile.std
+
+    echo "ifeq (,\$(OMEGA_SET))" >> Makefile.std
+    echo "OMEGA_SET = 1" >> Makefile.std
+    echo "OMEGA_INCLDIRS = ${NCI_OMEGA_INCLDIRS}" >> Makefile.std
+    echo "OMEGA_LIBDIRS = ${NCI_OMEGA_LIBDIRS}" >> Makefile.std
+    echo endif >> Makefile.std
+
+    echo "ifeq (,\$(TCL_SET))" >> Makefile.std
+    echo "TCL_INCLDIRS = ${NCI_TCL_INCLDIRS}" >> Makefile.std
+    echo "TCL_LIBDIRS = ${NCI_TCL_LIBDIRS}" >> Makefile.std
+    echo endif >> Makefile.std
+
+    echo >> Makefile.std
+    }
+
+emitsh()
+    {
+    echo "$1=$2; export $1" >> nci_setup.sh
+    }
+
+emitcsh()
+    {
+    echo setenv $1 $2 >> nci_setup.csh
+    }
+
+
+get_first()
+    {
+    the_path=$1
+    }
+
+mywhich() {
+   type -a $1 | head -1 | awk '{print $3}'
+ }
+
+find()
+    {
+    command=$1
+    shift
+    preference=`eval echo \\$NCI_$command`
+    for i in $preference $*
+    do
+        case x$i in
+	  x/*) the_path=$i;;  # absolute path
+	  *) get_first `which $i 2>/dev/null`;;
+        esac
+	if [ X"$the_path" != X"" ]; then
+	    if [ -x $the_path ]; then
+	            emitmake $command $the_path
+	    command_name=$i
+	    return
+	    fi
+    	fi
+	done
+    echo WARNING: Could not find $command. Installing without explicit path
+    emitmake $command $command
+    command_name=$command
+    return
+    }
+
+findinclude()
+    {
+    envname=$1
+    file=$2
+    shift
+    shift
+    for i in $*
+    do
+   	if [ -r $i/$file ]; then
+	    emit $envname $i
+	    return
+	fi
+    done
+    echo cannot find file $file
+    }
+
+help_usage()
+    {
+    echo "Usage: $0 [--with-CXX=compiler] [--with-CC=cc_compiler] "
+    echo "       [--with-CXXLINK=compiler] [--with-LOCAL_BASE] [--help]"
+    echo "       [--with-TCL_LIBDIRS=libs] [--with-LOCAL_BASE] [--help]"
+    echo "    To find the default compiler, we search for"
+    echo "    eg++ g++ CC and cc in the current path"
+    echo "    to override this either set the environment"
+    echo "    variables NCI_CXX and NCI_CC NCI_CXXLINK or use the"
+    echo "    --with-CXX= , --with-CC= "
+    echo "    --with-CXXLINK=   command line options"
+    echo "    --with-TCL_LIBDIRS=   -Ldirs and -llib needed to link TCL"
+    echo " To specify the garbage collector path"
+    echo "    --with-DOT='dot'
+    echo "    --with-GV='gv'
+    echo " To specify the garbage collector path"
+    echo "    --with-GC_LIBDIRS='-Lpath -lgc'
+    echo "    --with-GC_INCLDIRS=-Ipath
+    echo " To specify the path for the Omega library"
+    echo "    --with-OMEGA_LIBDIRS='-Lpath -lgc'
+    echo "    --with-OMEGA_INCLDIRS=-Ipath
+    echo " This program will build the files"
+    echo "    Makefile.std, nci_setup.csh and nci_setup.sh"
+    echo " If you specify --with-LOCAL_BASE, local solib and bin directories will be "
+    echo " added to the LD_LIBRARY_PATH and PATH."
+    exit 2
+    }
+
+NCI_GC_LIBDIRS=-lgc
+NCI_GC_INCLDIRS=
+
+NCI_OMEGA_LIBDIRS=-lomega
+NCI_OMEGA_INCLDIRS=
+
+#NCI_TCL_LIBDIRS="-L/usr/openwin/lib -L/usr/X11/lib -L/usr/X11R6/lib -ltcl8.0"
+#NCI_TCL_INCLDIRS="-I/usr/local/ultra/include -I/usr/openwin/include"
+NCI_TCL_INCLDIRS=
+NCI_TCL_LIBDIRS="-ltcl8.0"
+
+#NCI_DOT=dot
+#NCI_GV=gv
+
+while [ $?1 ]; do
+   case $1 in
+     --with-CXX=*) NCI_CXX=`echo $1|sed 's/^--with-CXX=//'`; shift;;
+     --with-CXXLINK=*) NCI_CXXLINK=`echo $1|sed 's/^--with-CXXLINK=//'`; shift;;
+     --with-CC=*) NCI_CC=`echo $1|sed 's/^--with-CC=//'`; shift;;
+     --with-GC_LIBDIRS=*) NCI_GC_LIBDIRS=`echo $1|sed 's/^--with-GC_LIBDIRS=//'`; shift;;
+     --with-GC_INCLDIRS=*) NCI_GC_INCLDIRS=`echo $1|sed 's/^--with-GC_INCLDIRS=//'`; shift;;
+     --with-OMEGA_LIBDIRS=*) NCI_OMEGA_LIBDIRS=`echo $1|sed 's/^--with-OMEGA_LIBDIRS=//'`; shift;;
+     --with-OMEGA_INCLDIRS=*) NCI_OMEGA_INCLDIRS=`echo $1|sed 's/^--with-OMEGA_INCLDIRS=//'`; shift;;
+     --with-TCL_LIBDIRS=*) NCI_TCL_LIBDIRS=`echo $1|sed 's/^--with-TCL_LIBDIRS=//'`; shift;;
+     --with-TCL_INCLDIRS=*) NCI_TCL_INCLDIRS=`echo $1|sed 's/^--with-TCL_INCLDIRS=//'`; shift;;
+     --with-DOT=*) NCI_DOT=`echo $1|sed 's/^--with-DOT=//'`; shift;;
+     --with-GV=*) NCI_GV=`echo $1|sed 's/^--with-GV=//'`; shift;;
+     --with-LOCAL_BASE) LOCAL_BIN='$LOCAL_BASE/bin'; LOCAL_LD_LIB='$LOCAL_BASE/solib'; shift;;
+     --help) help_usage;;
+     -*) echo "unknown option $1"; help_usage;;
+     *) break;;
+   esac
+done
+
+if [ ! -f Makefile.proto ]; then
+	echo Makefile.proto not found in current directory.
+	echo Please make sure to run install in the root of NCI tree.
+	exit 1
+	fi
+
+if [ -f Makefile.std ]
+then
+	echo Makefile.std exists - please remove it before running install
+	exit 1
+	fi
+
+echo  Creating Makefile.std
+
+echo \# The following settings are created by the install script >> Makefile.std
+echo \# Edit them to taste >> Makefile.std
+echo >> Makefile.std
+
+set_arch `uname -a`
+
+set_pwd
+
+emit ARCH $ARCH
+
+emit NCIHOME $PWD
+
+emit VISUAL_TCL $NCIHOME/suif/suif2b/suifbrowser/visual_tcl_lib
+
+find MAKE gmake make
+
+find AWK gawk nawk awk
+
+find CXX eg++ g++ CC cc
+
+find CXXLINK eg++ g++ CC cc
+
+findinclude X11_INCLUDE X11/Xlib.h /usr/X*/include /usr/include /usr/openwin/share/include
+
+#cmpl_name=get_compiler_name $command_name
+get_compiler_name $command_name
+
+emit COMPILER_NAME $cname
+
+find CC egcc gcc cc
+
+find AS as
+
+find YACC yacc
+
+find LEX lex
+
+find DOT dot
+
+find GV gv
+
+if [ -n "$USE_ZEPHYR" ]
+then
+    find SML_CM sml-cm
+    find SML sml
+    fi
+
+find PERL perl
+
+emitgc
+
+echo \# end of install generated settings >> Makefile.std
+echo \include \$\(NCIHOME\)/Makefile.proto >> Makefile.std
+
+if [ -f nci_setup.sh ]
+then
+	echo nci_setup.sh already exists - not overwritten
+else
+	echo Creating nci_setup.sh
+
+    emitsh NCIHOME $PWD
+    emitsh OSUIFHOME $PWD/suif/suif2b/osuif
+    emitsh ARCH $ARCH
+    emitsh LD_LIBRARY_PATH $LOCAL_LD_LIB:\$NCIHOME/solib:\$LD_LIBRARY_PATH
+    emitsh PATH $LOCAL_BIN:\$NCIHOME/bin:\$PATH
+    emitsh VISUAL_TCL $NCIHOME/suif/suif2b/suifbrowser/visual_tcl_lib
+    fi
+
+if [ x$LOCAL_LD_LIB != x ]
+then
+  tmp_lib_1=$LOCAL_LD_LIB:\$NCIHOME/solib:\$LD_LIBRARY_PATH
+  tmp_lib_2=$LOCAL_LD_LIB:\$NCIHOME/solib
+else
+  tmp_lib_1=\$NCIHOME/solib:\$LD_LIBRARY_PATH
+  tmp_lib_2=\$NCIHOME/solib
+fi
+
+if [ x$LOCAL_PATH != x ]
+then
+  tmp_path_1=$LOCAL_BIN:\$NCIHOME/bin:\$PATH
+else
+  tmp_path_1=\$NCIHOME/bin:\$PATH
+fi
+
+
+if [ -f nci_setup.csh ]
+then
+        echo nci_setup.csh already exists - not overwritten
+else
+	echo Creating nci_setup.csh
+     cat <<EOF >>nci_setup.csh
+
+setenv NCIHOME $PWD
+setenv ARCH $ARCH
+if ( \$?LD_LIBRARY_PATH ) then
+   setenv LD_LIBRARY_PATH $tmp_lib_1
+else
+   setenv LD_LIBRARY_PATH $tmp_lib_2
+endif 
+setenv PATH $tmp_path_1
+setenv VISUAL_TCL \$NCIHOME/suif/suif2b/suifbrowser/visual_tcl_lib
+EOF
+
+    fi
+
+

@@ -1,0 +1,85 @@
+#!/bin/sh -f
+
+ncibin=@NCIHOME@/bin
+ncisolib=@NCIHOME@/solib
+if [ x$LD_LIBRARY_PATH  = x"" ]
+    then LD_LIBRARY_PATH=$ncisolib
+else
+    LD_LIBRARY_PATH=$ncisolib:$LD_LIBRARY_PATH
+fi
+
+usage() {
+   echo "Usage: $0 [-o file.txt] [-style style] [-require node]* file.suif"
+   echo "  print a suif file. Before printing, the required libraries"
+   echo "  will be imported"
+   echo "  If the -o flag is not specified, output will be"
+   echo "  sent to standard output"
+   exit 1;
+}
+
+keep=0
+verbose=0
+
+while [ ! -z $1 ];
+  do case x"$1" in 
+    x-o)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      outputfile=$1
+      shift ;;
+    x-require)  shift
+      if [ -z $1 ] 
+         then usage; fi
+
+      if [ x$requires = x ] 
+        then requires="require $1"
+      else
+        requires="$requires; require $1"
+      fi
+      shift ;;
+    x-style)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      style="-style $1"
+      shift ;;
+    x-keep) keep=1
+      shift;;
+    x-*) 
+      echo "Bad option $1"; 
+      usage;;
+    *) break;;
+  esac
+done
+
+tmpfile="$$.drv"
+base=$1
+cat <<EOF > $tmpfile
+require suifnodes
+require cfenodes
+require suifprinter
+$requires
+load ${base}
+print $style
+EOF
+
+if [ $verbose -eq 1 ]
+  then echo $ncibin/suifdriver -f $tmpfile
+fi
+if [ x$outputfile = x ] 
+  then $ncibin/suifdriver -f $tmpfile
+  result=$?
+else
+  $ncibin/suifdriver -f $tmpfile > $outputfile
+  result=$?
+fi
+   
+if [ $result != 0 ]
+   then echo "failed $ncibin/suifdriver -f $tmpfile"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then if [ $verbose -eq 1 ]
+	then echo rm -f $tmpfile
+  fi
+  rm -f $tmpfile
+fi

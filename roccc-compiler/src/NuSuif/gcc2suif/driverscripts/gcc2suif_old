@@ -1,0 +1,57 @@
+#!/bin/sh
+
+
+CC=@CXXPARSER@
+#LFLAGS="-I$NCIHOME/include"
+LFLAGS="-I$ROCCC_HOME/include"
+CCFLAGS="-c --dump-tree-original-raw"
+PARSER=@ROCCC_HOME@/bin/parser
+SED=sed
+
+#echo "param = $#"
+if [ $# -ne 1 ]; then 
+    echo "USAGE :: $0 <file>"
+    exit 7
+fi
+
+if [ ! -f $1 ]; then
+    echo "[ERROR] $1 is not a regular file"
+    exit 6
+fi
+
+input=`basename $1`
+prefix_input=${input%.*}
+
+$CC $CCFLAGS $LFLAGS $input
+if [ $? -ne 0 ]; then
+    echo "[ERROR] on $CC"
+    echo "exiting..."
+    exit 5
+fi
+
+if [ ! -f $input.t02.original ]; then
+    echo "[ERROR] $input.t02.original doesn't exist !"
+    exit 4
+fi
+
+$SED -e '$ a \;; zEvilEOF' $input.t02.original > $prefix_input.ast
+if [ $? -ne 0 ]; then
+    echo "[ERROR] on $SED"
+    echo "exiting..."
+    exit exit 3
+fi
+
+#tail $prefix_input.ast
+if [ ! -f $prefix_input.ast ]; then
+    echo "[ERROR] $prefix_input.ast doesn't exist !"
+    exit  2
+fi
+
+$PARSER $prefix_input.ast $prefix_input.suif > /dev/null
+if [ ! -f $prefix_input.suif ]; then
+    echo "[ERROR] $prefix_input.suif doesn't exist !"
+    exit 1
+fi
+
+rm -f *.o a.out *.ast *.t02.original
+exit 0

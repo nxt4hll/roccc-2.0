@@ -1,0 +1,231 @@
+#
+# GNU make definitions and rules shared by Machine SUIF libraries and passes
+#
+# In the Makefile for a pass or library, start with macro definitions, then
+#
+#   include $(MACHSUIFHOME)/Makefile.common
+#
+# and finally add extra rules, if any are needed.
+#
+# Some of the macros that may be useful in a pass/library Makefile:
+#
+# PASS		The name of the pass (e.g., dce).
+# TARGET_LIB	The name of the library (e.g., alpha).
+# HOOF		The name of a hoof-generated module (e.g., cfg_ir).
+# CPPS		A list of .cpp files to be compiled to .o files
+# HDRS		A list of .h files to be installed for external use.
+# OBJS		A list of .o files to be linked into the library.  (Note that
+#		a pass consists of a library plus a driver executable.)
+# MAIN_OBJ	The .o file for the main program of a pass driver.
+# LIBS		The -l options for all libraries against which to link.
+# NWHDRS	The names of .h files derived from .h.nw files.
+# NWCPPS	The names of .cpp files derived from .cpp.nw files.
+# NWDOC		The name of the document, if any (e.g., machine).
+# NWSRCS	The names of .nw files comprising a document.
+# NWDICT	The names of any auxiliary .nw files defining code chunks.
+# DEBRIS	Any local files that should be removed by `make clean'.
+
+
+# We've had bad luck with the Alpha port of GCC when we don't use
+# the -fno-exceptions option.
+#
+ifeq (OSF1,$(ARCH))
+EXTRA_CXXFLAGS += -fno-exceptions
+endif
+
+ifneq (,$(PASS))
+
+# The driver program for a pass is usually called do_$(PASS).
+#
+ifeq  (,$(PROGRAM_FILE))
+PROGRAM_FILE =	$(BINDIR)/do_$(PASS)
+endif
+
+# The code for a pass resides in a shared-library object named by
+# $(TARGET_LIB).
+#
+ifeq  (,$(TARGET_LIB))
+TARGET_LIB =	$(PASS)
+endif
+
+endif # $(PASS) non-empty
+
+# Source files to compile
+#
+SRCS =		$(CPPS)
+
+# Header files to install.
+#
+HEADERS =	$(HDRS)
+
+# Object files for dynamic library.
+#
+OBJ_FILES =	$(OBJS)
+
+# Substrate libraries to link against.
+#
+LIBS +=		-lcommon -liokernel -lsuifkernel -lbasicnodes -lsuifnodes \
+		-lcfenodes -lutils -lbit_vector -ltypebuilder -lsuifpasses \
+		-lsuifcloning -lion $(DYNAMIC_LINKING_LIBRARY) \
+		$(DMALLOC_LIBRARY)
+
+
+ifneq (,$(HOOF))
+
+# Boilerplate for libraries that define hoof-generated classes.
+#
+HOOF_MAC =	$(SMGNDIR)/suif.mac
+HOOF_DEP =	$(SUIFDIR)/basicnodes/basic.hoof
+HOOF_INCL +=	-I$(NCIHOME)/suif/suif2b/basesuif
+SMGN_INCLUDES =	$(addprefix $(SMGNDIR)/, \
+		  $(addsuffix _builders.mac, \
+			      searchable_list indexed_list list vector))
+HOOF_GEN =	$(HOOF).h $(HOOF)_factory.h $(HOOF)_forwarders.h $(HOOF).cpp
+
+SRCS +=		$(HOOF).cpp
+HEADERS +=	$(HOOF).h $(HOOF)_factory.h $(HOOF)_forwarders.h
+OBJ_FILES +=	$(HOOF).o
+
+endif # $(HOOF) defined
+
+
+
+# Default rule.  Must set INCLUDE_DEPS in order to compile anything,
+# because the rules for .o files are in the automatically generated
+# Makefile.deps file.
+#
+all:
+	@$(MAKE) INCLUDE_DEPS=yes --no-print-directory buildpackage
+
+
+# Suppress or override rules from $(NCIHOME)/Makefile.std.  These
+# definitions must come before that file is include'd.
+#
+ALL_RULE =		defined
+BUILD_HEADERS_RULE =	defined
+PASS_DRIVER_RULE =	defined
+PROGRAM_RULE =		defined
+
+
+# Make it a bit easier to define INCLUDE_DEPS from the command line.
+# E.g., `make build=yes foo.o' will compile foo.cpp.
+#
+ifdef build
+INCLUDE_DEPS =	defined
+endif
+
+
+include $(NCIHOME)/Makefile.std
+
+# Augment the sweeping `clean' rule from Makefile.std.
+#
+clean: tidy extraclean
+
+# Tidy up locally without deleting installed headers and binaries.
+#
+tidy:
+	rm -f so_locations Makefile.deps dependencies $(OBJ_FILES) $(MAIN_OBJ) \
+	      $(DEBRIS)
+
+# Delete the installed pass driver, if any.
+#
+extraclean:
+	rm -f $(PROGRAM_FILE)
+
+
+ifneq (,$(PASS))
+
+# Rule for building and installing a pass driver, the path to which is
+# $(PROGRAM_FILE), defined above.
+#
+$(PROGRAM_FILE): $(DLIB) $(MAIN_OBJ)
+	$(CXXLINK) -o $(PROGRAM_FILE) $(CXXFLAGS) $(CXXLINKFLAGS) \
+		$(MAIN_OBJ) $(DLIB) $(SYS_LIBS) $(LIBDIRFLAG) -L$(LIBDIR) \
+		$(patsubst %,-L%,$(SHAREDLIBDIR)) $(LIBS) $(SLIBS)
+
+endif # $(PASS) non-empty
+
+
+# Derive the PostScript file for a document from its LaTeX file.
+#
+%.ps: $(NWSRCS) $(NWDICT)
+	@$(MAKE) --no-print-directory $*.tex
+	latex $*.tex
+	while grep -s 'Rerun to get cross' $*.log; \
+	  do latex $*.tex ; done
+	dvips -f $*.dvi > $*.ps
+	rm -f $*.tex $*.aux $*.log $*.toc $*.dvi
+
+
+
+ifneq (,$(NWHDRS)$(NWCPPS)$(NWHOOF))
+
+# Function to extract the innermost directory of a relative path
+#
+innerdir = $(notdir $(patsubst %/,%,$(dir $(shell pwd)/$(1))))
+
+# Derive a Noweb-documented file from its .nw source file.  Leave the
+# derived file write-protected as a reminder not to edit it directly.
+# Quote underscores in a notangle root to match the corresponding noweb
+# chunk name.  The -L option to notangle inserts #line directives.
+#
+$(NWHDRS) $(NWCPPS) $(NWHOOF): %: %.nw $(NWDICT)
+	@echo Creating $@ from $<
+	@rm -f $@
+	@notangle -L -R$(subst _,\\_,$(call innerdir,$@)/$@) $^ > $@
+	@chmod 444 $@
+
+endif # $(NWHDRS) and/or $(NWCPPS) and/or $(NWHOOF) non-empty
+
+
+ifneq (,$(TARGET_LIB))
+
+# We have suppressed the BUILD_HEADERS_RULE because there are other rules
+# for building and installing header files, and we want to customize that
+# process anyway.  But we need the following simplified version because
+# Makefile.deps requires it.
+#
+$(INCDIR)/$(TARGET_LIB):
+	mkdir -p $(INCDIR)/$(TARGET_LIB)
+
+# Cancel a rule in Makefile.std.  There's no reason to reinstall a file
+# just because the timestamp of its directory changes.
+#
+$(INCDIR)/$(TARGET_LIB)/%.h: $(INCDIR)/$(TARGET_LIB) %.h
+
+# Replacement for the rule canceled above.  Write-protect installed header
+# files so that we don't edit them accidentally when Emacs's next-error
+# command opens them.  Remove before copying because they're write-protected.
+#
+$(INCDIR)/$(TARGET_LIB)/%.h: %.h
+	@echo Installing $@
+	@mkdir -p $(@D); rm -f $@;  cp $*.h $@;  chmod 444 $@
+
+endif # $(TARGET_LIB) non-empty
+
+
+ifneq (,$(NWDOC))
+
+# Construct xchunks filter from code-chunk dictionary, if there is one
+#
+ifneq (,$(NWDICT))
+DICT_FILTER =	-filter 'xchunks $(NWDICT)'
+endif
+
+# Derive the TeX file for a Noweb document from its sources plus optional
+# code-chunk dictionary.
+#
+$(NWDOC).tex: $(NWSRCS) $(NWDICT)
+	rm -f $@
+	noweave $(DICT_FILTER) -delay -x $(NWSRCS) > $@
+	chmod 444 $@
+
+# The noweb l2h filter doesn't create a proper HTML title.  Extract the
+# title from the LaTeX \title{...} and insert it by brute force.
+#
+$(NWDOC).html: $(NWSRCS) $(NWDICT)
+	title=`sed -ne 's/^\\\\title{\([^}\\]*\)[}\\].*/\1/p' $(NWSRCS)`; \
+	noweave $(DICT_FILTER) -filter l2h -x -html $(NWSRCS) | htmltoc | \
+	  sed -e "s:<title>.*</title>:<title>$$title</title>:" > $(NWDOC).html
+
+endif # $(NWDOC) non-empty

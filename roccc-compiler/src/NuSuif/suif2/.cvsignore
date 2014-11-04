@@ -1,0 +1,9 @@
+Makefile.std
+nci_setup.sh
+nci_setup.csh
+edg
+suif_setup.csh
+bin
+solib
+obj
+include

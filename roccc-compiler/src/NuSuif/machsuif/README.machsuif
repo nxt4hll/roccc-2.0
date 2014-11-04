@@ -1,0 +1,242 @@
+This is Machine SUIF 2.02.07.15, released July 15, 2002.  This version is
+compatible with SUIF 2.2.0 from Stanford, but be sure to read about
+essential patches in the sections on INSTALLATION and FRONT ENDS below.
+
+Machine SUIF allows you to create new machine-specific back ends for SUIF.
+It is a testbed for experiments on machine-level code optimization and
+novel machine-architecture designs.  The system is distributed with back
+ends for the Compaq Alpha, Intel x86, and Intel Itanium (IA64) families.
+
+
+
+WHAT'S NEW?
+
+This release introduces support for Intel's Itanium processor family,
+nicknamed IA64.  Source code for the Itanium target library is in directory
+`ia64', and that is also the target name to use when generating IA64 code.
+The current system is capable of compiling and running a broad spectrum of
+benchmarks under RedHat's IA64 port of Linux.  Once our scheduling library
+and associated passes have been released, we will be able to take advantage
+of the Itanium processor's facilities for speculation.
+
+For the time being, there is no SUIF2 front end for IA64.  You must use the
+SUIF1 front end plus SUIF2's `suifversion1support' package.  See the FRONT
+ENDS section below.
+
+This release also introduces a simplified register description interface
+that more easily accommodates irregular register architectures.  This
+change affects all target libraries, but the new scheme is quite intuitive,
+and for most targets the conversion should be very easy.  Please see the
+section called Register Descriptions in the document for the machine
+library, which includes some comments about upgrading existing target
+libraries to the new scheme.
+
+
+
+OTHER RECENT CHANGES
+
+The last public release (2.01.10.08) introduced of a library for static
+single-assignment form (SSA).  As usual, there is a document in HTML and
+Postscript form which described the library interface.  As an example of
+how the SSA library is used, we also include a variant of the DCE pass
+called dcessa, which uses SSA form instead of classic reaching-definitions
+analysis.  To use it, follow the instruction in the overview document that
+describe how to use the conventional DCE pass.  Just substitute "dcessa"
+for "dce".
+
+The release before that premiered our library for instrumentation and
+profiling, called HALT.  The target-independent part of the library is in
+subdirectory `halt', while target-specific extensions are in x86_halt,
+x86_ppro_halt, and alpha_halt.  See the documentation in
+doc/halt.{html,ps}.
+
+An example application and extension of HALT is also included: an
+implementation of Ball-Larus path profiling for the x86 ISA.  The relevant
+directories are halt_blpp and x86_halt_blpp.  The HALT library document
+discusses this application.  See also the README file in the halt_blpp
+subdirectory.
+
+
+
+INSTALLATION
+
+Install SUIF 2.2.0: <URL:http://suif.stanford.edu/suif/suif2/index.html>.
+You need at least the `basesuif' segment.  To make use of the SUIF 1 front
+end (see FRONT ENDS below), you also need the `suifversion1support' segment
+of the SUIF 2 distribution.
+
+You also need an essential patch to the basesuif-2.2.0-4 package, which you
+will find in the current distribution as patches/basesuif-2.2.0-4.patch.
+To apply it, use the GNU patch utility in the top-level directory of the
+basesuif source tree:
+
+   % cd $NCIHOME
+   % patch -p1 < $MACHSUIFHOME/patches/basesuif-2.2.0-4.patch
+
+where $MACHSUIFHOME represents the root of the Machine SUIF source tree.
+
+Machine SUIF is an extension of SUIF.  When you compile all or part of it,
+your environment should include the same bindings as for building base
+SUIF.  Machine SUIF libraries and executables are installed in the same
+places and using the same GNU-make rules as those of base SUIF.
+
+Nevertheless, you can unpack the Machine SUIF distribution wherever you
+like.  The root of the source tree is `machsuif', but you can rename it if
+you wish.  Tell the system where to find that directory by adding
+MACHSUIFHOME to your compilation environment, e.g.
+
+   setenv MACHSUIFHOME /usr/local/machsuif
+
+Such a binding must exist whenever you compile part of Machine SUIF.
+
+You finish the installation by invoking GNU make in $MACHSUIFHOME, e.g.
+
+   % cd $MACHSUIFHOME
+   % gmake
+
+(It doesn't matter what `make' is called on your system, but you must use
+the GNU version.  Try the --version option to your `make' if you're
+unsure.)
+
+If you wish, you can integrate Machine SUIF with SUIF, so that rebuilding
+SUIF will also rebuild Machine SUIF.  Add a symbolic link in base SUIF's
+$NCIHOME/suif/suif2b subdirectory and then update the extra_suif_packages
+file in that same area:
+
+   % cd $NCIHOME/suif/suif2b
+   % ln -s $MACHSUIFHOME machsuif
+   % echo machsuif >> extra_suif_packages
+
+
+USING MAKE
+
+The SUIF make rules have an unusual property.  They make no distinction
+between rebuilding the products of a particular source subdirectory and
+installing those products (header files, libraries, and executables) into
+the shared directories for such files.  When you make experimental changes
+to some Machine-SUIF library or pass, be aware that your changes will be
+installed as soon as you compile and link them successfully.  Likewise,
+when you say `gmake clean', you will _uninstall_ the products of the
+current directory and its subdirectories.
+
+In a Machine-SUIF directory, you can use `gmake tidy' instead.  This cleans
+up local debris, such as object files, without uninstalling anything.
+
+If you are upgrading a Machine SUIF installation after unpacking a new
+tar archive, it is a good idea to run `gmake clean' in the $MACHSUIFHOME
+directory.
+
+
+DOCUMENTATION
+
+Once Machine SUIF is installed, refer to the overview document in
+$MACHSUIFHOME/doc for directions on beginning to use it.  In the same
+directory, you will find links to the Machine-SUIF Cookbook and to the
+implementation documents for the system's interface libraries.  In the
+`opi-users' subdirectory of $MACHSUIFHOME/doc, you'll find the OPI User's
+Guide.  In the sibling directory `opi-extenders', there is a guide to
+extending the system.
+
+
+FRONT ENDS
+
+SUIF 2 has front ends derived from the Edison Design Group's widely-used
+C/C++ front end.  These are available in binary form from the NCI web site
+at <URL:http://nci.pgroup.com>.  Compaq/Alpha, Linux/x86, and Solaris/Sparc
+are the currently supported platforms.  At the moment, the Alpha front end
+only runs under Compaq Tru64 UNIX version 5.0, and it is temporarily unable
+process certain C programs because of a library incompatibility.
+
+However, you can use the SUIF 1 front end in conjunction with the
+suifversion1support passes of SUIF 2 to translate C and Fortran programs
+for Alpha and a number of other target machines.  SUIF 1's home page is
+<URL:http://suif.stanford.edu/suif/suif1/>.
+
+In order to use the SUIF1 front end for IA64/RedHat compilation, you need
+to add configuration information to SUIF1's `scc' and `snoot' passes.  We
+include a patch in $MACHSUIFHOME/patches that adds both i386-redhat-linux
+and ia64-redhat-linux targets.  To apply the patch to the basesuif-1.3.0.5
+source tree:
+
+   % cd $SUIFHOME
+   % patch -p1 < $MACHSUIFHOME/patches/basesuif-1.3.0.5.patch
+
+
+
+STATUS
+
+Using our Alpha and x86 back ends, we have successfully compiled and run
+the SPECint95 and SPECfp95 benchmarks, as well as the MediaBench suite.
+
+The m2c pass for generating C instead of assembly code only works for
+inputs at the SUIFvm level, i.e., it won't handle anything that has gone
+through the gen pass.  And it still has bugs.
+
+The current distribution includes one full-fledged scalar optimization
+pass: dce, for dead code elimination.  In addition, the register allocator
+`raga' can be used as a copy propagator by giving it the -just_coalesce
+command-line option.  That causes it to eliminate unnecessary moves, but
+not do register allocation.
+
+Machine-SUIF 2 libraries and passes for instruction scheduling will be the
+next major feature enhancements that we release.
+
+
+SUPPORTED C++ COMPILERS
+
+Most of our experience testing Machine SUIF 2 has been on Compaq/Alpha and
+Linux/Intel platforms using the EGCS-1.1.2 version of G++.  We also use
+GCC-2.95.x under Linux and Solaris, but we sometimes find that we have to
+
+   #define __STL_USE_SGI_ALLOCATORS
+
+in order to work around problems with STL templates.  If you're using
+GCC-2.95.x, one way to set this switch is to add the line
+
+   EXTRA_CXXFLAGS += -D__STL_USE_SGI_ALLOCATORS
+
+to $NCIHOME/Makefile.options.gcc.  This is an optional Makefile included by
+gmake when the environment variable COMPILER_NAME is set to "gcc".  The
+initial install script causes $NCIHOME/Makefile.std to bind COMPILER_NAME
+to "gcc" by default when it sees that the compiler of choice is GCC-2.95.x.
+That Makefile.std file is included in every SUIF or Machine SUIF build.
+
+RedHat 7.x includes a version of GCC that RedHat calls GCC-2.96.  This is
+not a real GCC release.  It is based on a development snapshot.  It does
+eliminate the need to use the __STL_USE_SGI_ALLOCATORS workaround described
+above.  But in other ways, it is unsatisfactory.  In particular, GDB
+debugging of C++ code compiled with RedHat's GCC-2.96 doesn't work as well
+as it does with released versions of GCC.
+
+What we recommend on RedHat 7.x systems is to use egcs instead of gcc/g++.
+This is a version of the compiler based on EGCS-1.1.2.  It comes in the
+package called compat-egcs; you may need to find and install the RPM of
+that name appropriate for your RedHat release.  To cause egcs to be used
+for SUIF compilation in preference to gcc and g++, set both of the
+environment variables NCI_CC and NCI_CXX to "/usr/bin/egcs".
+
+
+
+REPORTING PROBLEMS
+
+If you have problems with Machine SUIF, including problems understanding
+how to use it, please send email to machsuif-bugs@eecs.harvard.edu.
+
+
+
+ACKNOWLEDGEMENTS
+
+In both style and substance, Machine SUIF builds on the Stanford SUIF
+system.  We are grateful to the SUIF team for providing a stable, robust,
+full-featured platform.
+
+This work was supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).  We also gratefully
+acknowledge the generous support of this research by Advanced Micro
+Devices, Compaq, Digital Equipment, Hewlett-Packard, International
+Business Machines, Intel, and Microsoft.
+
+Machine SUIF is the work of many hands.  To give credit to all without
+unduly extending this note, we acknowledge contributors in the file
+$MACHSUIFHOME/CREDITS.

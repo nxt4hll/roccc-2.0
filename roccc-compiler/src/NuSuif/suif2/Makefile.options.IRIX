@@ -1,0 +1,9 @@
+
+# SGI/IRIX-specific makefile
+
+AWK = nawk
+
+EXTRA_CFLAGS += -DIRIX 
+EXTRA_CXXFLAGS += -DIRIX 
+
+SHARED_LIB_FLAGS += -Wl,-LD_MSG:off=134:off=85

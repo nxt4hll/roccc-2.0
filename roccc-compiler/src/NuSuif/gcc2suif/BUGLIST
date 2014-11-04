@@ -1,0 +1,81 @@
+
+1. The input files require my own EOF marker appended to the end.
+
+Proposed solution: Change the parser to read from a file as opposed to
+standard in.
+
+Status: No solution yet. I changed the parser to read from a file, yet it 
+still hangs and waits if the last symbol could be empty.  I'm not sure how
+to handle this.  The way we currently deal with this is we wrote a
+script that calls g++, automatically appends this marker, and then
+calls my code to convert C code directly to suif in one swift stroke.
+
+2. Preincrement and Postincrement do the same thing currently.
+
+Proposed solution: Alter Postincrement to function correctly.
+
+Status: No solution yet.
+
+3. Initialization code is handled only once at the start of the function
+   and any variable that is declared in the middle of the function is not
+   initialized correctly.
+
+Proposed solution: Unknown.  I will have to completely change my variable
+declaration scheme and I'm not sure how it will fit in with Suif's mechanisms.
+I think the way to handle this would be to create a new symbol table 
+every time there is a new bind expression.
+
+Status: Currently the user must write his code such that all variables
+appear declared at the top of a function and all initializations are
+seperate.
+
+4. The comma operator does not currently work.
+
+Proposed solution: Convert comma operators to EvalStatments when a 
+statement is necessary and extract out the expressions and convert them
+into statements when an expression is necessary.
+
+Status: This is going to get ugly, so I have avoided this for the time
+being.
+
+5. Records (structs and classes) are not yet supported.
+
+Proposed solution: Get them working by creating several examples and
+seeing how they operate in both Suif and gcc.
+
+Status: I have not yet started on this bug.
+
+6. Truncate expressions for converting doubles to integers is not
+yet supported.
+
+Proposed solution: Unknown
+
+Status: I don't know yet how to handle casting in Suif.
+
+*********************** Fixed Bugs *******************************
+
+1. The function symbols in the suif symbol table are declared incorrectly.
+
+Proposed solution: Change my default scheme to one that actually figures
+out the name and arguments of the function.  
+
+Solution: I worked on this and function symbols are declared correctly now
+(with the correct name, return type, and argument list).
+
+2. Function call expressions are not currently working.
+
+Proposed solution: Keep working on them (this is what I am currently
+working on).
+
+Status: Fixed (partially).  Void function calls are generated correctly.
+I have not tested what happens when a variable is assigned to the results 
+of a function call.  It should work, but suif might not be general
+enough for it to work correctly without rewriting a large part of
+my modify_expr code.
+
+I have now tested functions on the left-hand side of the equals sign (i.e. as
+a normal expression) and they appear to work correctly.  I know that
+the C language does not support references, so I don't think I'll ever see
+functions on the left-hand side of an equal operator.  In conclusion,
+I think I have gotten functions working correctly in all the cases we 
+need to worry about.

@@ -1,0 +1,419 @@
+#
+#
+#      Copyright (c) 1998,1999 Stanford University
+#
+#      All rights reserved.
+#
+#      This software is provided under the terms described in
+#      the "suif_copyright.h" include file.
+
+
+module basic {
+
+  include "iokernel/cast.h";
+
+###########################################################
+#
+# Annotation
+#
+###########################################################
+
+  abstract AnnotableObject : SuifObject {
+    searchable_list<Annote* owner> annotes;
+    CPP_DECLARE
+        public:
+           virtual Annote *peek_annote(const LString &type) const ;
+           virtual Annote *take_annote(const LString &type);
+    CPP_DECLARE
+    CPP_BODY
+        Annote *AnnotableObject::peek_annote(const LString &name) const {
+           suif_assert( name.c_str() != NULL);
+           return( lookup_annote_by_name(name) );
+        }
+        Annote *AnnotableObject::take_annote(const LString &name) {
+           suif_assert( name.c_str() != NULL);
+           return(remove_annote_by_name(name));
+        }
+    CPP_BODY
+
+  };
+
+  abstract Annote : AnnotableObject {
+    virtual LString name key;
+  };
+
+  concrete GeneralAnnote : Annote {
+    LString name implements name;
+  };
+
+  concrete BrickAnnote : Annote {
+    LString name implements name;
+    list<SuifBrick * owner> bricks;
+  };
+
+  # NEW*NEW*NEW*NEW*NEW*NEW*NEW*NEW*NEW*NEW*NEW*NEW*NEW*NEW
+  concrete SymbolListAnnote : Annote {
+    LString name implements name;
+    list<Symbol * owner> symbols;
+  };
+
+
+#####################################################
+#
+# Bricks for the BrickAnnote
+#
+#####################################################
+
+  abstract SuifBrick : SuifObject {
+  };
+
+  concrete StringBrick : SuifBrick {
+    String value;
+  };
+
+  concrete IntegerBrick : SuifBrick {
+    IInteger value;
+  };
+
+  concrete SuifObjectBrick : SuifBrick {
+    SuifObject * reference object;
+  };
+
+  concrete OwnedSuifObjectBrick : SuifBrick {
+    SuifObject * owner object;
+  };
+
+#####################################################
+#
+# Symbol Table Objects
+#
+#####################################################
+
+  abstract SymbolTableObject : AnnotableObject {
+
+        LString name default {emptyLString};
+    CPP_DECLARE
+      public:
+        virtual SymbolTable *get_symbol_table() const;
+    CPP_DECLARE
+
+    CPP_BODY
+      SymbolTable *SymbolTableObject::get_symbol_table() const {
+        return(to<SymbolTable>(get_parent()));
+      }
+    CPP_BODY
+    };
+
+#####################################################
+#
+# Types
+#
+#####################################################
+
+  abstract Type : SymbolTableObject
+    {
+    };
+
+  concrete QualifiedType : Type
+    {
+      DataType * reference base_type;
+      searchable_list<LString> qualifications;
+    };
+
+  abstract DataType : Type
+    {
+      IInteger bit_size;
+      int  bit_alignment;
+    };
+
+  abstract ProcedureType : Type
+    {
+      searchable_list<LString> qualifications;
+    };
+
+  abstract LabelType : Type
+    {
+    };
+
+##########################################################
+#
+# Symbols
+#
+##########################################################
+
+  abstract Symbol : SymbolTableObject
+    {
+      bool is_address_taken default {false};
+      virtual Type * reference type;
+    };
+
+  concrete VariableSymbol : Symbol
+    {
+      QualifiedType* reference type implements type;
+      VariableDefinition * reference definition omitted;
+
+      CPP_DECLARE
+        public:
+          bool is_static() const;
+      CPP_DECLARE
+
+      CPP_BODY
+          bool VariableSymbol::is_static() const {
+            return (get_definition() != 0) && get_definition()->get_is_static();
+          }
+      CPP_BODY
+    };
+
+  concrete ParameterSymbol : VariableSymbol
+    {
+    };
+
+  concrete ProcedureSymbol : Symbol
+    {
+      ProcedureType* reference type implements type;
+      ProcedureDefinition * reference definition optional;
+    };
+
+  concrete CodeLabelSymbol : Symbol
+    {
+      LabelType* reference type implements type;
+    };
+
+
+##########################################################
+#
+# Scoped objects
+#  Objects that have an implicit scope.
+#  To find the "scope" of a scoped object,
+#    walk up the chain of parents until finding
+#    an object with an attached symbol table.
+#  Currently, the following object have attached
+#    symbol tables:
+#
+#     FileSetBlock
+#     FileBlock
+#     ProcedureDefinition
+#     ScopeStatement  (in suif.hoof)
+#
+##########################################################
+
+  abstract ScopedObject : AnnotableObject
+    {
+    };
+
+
+  abstract ExecutionObject : ScopedObject
+    {
+      virtual list<Expression * owner> source_ops;
+      virtual list<VariableSymbol * reference> source_vars;
+      virtual list<CodeLabelSymbol* reference> defined_labels;
+    };
+
+  abstract Statement : ExecutionObject
+    {
+      virtual list<Statement* owner> child_statements;
+      virtual list<VariableSymbol* reference> destination_vars;
+    };
+
+   abstract Expression : ExecutionObject
+    {
+      DataType * reference result_type;
+      CPP_DECLARE
+        public:
+          virtual ExecutionObject *get_destination() const;
+      CPP_DECLARE
+
+      CPP_BODY
+          ExecutionObject *Expression::get_destination() const {
+            return(to<ExecutionObject>(get_parent()));
+          }
+      CPP_BODY
+    };
+
+  concrete StatementList : Statement
+    {
+      list<Statement* owner> statements in child_statements;
+    };
+
+
+  abstract Constant : Expression
+    {
+    };
+
+  concrete IntConstant : Constant
+    {
+      IInteger value;
+    };
+
+  concrete FloatConstant : Constant
+    {
+      String value;
+    };
+
+#  concrete StringConstant : Constant
+#    {
+#      String value;
+#    };
+
+#  concrete RationalConstant : Constant
+#    {
+#      IRational value;
+#    };
+
+#
+# e.g. {1, 2, 3} as in "int a[] = {1, 2, 3};"
+#
+  abstract ValueBlock : ScopedObject
+    {
+      virtual default { return 0; } DataType * reference type;
+    };
+
+#
+# For initialization of static variables only.
+#
+  concrete VariableDefinition : ScopedObject
+    {
+      VariableSymbol* reference variable_symbol;
+      int bit_alignment;
+      ValueBlock* owner initialization;
+      bool is_static default {false};
+
+      CPP_DECLARE
+        public:
+          virtual void notifier(bool created,DefinitionBlock *d);
+      CPP_DECLARE
+
+      CPP_BODY
+        void VariableDefinition::notifier(bool created,DefinitionBlock *d)
+	  {
+          if (created) _variable_symbol->set_definition(this);
+          else _variable_symbol->set_definition(0);
+          }
+      CPP_BODY
+
+    };
+
+  concrete ProcedureDefinition : ScopedObject
+    {
+      ProcedureSymbol* reference procedure_symbol build {0};
+      ExecutionObject* owner body build {0};
+      SymbolTable* owner symbol_table build {
+        ::create_basic_symbol_table( get_suif_environment() )};
+      DefinitionBlock* owner definition_block build {
+        ::create_definition_block(get_suif_environment())};
+      list<ParameterSymbol* reference> formal_parameters;
+      CPP_DECLARE
+        public:
+          virtual void notifier(bool created,DefinitionBlock *d);
+      CPP_DECLARE
+
+      CPP_BODY
+        void ProcedureDefinition::notifier(bool created,DefinitionBlock *d)
+	  {
+          if ( _procedure_symbol ) {
+            if (created) _procedure_symbol->set_definition(this);
+            else _procedure_symbol->set_definition(0);
+          }
+        }
+      CPP_BODY
+
+
+    };
+
+  concrete DefinitionBlock : ScopedObject
+    {
+      searchable_list<VariableDefinition* owner> variable_definitions notify;
+      searchable_list<ProcedureDefinition* owner> procedure_definitions notify;
+    };
+
+  concrete FileBlock : ScopedObject
+    {
+      LString source_file_name;
+      SymbolTable* owner symbol_table build {create_basic_symbol_table( 0 )};
+      DefinitionBlock* owner definition_block build {create_definition_block()};
+    };
+
+#############################################################
+#
+# SymbolTable
+#
+#############################################################
+
+  abstract SymbolTable : AnnotableObject
+    {
+      virtual searchable_list<SymbolTableObject* owner> symbol_table_objects;
+      indexed_list<LString,SymbolTableObject *reference> lookup_table;
+      virtual SymbolTable * reference explicit_super_scope;
+
+      CPP_DECLARE
+        public:
+	  virtual void add_symbol(const LString &,SymbolTableObject *);
+          virtual void add_symbol(SymbolTableObject *);
+          virtual void remove_symbol(SymbolTableObject *);
+	  virtual void change_name(SymbolTableObject *,const LString &);
+      CPP_DECLARE
+
+      CPP_BODY
+	void SymbolTable :: add_symbol(
+		const LString &name,
+		SymbolTableObject *x) {
+	    suif_assert(x->get_name() == emptyLString);
+	    x->set_name(name);
+	    append_symbol_table_object(x);
+	    if (name != emptyLString)
+              add_lookup_table(name,x);
+	    }
+        void SymbolTable :: add_symbol(SymbolTableObject *x) {
+          append_symbol_table_object(x);
+	  if (x->get_name() != emptyLString)
+              add_lookup_table(x->get_name(),x);
+        }
+
+        void SymbolTable :: remove_symbol(SymbolTableObject *x) {
+          remove_all_from_lookup_table(x);
+          remove_symbol_table_object(x);
+          }
+	void SymbolTable::change_name(SymbolTableObject *x,const LString &n) {
+	    remove_all_from_lookup_table(x);
+	    x->set_name(n);
+	    if (n != emptyLString)
+		add_lookup_table(n,x);
+	    }
+      CPP_BODY
+
+    };
+
+
+  concrete BasicSymbolTable : SymbolTable
+    {
+      searchable_list<SymbolTableObject* owner> symbol_table_objects;
+      SymbolTable * reference explicit_super_scope optional;
+    };
+
+###########################################################
+#
+# GlobalInformationBlock
+#
+###########################################################
+
+
+  concrete GlobalInformationBlock : AnnotableObject
+    {
+    };
+
+###########################################################
+#
+# FileSetBlock
+#   The ultimate parent and owner of all of the SuifObjects
+#   in the FileSet
+#
+###########################################################
+  concrete FileSetBlock : AnnotableObject
+    {
+      BasicSymbolTable* owner external_symbol_table build {create_basic_symbol_table()};
+      BasicSymbolTable* owner file_set_symbol_table build {create_basic_symbol_table()};
+      list<FileBlock* owner> file_blocks;
+      list<GlobalInformationBlock* owner> information_blocks;
+    };
+
+ }

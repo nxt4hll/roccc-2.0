@@ -1,0 +1,54 @@
+\section{Ex5 -- Removing Instructions from an Instruction List}
+
+To this point, our examples have only inserted instructions.  This
+example demonstrates how to remove safely one or more instructions
+from an instruction list.  In particular, since removing anything in
+C/C++ is always exciting, we'll show you how to do this without
+invalidating your [[InstrHandle]].
+
+The [[do_opt_unit]] method of [[Ex5]] searches the [[InstrList]]
+of an [[OptUnit]] for instructions annotated with either our
+[[k_reserved_reg_load]] or [[k_store_reserved_reg]] flag notes.
+When it finds such an instruction, it calls the OPI function
+[[remove]] and deletes the returned instruction.
+
+<<[[Ex5]] walk of [[InstrList]]>>=
+@
+
+The [[for]] loop is carefully constructed to increment the
+instruction handle [[h]] (the loop's induction variable)
+before calling [[remove]].  Because of the implementation
+of [[InstrHandle]] in Machine SUIF, we are not guaranteed
+to be able to increment [[h]] correctly if we have removed
+the instruction associated with it.
+
+
+\paragraph{Removing Operands from an Instruction}
+
+Unlike an [[InstrList]], you should view the source and destination
+operand dequences as implemented as arrays.  Even though the OPI
+provides you with equivalents of [[remove]], called [[remove_src]] and
+[[remove_dst]], that are able to remove an operand from an operand
+sequence given its handle, we typically do not use these functions.
+They are relatively expensive and are not generally needed.
+
+As an example of where you might use this functionality, consider code
+generation.  During code generation, we change one instruction of
+target $X$ into one or more instructions of target $Y$.  For
+translations that map one $X$ instruction to one $Y$ instruction, you
+might be tempted to reuse the storage container for the first
+instruction.  For instance, translating a SUIFvm integer AND
+instruction into an Alpha AND instruction requires only that we change
+the opcode from [[AND]] to [[AND]].  Both take the same number
+of source and destination operands, and Machine SUIF uses the same
+data structure for both target architectures.
+
+Suppose however that the SUIFvm AND instruction specified three source
+operands while the Alpha AND required only two of these
+operands.\footnote{This example is a bit hokey, but we did warn you
+that [[remove_src]] was generally not needed.}  During code
+generation, you would want to remove one of the SUIFvm AND source
+operands in addition to changing the opcode.  Instead of this
+approach, we recommend that you construct the Alpha AND instruction
+from the needed components of the SUIFvm AND using the appropriate
+instruction creator function.

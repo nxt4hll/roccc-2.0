@@ -1,0 +1,177 @@
+\section{Ex3 -- Manipulating an Instruction List}
+
+You should now understand the basic operation and structure of
+a Machine-SUIF pass.  In this and the next several examples, we
+will investigate a more realistic pass and show you how to
+modify the input Machine-SUIF IR.  These examples continue to
+view the body of a procedure (or optimization unit) as a simple
+instruction list.  Other later examples investigate operations
+on other kinds of bodies.
+
+\paragraph{Description of pass function.}
+
+Suppose that you want to write a pass that takes a register-allocated
+instruction list and rewrites that list to reserve a register.  In
+other words, we will create a memory location that will become the
+``home'' of the contents of the reserved register.  Whenever we
+encounter an instruction that uses the reserved register, we will have
+to load it with the contents of our memory location.  When an
+instruction writes the reserved register, we will have to store the
+result into our memory location.  Once this has been done, we are
+free to use the reserved register for our own purposes anywhere
+between the program's uses of the reserved register.  You might, for
+example, wish to do this to prepare an instruction list for
+instrumentation by a profiler.
+
+We will assume that the pass is only run after register allocation,
+and we will provide the user with the option of specifying a specific
+register to reserve.
+
+
+\paragraph{Additions to SUIF-specific files.}
+
+The files [[suif_main.cpp]], [[suif_pass.h]], and [[suif_pass.cpp]]
+are largely unchanged from our previous examples.  We added a small
+amount of code to the [[Ex3SuifPass]] methods [[initialize]] and
+[[parse_command_line]] so that we could grab the user-specified
+reserved register name, if one was supplied.  We refer you to the SUIF
+documentation to learn more about the specification and processing of
+command line options in SUIF.
+
+
+\paragraph{Setup.}
+
+Below, we present the declaration of class [[Ex3]].  It is the same
+as the trivial OPI class declarations that you've seen previously, except
+for the fact that we've included a few instance variables.
+
+<<class [[Ex3]]>>=
+@
+
+Most of the variables deal with properties or IR objects related
+to the reserved register.  The variables [[k_reserved_reg_load]] and
+[[k_store_reserved_reg]] declare new [[NoteKey]] variables for use by
+this pass in its annotations.
+
+
+\paragraph{Finding a register to reserve.}
+
+The [[initialize]] method of the class [[Ex3]] identifies the register
+we wish to reserve, and it builds several IR components related to
+this choice.  The abstract register number for the register that we
+wish to reserve is a simple [[int]].  If the user specified a
+particular register by name, we use the [[reg_lookup]] function to
+determine the abstract number corresponding to this register name.
+Note that the user should be aware of the target architecture because
+the name is target dependent.
+
+<<set [[reserved_reg]]>>=
+@
+
+On the other hand, if the user did not specify a register name on the
+command line, the pass chooses one of the caller-saved registers.  The
+OPI function [[reg_caller_saves]] returns a pointer to a [[NatSet]]
+containing the abstract register numbers of all registers obeying this
+convention.  If the set is empty, we abort the pass.  Otherwise, we
+simply choose the first one that we find and make it the reserved
+register.
+
+To create a register operand for this register number, Machine SUIF
+requires a [[TypeId]].  This [[TypeId]] describes the type of the data
+in the register.  Since we're simply going to spill and reload the
+contents of this register as an untyped bit pattern, we could define
+[[reserved_reg_type]] as some void type.  The code below is a bit more
+intelligent (mostly for illustrative purposes) in that it queries the
+width of the reserved register and then sets [[reserved_reg_type]] to
+the type for an unsigned integral value of that width.
+
+<<set [[reserved_reg_type]]>>=
+@
+
+Given a register number and a [[TypeId]], we can now build the hard
+register operand [[reserved_reg_opnd]].
+
+<<set [[reserved_reg_opnd]]>>=
+@
+
+
+\paragraph{Initializing the note keys.}
+
+The last thing done in [[Ex3::initialize]] is to define the values of
+our pass's [[NoteKey]]s.
+
+<<set the note keys>>=
+@
+
+You should consider the type [[NoteKey]] to be an opaque type.  We
+usually define the value of a [[NoteKey]] outside the OPI pass
+that we're writing, since its type depends upon the substrate and may
+change from one substrate to another.  In Machine SUIF, a note key is
+a string ([[IdString]], in particular).
+
+
+\paragraph{Building a stack location.}
+
+The [[do_opt_unit]] routine begins as it did in [[Ex2]].  Before we
+begin walking the instruction list however, we build a stack location
+to store the current contents of the reserved register.
+
+<<build a stack location>>=
+@
+
+The OPI function [[new_unique_var]] returns a pointer to a new variable
+symbol of the right type that is local to the current [[OptUnit]].  We
+supply a name ([[_var_reserved_reg]]) that will help us to recognize the
+function of this stack location.
+
+Once we have a variable symbol, we can construct an address-symbol
+operand that represents the address of this variable symbol for use
+in load and store operations.  We often refer to these kinds of
+operands as ``effective addresses'' (ea).
+
+
+\paragraph{Manipulating the [[InstrList]].}
+
+The loop that walks the instruction list is structured the same way
+as the one that we used in [[Ex2]].
+
+<<[[Ex3]] walk of [[InstrList]]>>=
+@
+
+The current instruction [[mi]] is inspected only if it is interesting,
+i.e. it is an active instruction that we didn't insert.  As you will
+see, we will be inserting instructions after as well as before the one
+corresponding to the handle [[h]].
+
+For each active instruction, we inspect its source and destination
+operand list looking for occurrences of the reserved register.  The
+code to perform these inspections is nearly identical.
+
+<<inspect source operands>>=
+<<inspect destination operands>>=
+@
+
+If we find an occurrence of the reserved register in the source
+operand list, we insert a load operation before the current
+instruction.  We use the OPI function [[opcode_load]] to find the
+correct target-specific load opcode for the restore operation, and
+we mark this new instruction with one of our flag annotations.
+
+<<insert load of reserved register>>=
+@
+
+For occurrences of the reserved register in the destination operand
+list, we insert a store operation after the current instruction.  This
+instruction is built and marked in an analogous manner.
+
+<<insert spill of reserved register>>=
+@
+
+Finally, please note that we clone the address-symbol operand
+[[ea_var_reserved_reg]] before inserting it into either the
+load or store instruction.  This ensures that each instruction
+has a unique copy of the address operand.  In this way, if later
+pass modifies a component of one of these address operands, we
+will not inadvertently affect the others.  This is necessary
+because some implementations of the OPI (e.g., Machine SUIF)
+define the type [[Opnd]] to have reference semantics.

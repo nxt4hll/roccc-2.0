@@ -1,0 +1,70 @@
+\section{Ex6 -- [[AnyBody]] Converters}
+
+This section describes the contents of the two converters associated with 
+class [[Cfg]], a derived class of [[AnyBody]].  If you create a new kind
+of [[OptUnit]] body, you should provide two converters like these.
+
+For each converter, we present only the OPI pass method
+[[do_opt_unit]].  The rest of the files in the source directories are,
+except for the pass name strings and the parsing of some command line
+arguments, identical to those explained in [[Ex1]].
+
+\paragraph{[[Il2Cfg::do_opt_unit]].}
+
+To convert the body of an [[OptUnit]] from an [[InstrList]] to a
+[[Cfg]], we invoke the OPI function [[new_cfg]].  This function
+modifies the input [[InstrList]] during the [[Cfg]] creation.  You can
+think of this as ``recycling'' whatever [[InstrList]] contents
+the new [[Cfg]] object can use.
+
+<<[[Il2cfg::do_opt_unit]]>>=
+@
+
+We explicitly copy the annotations attached to the [[InstrList]] to
+the [[Cfg]] since we may (in the future) not wish to copy all of the
+annotations on the original [[AnyBody]] to the [[Cfg]].  Finally, we
+replace the original body with the new [[Cfg]] and delete the
+original body.
+
+You can also use this function to ensure that a body in [[Cfg]] form
+has the specific form you want.  For bodies already in [[Cfg]] form,
+we invoke the OPI function [[canonicalize]] with the user-specified
+[[Cfg]] options and then return.
+
+
+\paragraph{[[Cfg2il::do_opt_unit]].}
+
+To convert the body of an [[OptUnit]] from a [[Cfg]] to an
+[[InstrList]], we invoke the OPI function [[to_instr_list]].  As with
+[[new_cfg]], this function modifies the input [[Cfg]].
+
+<<[[Cfg2il::do_opt_unit]]>>=
+@
+
+This converter ends in the same way as above.  For convenience, it
+quietly leaves an [[OptUnit]] body alone if the body is already in
+[[InstrList]] form.
+
+
+\paragraph{[[AnyBody]] code in a pass.}
+
+As we mentione in {\em The Extender's Guide}, it is the responsibility
+of the person stringing together optimization passes to ensure that the
+input needs of a pass are satisfied.  In the [[do_opt_unit]] method of
+an OPI optimization pass, we include only the following code for casting
+the [[OptUnit]]'s body to the appropriate type.  Note that this example
+assumes that the pass wants the body as a [[Cfg]].
+
+\begin{verbatim}
+    // get the body of the OptUnit
+    AnyBody *body = get_body(unit);
+
+    // verify that it is a Cfg
+    claim (is_a<Cfg>(body),
+           "expected OptUnit's body in Cfg form");
+    Cfg *cfg = (Cfg *)body;
+\end{verbatim}
+
+When done, this pass writes the [[OptUnit]] body as a [[Cfg]].  It
+is not expected that an individual pass would convert the body back to
+a ``standard'' form.

@@ -1,0 +1,1543 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>The HALT Library</title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+
+           <!-- Omit \clearpage for new source file-->
+<p>
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>The HALT Library</a></h1>
+<address><em>Release version 2.02.07.15</em> <br><br>Martha Mercaldi <br>Michael D. Smith <br>Glenn Holloway <br>{mercaldi,smith,holloway}@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+
+HALT, the Harvard Atom-Like Tool, is a library used for studying program
+behavior and the performance of computer hardware.  HALT works by
+instrumentation, i.e., by mechanically changing a program's code so that it
+collects information about its own operation.  You can use it to profile a
+program, e.g., to fugure out which parts of the code consume most of the
+running time.  But you can also use HALT to investigate how efficiently a
+memory caching scheme supports the memory behavior of a program when
+applied to a range of benchmarks.
+<p>
+In fact, because HALT is extensible, you can design your own experiments
+for studying the behavior of programs and the performance of machines that
+execute them.  HALT lets you control instrumentation by saying precisely
+where and how measurement code should be inserted.  The class of behavioral
+events that you can track at run time is open-ended.  HALT is structured to
+make it easy to adapt to new architectures, or to experimental variants of
+existing architectures.  To port the library to a new target platform, you
+just specify some things that are peculiar to that platform, like how
+run-time analysis routines are to be called.
+<p>
+While HALT makes the usual applications of instrumentation (such as
+profiling) easy to set up, it also allows you to selectively override its
+behavior to do non-standard things.
+<p>
+<!-- We describe one such extension, for path profiling in the style of Ball and-->
+<!-- Larus \cite{bib-ball-larus}.-->
+
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">How HALT is Used</a></li>
+  <ul compact>
+  <li><a href="#toc5">Example: Edge Profiling</a></li>
+  <li><a href="#toc6">Other Applications of HALT</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc7">Node profile.</a></li>
+      <li><a href="#toc8">Path profile.</a></li>
+      <li><a href="#toc9">Branch prediction evaluation.</a></li>
+      <li><a href="#toc10">Cache simulation.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc11">User's Guide</a></li>
+  <ul compact>
+  <li><a href="#toc12">Identifying Instrumentation Points</a></li>
+    <ul compact>
+    <li><a href="#toc13">HALT's label pass</a></li>
+      <ul compact>
+      <li><a href="#toc14">What label labels.</a></li>
+      <li><a href="#toc15">How label assigns ``unique'' identifiers.</a></li>
+      </ul>
+    <li><a href="#toc16">Generating your own HALT annotations</a></li>
+      <ul compact>
+      <li><a href="#toc17">Static versus dynamic arguments.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc18">The Instrument Pass</a></li>
+  <li><a href="#toc19">Writing HALT Analysis Routines</a></li>
+  </ul>
+<li><a href="#toc20">Extending the HALT System</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc21">What the instrument pass does.</a></li>
+      <li><a href="#toc22">Class HaltRecipe.</a></li>
+      <li><a href="#toc23">operator() method.</a></li>
+      <li><a href="#toc24">What goes in the pot.</a></li>
+      <li><a href="#toc25">Target-specific methods.</a></li>
+      <li><a href="#toc26">Following the recipe.</a></li>
+      <li><a href="#toc27">Inserting the instrumentation.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc28">How to Create a HALT-Ready Target Library</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc29">Creating a context object.</a></li>
+      <li><a href="#toc30">Organizing your recipes.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc31">Extending HALT for Path Profiling</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc32">Instrumentation kind extensions.</a></li>
+      <li><a href="#toc33">Instrumenting Ball-Larus paths.</a></li>
+      <li><a href="#toc34">Adding the extended kinds.</a></li>
+      <li><a href="#toc35">Kind PATH_SUM_INIT.</a></li>
+      <li><a href="#toc36">Kind PATH_SUM_INCR.</a></li>
+      <li><a href="#toc37">Kind PATH_SUM_READ.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc38">Summary</a></li>
+<li><a href="#toc39">Acknowledgments</a></li>
+<li><a href="#toc40">References</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+The HALT library is an instrumentation package for Machine SUIF.  It allows
+the user to modify a program as it is compiled to perform run-time analysis
+of its own behavior.  HALT helps record and summarize useful facts about 
+where a program spends its time and how it accesses data.  The resulting
+profiles can be used as inputs to compiler optimizations, and they can shed
+light on opportunities for new optimizations, either in software or hardware.
+<p>
+For example, HALT is a useful tool in support of static profile-driven
+optimizations.  And many dynamic techniques, such as ``walk-time
+optimization,''
+<!-- Reference for walk-time optimization?-->
+just-in-time compilation, run-time code generation,
+instruction set emulation, and binary translation, also require the sort of
+run-time information that a system such as HALT provides.
+<p>
+The name HALT stands for Harvard Atom-like Tool, after the Atom tool
+developed by Digital Equipment Corporation (now part of Compaq)
+<b>[cite&nbsp;<a href="#NWcite-bib-atom">bib-atom</a>]</b>.  Atom is a customizable system for instrumenting already
+compiled Alpha executables.
+<p>
+HALT runs as part of compilation.  Since parts of HALT have to perform
+target-specific tasks, HALT must be extended for each target architecture
+<a name="NWD2">with which you wish to use it.  Currently HALT is implemented for both the</a>
+<i>x</i>86 and Alpha targets.
+<p>
+Section&nbsp;<a href="#sec-examples">[-&gt;]</a> contains an example of how you might use HALT to
+generate a simple edge profile.  Section&nbsp;<a href="#sec-users-guide">[-&gt;]</a> contains all
+you about HALT to user it for standard tasks like profiling.
+Section&nbsp;<a href="#sec-extenders-guide">[-&gt;]</a> is as an extender's guide, providing
+implementation specifics to help you adapt HALT to a new platform or to use
+it in a new way.
+<p><h2><a name=toc4>How HALT is Used</a></h2>
+<a name="sec-examples"><b>[*]</b></a>
+<p>
+Here, in a nutshell, is how you use HALT for typical instrumetation-based
+tasks like profiling.
+<p>
+<ul>
+
+<li>You run a pass that marks points in the program that you want to have
+instrumented.  A pass called <code>label</code>, provided with HALT, handles typical
+cases for you, but you can also do this in a pass of your own.
+<p>
+<li>You write run-time <em>analysis routines</em>, one for each kind of
+instrumentation that's been marked in your program.  E.g., if you have
+instrumented procedure entries, then you write a routine called
+<code>_record_entry</code> to be called each time an instrumented procedure is
+entered.
+<p>
+<li>You use HALT's instrument pass to do the actual insertion as part of
+Machine-SUIF compilation.
+<p>
+<li>You run the resulting program, linked with your run-time analysis
+routines, on representative input data, producing some analysis, i.e., some
+data about the program's performance.  For example, the analysis data might
+be an execution count for each instrumented program point.
+<p>
+<li>Finally, you map the collected data back to the program in a form
+useful for your intended application.  There's no single recipe for doing
+this.  If your goal is to provide a profile for manual optimization, you
+might identify ``hot spots'' by source file, procedure name and line
+number.  If you're guiding a profile-driver optimizer, then you must put
+your analysis information into the form that it expects to read.
+<p>
+</ul>
+
+
+<h3><a name=toc5>Example: Edge Profiling</a></h3>
+<a name="sec-edge-profiling"><b>[*]</b></a>
+<p>
+HALT is easy to use for edge profiling, allowing you to gather data 
+needed to determine how many times each control flow graph (CFG) 
+edge is traversed during the execution of a program.  
+<p>
+Say you had the CFG for your program with numbered nodes.  The
+information that HALT would provide would indicate which direction
+control went every time it reached a control-flow-related instruction.
+HALT obtains this information by inserting calls on run-time analysis
+routines just before each such instruction.  The arguments to an
+analysis routine for a branch indicate which branch it is and which
+edge from the branch node is being taken.
+<p>
+To mark each branch, HALT assigns it a unique identifier, distinct
+from that of other branches in the program.  To identify an out-edge
+for a branch node, HALT uses a 0-based index into the sequence of its
+successor nodes.  In the case of a conditional branch that index is 0
+when the branch is not taken (the ``fall-through'' case) and 1 when
+the branch is taken.  For a multiway branch with <i>k</i> out edges, the
+index ranges between 0 and <i>k-1</i>.
+<p>
+The purpose of analysis routines for edge profiling is to record the
+number of times each branch edge is taken during runs on sample
+inputs.  To connect the measured frequencies back to the program, you
+need a map from each unique identifier back to the corresponding point
+in the control flow graph (CFG).  One way to create such a map is with
+a pass called <code>summarize</code>.  It produces a representation of the CFG
+labeled with unique identifiers.
+<p>
+Having mapped each HALT unique identifier to a point in the CFG, you
+can use the frequencies of branch edges to calculate how many times
+each edge in the CFG was traversed during the program execution.
+<p>
+The following commands use HALT to gather the run-time data needed to 
+complete the edge profile described above.
+<p>
+<pre>
+    do_label -entry -exit -cbr -mbr foo.input foo.labeled
+    do_instrument -target_lib x86_halt foo.labeled foo.instrumented
+</pre>
+
+To produce the CFG labeled with unique identifiers:
+<p>
+<pre>
+    do_summarize foo.labeled foo.summary
+</pre>
+
+
+<h3><a name=toc6>Other Applications of HALT</a></h3>
+<a name="sec-other-apps"><b>[*]</b></a>
+<p>
+HALT can gather other types of profiles in addition to the simple 
+edge profile described above.  Profiles are especially important 
+in guiding profile-driven optimizations.  Below are some possibilities 
+for other uses of HALT.
+<p>
+<h5><a name=toc7>Node profile.</a></h5>
+An even simpler program profile than an edge profile is a node profile,
+which tells you the number of times each basic block was executed.  For
+node profiling, you use the <code>-bb</code> option of the <code>label</code> pass, which
+marks the start of each basic block as an instrumentation point.
+<p>
+<h5><a name=toc8>Path profile.</a></h5>
+Node and edge profiles are called <em>point</em> profiles.  A <em>path</em>
+profile helps you understand the execution frequencies of important basic
+block sequences, which is valuable information because it allows you to
+exploit correlations that aren't exposed in point profiles.  HALT has been
+used for depth-bounded path-profiling in studies of static correlated
+branch prediction and profile-directed instruction
+scheduling&nbsp;<b>[cite&nbsp;<a href="#NWcite-bib-scbp">bib-scbp</a>]</b>.  In this application, arbitrary paths up to a
+certain history depth are monitored.
+<p>
+We are currently using HALT to implement an alternative path-profiling
+approach developed by Thomas Ball and James Larus <b>[cite&nbsp;<a href="#NWcite-bib-ball-larus">bib-ball-larus</a>]</b>.
+The Ball-Larus method assigns a unique number to each acyclic path in a
+program.  The numbering scheme is designed so that very lightweight
+instrumentation, placed at strategically-chosen program points, is
+sufficient to identify which path has been taken whenever a path endpoint
+is reached.  Our implementation of the Ball-Larus approach extends the HALT
+library to accommodate new kinds of instrumentation.  We sketch these
+extensions in Section&nbsp;<a href="#sec-extending-for-pp">[-&gt;]</a>.
+<p>
+<h5><a name=toc9><a name="NWD3">Branch prediction evaluation.</a></a></h5>
+One can evaluate branch prediction hardware by modelling the hardware being
+tested and comparing its predictions for each branch with the direction
+actually taken by the program, information that HALT can provide.
+<p>
+<h5><a name=toc10>Cache simulation.</a></h5>
+Using instrumentation data on memory references, you can use HALT to
+simulate and compare different cache models and replacement policies.
+<p><h2><a name=toc11>User's Guide</a></h2>
+<a name="sec-users-guide"><b>[*]</b></a>
+<p>
+This section explains how to mark places in code being compiled where
+instrumentation should be inserted, how to use the <code>instrument</code> pass to
+insert the actual instrumentation code, and how to write the analysis
+routines that the instrumented code will call at run time.
+<p>
+<h3><a name=toc12>Identifying Instrumentation Points</a></h3>
+<p>
+You identify each instrumentation point by adding a HALT annotation to an
+instruction.  The annotation marks a point of interest in the code being
+compiled and it indicates what kind of instrumentation needs to be done.
+To attach annotations, you can either use HALT's <code>label</code> pass, which
+performs numbers and labels selected instrumentation points in a SUIF file,
+or you can place the HALT annotations using a pass of your own.  The latter
+alternative allows you to be more selective, and you may well have an
+existing pass can that can be adapted to do the labeling as an optional
+side effect.
+<p>
+A HALT annotation has the key <code>k_halt</code>.  Its associated value contains
+two or more constants: a <em>kind identifier</em>, a <em>unique
+identifier</em>, and possibly other values that the instrumentation code will
+use at run time.  The kind identifier is an integer that distinguishes one
+kind of instrumentation point (such as a conditional branch) from another
+(such as a procedure entry).  Different kinds require different handling,
+both at instrumentation time and at run time.  The unique identifier
+distinguishes the specific instrumentation point.  It is often literally
+unique to one point in the compiled code, but nothing in HALT requires that
+to be the case.  You could, for example, create a separate identifier space
+for each instrumentation kind, if you prefer.
+<p>
+The additional values attached to the HALT annotation are also up to the
+user.  Suppose that you want to instrument a program to measure the number
+of instructions that it executes (dynamically) on each run.  To do so, you
+can attach the number of instructions in each basic block to a HALT
+annotation at the entry of the block.  Each time that point is reached at
+run time, instrumentation code calls an analysis routine (written by you)
+that adds the static count to a running total.
+<p>
+<h4><a name=toc13>HALT's <code>label</code> pass</a></h4>
+<p>
+The <code>label</code> pass looks at each procedure in the program, going through
+each node in the procedure's control flow graph, and for each node, going
+through the instructions contained in it.  Depending on the options you
+give on the <code>label</code> command line, the pass looks for instructions that
+<a name="NWD4">satisfy predicates such as </a><code>is_cbr</code> (for conditional branches) or
+<code>reads_memory</code> (for loads).  When it finds an instruction satisfying an
+appropriate condition, the <code>label</code> pass attaches a HALT annotation to it,
+incorporating a freshly generated unique identifier and the kind identifier
+of instrumentation to be performed.
+<p>
+<h5><a name=toc14>What <code>label</code> labels.</a></h5>
+Here are the instrumentation kinds that HALT knows about initially.
+<p>
+<pre><a name="NW1llvx7-1ovzwr-1" href="#NWD4"><dfn>&lt;kinds list&gt;=</dfn></a> <b>[D<a href="#NWDG">-&gt;</a>]</b>
+namespace halt {
+
+enum {
+    STARTUP = 0,        // whole-program entry
+    CBR,                // conditional branch
+    MBR,                // multi-way branch
+    ENTRY,              // procedure entry
+    EXIT,               // procedure exit
+    SETJMP,             // setjmp call
+    LONGJMP,            // longjmp call
+    LOAD,               // reads memory
+    STORE,              // writes memory
+    BLOCK,                      // basic block
+    CYCLE               // cycle count
+};
+} // namespace halt
+<a name="NW1llvx7-1ovzwr-1-u1" href="#NWDH"><i>&lt;last kind value&gt;</i></a>
+</pre><p>
+
+Note that kind identifiers are wrapped in a C++ <code>namespace</code> declaration.
+When you use a HALT kind identifier, you may either qualify it with the
+namespace, as in <code>halt::CBR</code>, or open the <code>halt</code> namespace with the
+declaration
+<p>
+<pre>
+    using namespace halt;
+</pre>
+
+Here are sketches of the various kinds:
+<p>
+<ul>
+
+<li>Program start (<code>STARTUP</code>):
+<p>
+The <code>STARTUP</code> point is always at the entry of the main procedure of the
+compiled program.  The <code>instrument</code> pass instruments that point without
+needing an annotation to guide it.  The <code>STARTUP</code> analysis routine that
+you define can allocate and initialize storage, install signal handlers,
+and otherwise prepare for run-time analysis.  Typically, it invokes
+<code>atexit</code> to register a termination handler, a function that finalizes
+analysis when the program exits.  For example, the termination handler
+might write a profile to disk.
+<p>
+<li>Conditional branch (<code>CBR</code>):
+<p>
+The analysis routine for a conditional branch takes two arguments, the
+unique identifier of the instrumentation point and the branch condition.
+The condition is 1 when the branch is about to take, and 0 when it will
+fall through.  The <code>label</code> pass annotates conditional branches when
+given the <code>-cbr</code> option.
+<p>
+<li>Multiway branch (<code>MBR</code>):
+<p>
+The analysis routine for a multiway branch takes the unique identifier
+and the the zero-based index of the branch target chosen.
+ <b>[</b>The number of targets of a multiway branch and the index
+associated with each isn't always obvious from the source code that
+gives rise to it (e.g., a C <code>switch</code> statement).  The <code>default</code>
+label can correspond to more than one index in a multiway dispatch, or
+it might be omitted completely if the front end has ruled out the need
+for it.<b>]</b> 
+The <code>label</code> pass annotates multiway branches when given the <code>-mbr</code>
+option.
+<p>
+<li>Procedure entry (<code>ENTRY</code>):
+<p>
+The analysis routine for a procedure-entry point receives just the unique
+identifier of that point.  The <code>-proc</code> option to <code>label</code> causes every
+procedure entry point to be annotated.  (It also affects return-point
+annotation.  See the next entry.)
+<p>
+<li>Procedure exit (<code>EXIT</code>):
+<p>
+The analysis routine for a procedure-exit (return) point receives just
+the unique identifier of that point.  If you give <code>label</code> the <code>-ret</code>
+option, then it annotates every return instruction giving each one a
+distinct unique number.  If you use both <code>-ret</code> and <code>-proc</code>, each
+procedure entry and exit receives its own unique number.  However if
+<code>-proc</code> is used without <code>-ret</code>, each return point is given the same
+unique number as the entry of the procedure that contains it.  That makes
+it easy to keep track of which procedure is the ``innermost'' currently
+active at run time.
+<p>
+<li><code>setjmp</code> call (<code>SETJMP</code>):
+<p>
+The analysis routine for a <code>setjmp</code> is called just before the original
+<code>setjmp</code> call.  It takes a unique identifier and the <code>jmp_buf</code> value
+that is to be passed to <code>setjmp</code>.  The <code>label</code> pass annotates
+<code>setjmp</code> calls when you give it the <code>-setlongjmp</code> option.
+<p>
+<li><code>longjmp</code> call (<code>LONGJMP</code>):
+<p>
+The analysis routine for a <code>longjmp</code> takes three parameters: a unique
+identifier plus the <code>jmp_buf</code> and ``status'' values that are to be
+passed to <code>longjmp</code>.  The <code>label</code> pass annotates <code>longjmp</code> calls
+when you give it the <code>-setlongjmp</code> option.
+<p>
+<li>Load (<code>LOAD</code>):
+<p>
+This kind of instrumentation covers any instruction that reads from
+memory.  The analysis routine takes three arguments: the unique
+identifier of the memory-fetch instruction, the address in memory from
+which data is read, and the number of bytes transferred.  To annotate
+memory-fetch instructions, add the <code>-load</code> flag to the <code>label</code>
+command line.
+<p>
+<li>Store (<code>STORE</code>):
+<p>
+This kind of instrumentation covers any instruction that writes to
+memory.  The instrumentation is placed just after the original store.
+The analysis routine takes three arguments: the unique identifier of the
+store instruction, the address in memory to which data is written, and
+the number of bytes transferred.  To annotate store instructions, add the
+<code>-store</code> flag to the <code>label</code> command line.
+<p>
+<li>Basic block (<code>BB</code>):
+<p>
+Basic-block instrumentation is inserted at the entry of each node of a
+CFG except the entry and exit nodes.  The only argument to the analysis
+routine is the unique identifier.  You can cause basic-block entries to
+be markd for instrumentation by using the <code>-bb</code> option of the <code>label</code>
+pass.
+<p>
+<li>Cycle (<code>CYCLE</code>):
+<p>
+A <code>CYCLE</code> event represents the advancement from one processor cycle to
+the next.  These instrumentation points are marked by a scheduler, not by
+the <code>label</code> pass.  The only analysis-routine argument for a <code>CYCLE</code>
+point is its unique identifier.
+<p>
+</ul>
+
+<h5><a name=toc15>How <code>label</code> assigns ``unique'' identifiers.</a></h5>
+<p>
+The <code>label</code> pass assigns a fresh unique identifier to each
+instrumentation point that it annotates.  By default, it starts at 0 and
+adds 1 to form subsequent identifiers.  To give it an explicit starting
+value, add <code>-unique</code> <em>identifier</em> to the command line.  When it
+finishes, <code>label</code> prints the next unused identifier on its standard
+output.  This allows you to assign numbers that are unique over a whole
+program.  You apply <code>label</code> to each file of the program in turn,
+capturing the final identifier for each and making that the starting value
+for the next.
+<p>
+The effects of the <code>label</code> pass are cumulative.  If you want the unique
+numbers for procedure entry, say, to be drawn from a different space than
+branch numbers, you could run <code>label</code> twice, once with the <code>-proc</code>
+option and again with the <code>-cbr</code> and <code>-mbr</code> options.  The resulting
+identifiers would still be unique within kinds, but not across kinds.
+Sometimes, that's the scheme that leads to the most efficient run-time
+organization.
+<p>
+
+
+<h4><a name=toc16>Generating your own HALT annotations</a></h4>
+<a name="sec-custom-labels"><b><a name="NWD5">[*]</a></b></a>
+<p>
+You might prefer to write your own SUIF pass to insert HALT annotations.
+If your research interests focus on particular parts of a program, then 
+you most likely already have a SUIF pass that knows how to locate these 
+parts, so modifying this pass to add HALT annotations isn't too difficult.  
+<p>
+Here is the definition of the HALT annotation class.  
+<p>
+<pre><a name="NW1llvx7-23DomI-1" href="#NWD5"><dfn>&lt;Class <code>HaltLabelNote</code>&gt;=</dfn></a>
+class HaltLabelNote : public Note {
+ public:
+    HaltLabelNote() : Note(note_list_any()) { }
+    HaltLabelNote(long kind, long id) : Note(note_list_any())
+        { _replace(0, kind); _replace(1, id); }
+    HaltLabelNote(const HaltLabelNote &amp;other) : Note(other) { }
+    HaltLabelNote(const Note &amp;note) : Note(note) { }
+
+    long get_kind() const                    { return _get_c_long(0); }
+    void set_kind(long kind)                 { _replace(0, kind); }
+    long get_unique_id() const               { return _get_c_long(1); }
+    void set_unique_id(long id)      { _replace(1, id); }
+
+    int  get_size_static_args(void)          { return _values_size() - 2; }
+    long get_static_arg(int pos)             { return _get_c_long(pos+2); }
+    void set_static_arg(int pos, long value) { _replace(pos + 2, value); }
+};
+</pre><p>
+
+<h5><a name=toc17>Static versus dynamic arguments.</a></h5>
+<p>
+We call analysis routine arguments that are known at compile time
+<em>static</em> arguments.  The unique identifier of an instrumentation point
+is an example of a static argument.  A <em>dynamic</em> argument however is
+an argument to the analysis routine that cannot be known until run time.
+For example, you can't know whether or not a conditional branch is taken
+until the program is run.  So the condition code of a conditional branch is
+considered a dynamic argument to the analysis routine.
+<p>
+The <code>HaltLabelNote</code> allows for more than one static argument.  The
+generic HALT <code>label</code> pass uses only the unique identifier of an
+instrumentation point as a static argument.  However, when you write your
+own pass to insert <code>HaltLabelNote</code>s you may wish to include other static
+arguments.  You do so by first creating a <code>HaltLabelNote</code> value and then
+calling the <code>set_static_arg</code> and method to append static argument values.
+Section &nbsp;<a href="#sec-extending-for-pp">[-&gt;]</a> contains an example that uses extra
+static arguments.
+<p>
+When an analysis routine is called, its dynamic arguments come first,
+followed by its static arguments.  That allows you to add extra static
+arguments for particular instrumentation points without having to define
+new instrumentation kinds.  You just need to write analysis routines that
+accept the extra arguments.
+<p>
+
+<h3><a name=toc18>The <code>Instrument</code> Pass</a></h3>
+<p>
+Once there are HALT annotations in the program, the <code>instrument</code> pass 
+comes along to manipulate and insert the proper instructions to make the calls 
+to analysis routines.  The following command line would run the 
+<code>instrument</code> pass.
+<p>
+<pre>
+    do_instrument -target_lib x86_halt foo.labeled foo.instrumented
+</pre>
+
+There is only one flag for the command line, the <code>-target_lib</code> flag,
+which indicates the target library to use to generate the machine code.
+This can be either <code>x86_halt</code> or <code>alpha_halt</code> or one you write yourself
+if you have extended Machine SUIF and HALT to another target.  If you've
+added a new target library to Machine SUIF you must also extend HALT to
+generate instrumentation code in that machine language.  Therefore
+<code>-target_lib x86_halt</code> works on the <code>instrument</code> pass command line, but
+<code>-target_lib x86</code> does not.  There is more information about extending
+HALT for a new target in Section&nbsp;<a href="#sec-extenders-guide">[-&gt;]</a>.
+<p>
+<h3><a name=toc19>Writing HALT Analysis Routines</a></h3>
+<p>
+The instrument pass, according to the kind of instrumentation, inserts a 
+call to the user-defined analysis routine for that kind.  These routines 
+are named using the following formula: <code>_record_</code><em>kind</em>.  That 
+means that the analysis routine for conditional branches is called
+<code>_record_cbr</code>.  Here is a list of the analysis routine declarations 
+for the kinds HALT can currently instrument.
+<p>
+<pre>
+void _halt_startup(void);
+void _record_cbr(unsigned long cond, unsigned long id);
+void _record_mbr(unsigned long index, unsigned long id);
+void _record_entry(unsigned long id);
+void _record_exit(unsigned long id);
+void _record_load(long bytes, unsigned long ea, unsigned long id);
+void _record_store(long bytes, unsigned long ea, unsigned long id);
+void _record_block(unsigned long id);
+void _record_cycle(unsigned long id);
+void _record_setjmp(unsigned long buf, unsigned long id);
+void _record_longjmp(unsigned long buf, unsigned long status, unsigned long id);
+</pre>
+
+<a name="NWD6">In each of the above functions, the last argument, the instrumentation</a>
+point's unique identifier, is the only static argument.  Each argument
+before that is a dynamic one, whose value must be developed at run time.
+<p>
+These analysis routines are written in C, but can also be written in C++.
+If you write the functions in C++ you must be sure to use the
+<code>extern &quot;C&quot;</code> specifier in the declaration so that the function names won't
+be mangled.
+<p><h2><a name=toc20>Extending the HALT System</a></h2>
+<a name="sec-extenders-guide"><b>[*]</b></a>
+<p>
+
+There are two main reasons for wanting to extend HALT.  First, because
+the action of HALT is partly target-specific, you may want to extend its
+functionality to a new target platform.  Second, you may want to perform
+a new kind of instrumentation, e.g., to monitor a kind of run-time event
+that isn't handled by the basic library.  We'll give examples of such
+events in Section&nbsp;<a href="#sec-extending-for-pp">[-&gt;]</a>.
+<p>
+To understand how to extend HALT, you need to know something about how the
+<code>instrument</code> pass operates.  The examples in this section use the <i>x</i>86
+target.  You can find the complete code adapting HALT to that platform in
+the <code>x86_halt</code> directory of the Machine-SUIF distribution.  It may be
+helpful to look over this code when porting the library to a new target.
+<p>
+<h5><a name=toc21>What the <code>instrument</code> pass does.</a></h5>
+<p>
+The <code>instrument</code> pass scans the representation of code being compiled,
+looking for HALT annotations attached to instructions.  When it finds such
+a note, it applies the function <code>halt_recipe</code> to its kind identifier to
+obtain a <em>recipe</em> for performing instrumentation.
+ <b>[</b><code>halt_recipe</code> is
+the HALT library's addition to the Machine-SUIF OPI.  So it can be used
+in target-independent code (like the <code>instrument</code> pass), but its
+semantics in any given application depend on the prevailing target context
+<b>[cite&nbsp;<a href="#NWcite-bib-opi-extenders">bib-opi-extenders</a>]</b>.<b>]</b> 
+
+A recipe is a C++ object of class <code>HaltRecipe</code>.  It represents the series
+of steps needed to instrument one event.  The <code>instrument</code> pass
+``applies'' the recipe to the annotated instruction; that is, it invokes
+the <code>operator()</code> method of class <code>HaltRecipe</code>, passing the location of
+the HALT-annotated instruction and some other information (described below)
+as arguments.  The <code>operator()</code> method inserts instrumentation code in
+the neighborhood of the annotated instruction (just before it or just
+after).
+<p>
+A recipe is customized for the target and for the kind of instrumentation
+that it handles.  It has to know about the target because it involves
+emitting machine-specific instructions.  It has to know about the
+instrumentation kind because collection of information about instrumented
+events is different for the different kinds.  The recipe for instrumenting
+a conditional branch on the <i>x</i>86, for instance, has to know how to pass
+arguments to a function called at run time (i.e., by pushing them onto the
+stack in reverse order) and it has to know how to emit code that grabs the
+the branch condition at run time (which it does by inspecting the code
+leading up to the branch).
+<p>
+
+<h5><a name=toc22>Class <code>HaltRecipe</code>.</a></h5>
+<p>
+You extend HALT by encoding new recipes in subclasses of the abstract class
+<code>HaltRecipe</code>.  There is a subclass for each target family (e.g.,
+<code>HaltRecipeX86</code>).  Its methods handle things that are needed by most
+recipes for that family (e.g., emitting code to call a function at
+run time).  And there is a concrete subclass of the target-specific class
+for each instrumentation kind (e.g., <code>HaltRecipeX86Cbr</code> for <i>x</i>86
+conditional-branch events).  This is the class whose <code>operator()</code> method
+knows the exact recipe for that target and kind.
+<p>
+Almost every recipe inserts a function call into the original program.  In
+addition to the actual call, there must be code for saving and restoring
+registers affected by the call and for developing the dynamic arguments
+(the ones whose values can't be known until run time).
+<p>
+For a particular target, most of these tasks can be handled in the same way
+for each kind of instrumentation.  There are <code>HaltRecipe</code> methods for
+each task, and most are implemented at the target-specific level (e.g., in
+class <code>HaltRecipeX86</code>).  If necessary, however, any of these methods can
+be overridden by the class for a particular kind (such as
+<code>HaltRecipeX86Cbr</code>).
+<p>
+A recipe collects instrumentation code in the <code>instr_pot</code> data field of
+class <code>HaltRecipe</code>, which is an array of instruction lists.  As the
+<a name="NWD7">recipe is followed at a given instrumentation point, these lists are filled</a>
+with code snippets for the tasks making up the recipe.  For example,
+<code>instr_pot[SAVE]</code> receives the instructions for saving registers.  After
+<code>instr_pot</code> has been filled, the final step is to pour the
+instrumentation code snippets from the ``pot'' into the original
+instruction stream in the right order.
+<p>
+Here's how class <code>HaltRecipe</code> is declared:
+<!--recipe.h.nw-->
+<p><pre><a name="NW1nuTVP-3r9ODT-1" href="#NWD7"><dfn>&lt;class <code>HaltRecipe</code>&gt;=</dfn></a>
+class HaltRecipe {
+  public:
+    HaltRecipe() { prepare_pot(); }
+    virtual ~HaltRecipe() { /* scrub_pot(); */ } // (SUIF dtor-ordering problem)
+
+    // insert target- and kind-specific instrumentation for one point
+    virtual void
+        operator()(HaltLabelNote note, InstrHandle handle, CfgNode *block,
+                   const NatSet *live_before, const NatSet *live_after) = 0;
+  protected:
+    InstrList *instr_pot[halt::RECIPE_SIZE];    // code snippets for this...
+                                                // ...instrumentation point
+    Vector&lt;Opnd&gt; args;                          // args to analysis routine
+
+    // target-independent helpers
+    void prepare_pot();                         // initialize instr_pot
+    void scrub_pot();                           // clean up instr_pot
+    void follow_recipe(int kind,                // fill instr_pot by calling...
+                       const NatSet *live);     // ... target-specific methods
+    void insert_instrs(halt::InsertPoint,       // pour instr_pot into stream...
+                       CfgNode*, InstrHandle);  // ...at indicated point
+
+    // target-specific helper methods for use in operator()
+    virtual void static_args(HaltLabelNote) = 0;
+    virtual void build_save_set(NatSet *save, const NatSet *live) = 0;
+    virtual void setup_stack() = 0;
+    virtual void save_state(NatSet *save) = 0;
+    virtual void insert_args() = 0;
+    virtual void insert_call(ProcSym*) = 0;
+    virtual void clean_args() = 0;
+    virtual void restore_state(NatSet *save) = 0;
+    virtual void destroy_stack() = 0;    
+};
+</pre><p>
+
+As the declaration above shows, <code>HaltRecipe</code> is an abstract class: it
+defines only four of the methods that it declares.  Two of them,
+<code>prepare_pot</code> and <code>scrub_pot</code>, are normally only used by the
+<code>HaltRecipe</code> constructor and destructor, respectively.  The other two,
+<code>follow_recipe</code> and <code>insert_instrs</code>, are useful when you implement
+<code>operator()</code> for particular target machines and instrumentation kinds.
+<code>follow_recipe</code> fills <code>instr_pot</code>, and <code>insert_instrs</code> empties it
+into the instruction stream of the program being instrumented.  The
+arguments to <code>follow_recipe</code> are a kind identifier (e.g., <code>CBR</code> for a
+conditional branch point) and a set representing the live registers at the
+instrumentation point (see the discussion of <code>operator()</code> below).  The
+arguments to <code>insert_instrs</code> give the position at which instrumentation
+code should be inserted: a flag indicating whether to place it before or
+after the original instruction, together with the block and the position of
+that instruction within the block.  (An example of how to use
+<code>follow_recipe</code> and <code>insert_instrs</code> is coming up.)
+<p>
+
+<h5><a name=toc23><code>operator()</code> method.</a></h5>
+<p>
+The virtual <code>operator()</code> method in class <code>HaltRecipe</code> embodies the
+recipe for a particular target machine and instrumentation kind.  It takes
+the following arguments:
+<p>
+<ul>
+<li><code>note</code>, the HALT annotation containing the instrumentation kind
+and static arguments;
+<li><code>handle</code>, a handle on the annotated instruction;
+<li><code>block</code>, the basic block containing the annotated instruction;
+<li><code>live_before</code> and <code>live_after</code>, sets of registers live before
+and after the annotated instruction, respectively.
+</ul>
+<p>
+The sets <code>live_before</code> and <code>live_after</code> contain abstract register
+numbers for the target machine.  Register liveness is needed during
+instrumentation to minimize the number of registers that have to be saved
+and restored around the inserted code.  The <code>live_before</code> set is used
+when the insertion point precedes the annotated instruction;
+<code>live_after</code>, when it follows.  The <code>instrument</code> pass provides both
+since it doesn't know which is actually needed.
+<p>
+The typical <code>operator()</code> method creates code that develops any needed
+dynamic analysis-routine argument values, it calls <code>follow_recipe</code> to
+fill <code>instr_pot</code> with these and other needed instructions, and then it
+calls <code>insert_instrs</code> to insert the contents of <code>instr_pot</code> into the
+instruction stream of the program.
+<p>
+As an example of how to write this method, consider the case of an <i>x</i>86
+conditional branch that has been annotated for instrumentation.  Here is
+the code at such a branch after <code>instrument</code> has finished with it:
+<p>
+<pre>
+        cmpl    $0,%ecx        # original
+        pushfl                 # instr_pot[SAVE]
+        pushl   %eax           # instr_pot[SAVE]
+        setne   %al            # instr_pot[KIND]
+        movzbl  %al,%eax       # instr_pot[KIND]
+        pushl   $42            # instr_pot[ARGS]
+        pushl   %eax           # instr_pot[ARGS]
+        call    _record_cbr    # instr_pot[CALL]
+        addl    $8,%esp        # instr_pot[CLEAN]
+        popl    %eax           # instr_pot[RESTORE]
+        popfl                  # instr_pot[RESTORE]
+        jne     main._tmp123   # original
+</pre>
+
+Before instrumentation, the program performed a compare (<code>cmpl</code>) followed
+by a jump-if-not-equal (<code>jne</code>).  The code that <code>instrument</code> has
+inserted between these two original instructions:
+<p>
+<ul>
+<li>saves registers that are live before the branch (<code>EFLAGS</code> and
+<code>EAX</code>);
+<li>realizes the branch condition as an integer in <code>EAX</code>: zero if the
+branch will fall through, or one if it will take.
+<li>pushes the analysis-routine arguments in reverse order: first the
+static argument 42, which is the unique identifier of the instrumentation
+<a name="NWD8">point, and then the dynamic argument in </a><code>EAX</code>;
+<li>calls the analysis routine (<code>_record_cbr</code>);
+<li>flushes the arguments from the stack (8 bytes' worth);
+<li>restores the saved registers.
+</ul>
+<p>
+Here is the <i>x</i>86 definition of <code>operator()</code> for the conditional-branch
+kind (<code>CBR</code>):
+<p>
+<pre><a name="NW1nuTVP-2UfEnU-1" href="#NWD8"><dfn>&lt;x86 <code>CBR</code> <code>operator()</code>&gt;=</dfn></a>
+void
+HaltRecipeX86Cbr::operator()
+    (HaltLabelNote note, InstrHandle handle, CfgNode *block,
+     const NatSet *live_before, const NatSet *live_after)
+{
+    debug(2, &quot;%s:HaltRecipeX86Cbr&quot;, __FILE__);
+
+    Instr *mi;
+    Opnd opnd_reg_al  = opnd_reg(AL,  type_s8);
+    Opnd opnd_reg_eax = opnd_reg(EAX, type_s32);
+
+    // find the setCC opcode matching the branch's jCC opcode
+    int setcc = jcc_to_setcc(get_opcode(*handle));
+
+    // build one dynamic arg in EAX: a 1 if branch will take, else 0
+    mi = new_instr_alm(opnd_reg_al, setcc, opnd_reg_eflags);
+    append(instr_pot[KIND], mi);                        // setCC %al
+
+    mi = new_instr_alm(opnd_reg_eax, MOVZX, opnd_reg_al);
+    append(instr_pot[KIND], mi);                        // movzx %al -&gt; %eax
+
+    // put argument operands (dynamic and static) into `args'
+    args.push_back(opnd_reg_eax);
+    static_args(note);
+
+    // save/restore regs live before the branch, including EFLAGS
+    NatSetDense to_save = *live_before;
+    to_save.insert(EFLAGS);
+
+    follow_recipe(CBR, &amp;to_save);
+    insert_instrs(BEFORE, block, handle);
+}
+</pre><p>
+
+The first half of the method above is about making the instructions that
+produce the dynamic argument for the analysis routine <code>_record_cbr</code>; in
+the example, these are the <code>setne</code> and <code>movzbl</code> instructions.
+ <b>[</b>Method <code>jcc_to_setcc</code> is a helper in class <code>HaltRecipeX86</code>.
+Given a conditional-jump opcode of <i>x</i>86, such as <code>JNE</code>, it returns the
+corresponding opcode (e.g., <code>SETNE</code>) for extracting a Boolean from
+the <code>EFLAGS</code> register as a byte-sized value.<b>]</b> 
+The first puts the branch condition into register <code>AL</code>, which is the low
+byte of <code>EAX</code>.  The second zero-extends that value into the full <code>EAX</code>
+register.  These two instructions go into <code>instr_pot[KIND]</code>, which is the
+segment of <code>instr_pot</code> used for purely kind-specific instrumentation
+code.
+<p>
+The next part of this <code>operator()</code> fills the sequence called <code>args</code>
+with operands that represent arguments to the analysis routine.  The
+<code>args</code> field of class <code>HaltRecipe</code> is where other methods expect to
+find these operands.  First <code>operator()</code> appends the dynamic-argument
+operand to <code>args</code>.  Since the argument value will be in <code>EAX</code> at run
+time, it uses a register operand representing <code>EAX</code>.  Next, static
+arguments are inserted by the <code>static_args</code> helper, which takes values
+from the HALT annotation and appends corresponding operands to <code>args</code>.
+(In the example, there's just one static argument, namely the unique
+identifier 42.)  Finally, like almost all <code>operator()</code> implementations,
+this one ends with calls on <code>follow_recipe</code>, to fill the other segments
+of <code>instr_pot</code>, and on <code>insert_instrs</code>, to move all <code>instr_pot</code>
+segments into the instruction stream.  It chooses to insert instrumentation
+code before the annotated instruction, rather than after.  For a
+conditional branch, this makes sense because the point after the
+instruction won't always be reached.  This choice is reflected in the use
+of <code>live_before</code> as the set of registers to save and restore (second
+argument to <code>follow_recipe</code>) and in the use of the <code>BEFORE</code> token when
+calling <code>insert_instrs</code>.
+<p>
+When you write an <code>operator()</code> method, you have complete control of what
+happens at the instrumentation points to which it applies.  As in the
+conditional-branch example, however, most of the work is usually handled by
+helper methods, leaving only kind-specific tasks to be implemented
+explicitly.
+<p>
+
+<h5><a name=toc24>What goes in the pot.</a></h5>
+<p>
+In the example above, <code>instr_pot[KIND]</code> is the instruction list in which
+<a name="NWD9">code for generating a dynamic argument is built up.  This segment of</a>
+<code>instr_pot</code>, intended for kind-specific purposes, is usually the only one
+that you'll need to mention explicitly in an <code>operator()</code> method.  The
+other segments are filled by methods that, while target-specific, are
+usually kind-independent.
+<p>
+Here is the full list of <code>instr_pot</code> segments, in the order of their
+appearance in the instrumented code:
+<p>
+<pre><a name="NW1nuTVP-1ynmzL-1" href="#NWD9"><dfn>&lt;recipe component names&gt;=</dfn></a>
+enum {
+    SETUP = 0,  // code to build stack frame
+    SAVE,       // save necessary register state
+    KIND,       // create kind-specific arguments
+    ARGS,       // argument setup
+    CALL,       // call to user-provided instrumentation routine
+    CLEAN,      // clean-up argument storage
+    RESTORE,    // restore saved register state
+    DESTROY,    // code to destroy the stack frame
+    RECIPE_SIZE
+};
+</pre><p>
+
+Some targets don't need to use every segment.  For example, the <i>x</i>86
+implementation doesn't use the <code>SETUP</code> and <code>DESTROY</code> segments because
+that ISA has stack push and pop instructions that let you allocate and free
+stack space while saving and restoring state.  The uses of the other
+segments are illustrated by the conditional-branch example above.
+<p>
+
+<h5><a name=toc25>Target-specific methods.</a></h5>
+<p>
+Here is a rundown of the target-specific methods that <code>HaltRecipe</code>
+declares.  Although these usually handle the kind-independent aspects of
+instrumentation-code preparation, you can always override them at the kind
+level if necessary.
+<p>
+<ul>
+
+<li><code>static_args(HaltLabelNote note)</code>: Appends operands for static
+arguments to the <code>args</code> sequence.  The first static argument is
+always the <code>unique_id</code> attribute of <code>note</code>.  The rest, if any,
+come from <code>note</code>'s <code>static_arg</code> sequence.
+<p>
+<li><code>build_save_set(NatSet *save, const NatSet *live)</code>: Looks at the
+set of <code>live</code> registers and converts it into a set of maximal
+registers which need to be saved before the call to the analysis
+routine.  This set, called the <em>save set</em>, is unioned into the
+result parameter <code>save</code>. Elements of <code>save</code> and <code>live</code> are
+abstract register numbers, as defined by the target library.
+<p>
+<li><code>setup_stack()</code>: Builds code in <code>instr_pot[SETUP]</code> to make room on
+the stack for saving state.  The amount of space needed is determined
+by other methods and communicated through a protected field.
+<p>
+<li><code>save_state(NatSet *save_set)</code>: Builds code in <code>instr_pot[SAVE]</code>
+to store all registers given by <code>save_set</code> on the stack.
+<p>
+<li><code>insert_args()</code>: Builds code in <code>instr_pot[ARGS]</code> for passing
+arguments to a subsequent call instruction.  Takes the argument
+operands from the <code>args</code> sequence (a field of class
+<code>HaltRecipe</code>).
+<p>
+<li><code>insert_call(ProcSym *routine)</code>: Builds a call to the given
+analysis <code>routine</code> in <code>instr_pot[CALL]</code>.
+<p>
+<li><code>clean_args()</code>: Builds code in <code>instr_pot[CLEAN]</code> to clean up
+after the <code>insert_args</code> method, if necessary.  This method must
+also clear the <code>args</code> sequence by calling <code>args.resize(0)</code>.
+<p>
+<li><code>restore_state(NatSet *save_set)</code>: Builds code in
+<code>instr_pot[RESTORE]</code> to restore the registers in <code>save_set</code> from
+the stack.
+<p>
+<li><code>destroy_stack()</code>: Builds code in <code>instr_pot[DESTROY]</code> to free
+the stack space allocated by <code>setup_stack</code>.
+<p>
+</ul>
+
+
+<h5><a name=toc26>Following the recipe.</a></h5>
+<p>
+<a name="NWDA">In the </a><i>x</i>86 conditional-branch example, only one of the target-specific
+methods described above was mentioned explicitly: <code>static_args</code> was
+called to begin the <code>args</code> sequence.  The rest are called from
+<code>follow_recipe</code>, which invokes them an order that's intended to allow
+reasonable communication between the methods.  For example, the
+<code>save_state</code> method is called before <code>setup_stack</code> because the former
+might need to record some information for the latter.  Here is the
+definition of <code>follow_recipe</code>:
+<p>
+<pre><a name="NW1nuTVP-2TgRSa-1" href="#NWDA"><dfn>&lt;method <code>follow_recipe</code>&gt;=</dfn></a>
+inline void
+HaltRecipe::follow_recipe(int unique_id, const NatSet *live)
+{
+    NatSetDense save_set;
+    build_save_set(&amp;save_set, live);
+
+    insert_args();
+    clean_args();
+
+    insert_call(halt_proc_sym(unique_id));
+
+    save_state(&amp;save_set);
+    restore_state(&amp;save_set);
+
+    setup_stack();              // save_state may record the size of the state
+    destroy_stack();
+}
+</pre><p>
+
+<h5><a name=toc27>Inserting the instrumentation.</a></h5>
+<p>
+The function <code>insert_instrs</code>, a call to which is the last thing done by
+<code>operator()</code>, performs the actual insertion of the instructions from
+<code>instr_pot</code> into the instruction stream of the program.
+<code>Insert_instrs</code> takes three arguments: the insertion point, the node in
+which the instructions are to be inserted, and the instruction handle of
+the annotated instruction.  The insertion point argument is simply of type
+<code><a name="NWDB">InsertPoint</a></code> (shown below) and indicates on which side of an annotated
+instruction to place the instrumentation.  In some cases this doesn't make
+a difference, but in other cases it can.  For example, the instrumentation
+for a store instruction is placed after the store instruction itself, so
+that the analysis routine could, since it has the address in memory and
+number of bytes of data being stored, look at the data that has been
+stored.  This has to be done after the store is executed because otherwise
+the data would not yet be at that address.
+<p>
+<pre><a name="NW1nuTVP-2MWmuc-1" href="#NWDB"><dfn>&lt;insertion-point names&gt;=</dfn></a>
+enum InsertPoint {
+    BEFORE,
+    AFTER
+};
+</pre><p>
+
+<h3><a name=toc28>How to Create a HALT-Ready Target Library</a></h3>
+<p>
+Recall from Section&nbsp;<a href="#sec-edge-profiling">[&lt;-]</a> that a typical command line
+for the <code>instrument</code> pass looks like this:
+<p>
+<pre>
+    do_instrument -target_lib x86_halt foo.labeled foo.instrumented
+</pre>
+
+The <code>-target_lib</code> option must name a library that has all the
+functionality of a regular Machine-SUIF target library and also supplies
+target-specific functionality for HALT.  In particular, it must provide the
+<i>x</i>86 implementation of the <code>halt_recipe</code> function.
+<p>
+<h5><a name=toc29>Creating a context object.</a></h5>
+<p>
+This customization uses the ``context object'' machinery described in
+<em>An Extender's Guide to the Optimization Programming Interface and
+Target Descriptions</em> <b>[cite&nbsp;<a href="#NWcite-bib-opi-extenders">bib-opi-extenders</a>]</b>.  The HALT library declares a
+class called <code>HaltContext</code> that specifies the interface that a HALT-ready
+target library must implement.  To make a HALT-ready target-specific
+library such as <code>x86_halt</code>, you combine the context class of an existing
+target library, such as <code>x86</code>, with a target-specific subclass of
+<code><a name="NWDC">HaltContext</a></code>, using C++ multiple inheritance.  An instance of the
+resulting class is the context object through which a target-independent
+pass like <code>instrument</code> queries the description of the target machine.
+The same context object that supplies register characteristics and
+implements predicates about instruction semantics also provides the
+target-specific results for the <code>halt_recipe</code> function.
+<p>
+The <code>HaltContext</code> class is particularly simple:
+<p>
+<pre><a name="NW1nuTVP-2HMVLK-1" href="#NWDC"><dfn>&lt;class <code>HaltContext</code>&gt;=</dfn></a>
+class HaltContext {
+  public:
+    HaltContext() { }
+    virtual ~HaltContext() { }
+
+    virtual void halt_begin_unit(OptUnit*) { }
+    virtual void halt_end_unit  (OptUnit*) { }
+    virtual HaltRecipe *halt_recipe(int) const = 0;
+};
+</pre><p>
+
+<a name="NWDD">As you see, there is only one method to implement: </a><code>halt_recipe</code> takes an
+integer instrumentation-kind indicator and returns a <code>HaltRecipe</code>
+pointer.
+<p>
+To carry the implementation, you subclass from <code>HaltRecipe</code>.  For
+example, in the <code>x86_halt</code> library, you will find:
+<p>
+<pre><a name="NW1nuTVP-Ynucc-1" href="#NWDD"><dfn>&lt;class <code>HaltRecipeX86</code>&gt;=</dfn></a>
+</pre><p>
+
+<a name="NWDE">And the implementation of </a><code>HaltRecipeX86::halt_recipe</code> just looks up the
+given kind indicator in a vector of recipes and returns the result.
+<p>
+To create the context object for your library, you derive another context
+class by multiple inheritance.  For example, in <code>x86_halt</code>:
+<p>
+<pre><a name="NW1nuTVP-3ZoMPH-1" href="#NWDE"><dfn>&lt;<i>x</i>86 HALT context inheritance&gt;=</dfn></a>
+class X86HaltContext : public virtual X86Context,
+                       public virtual HaltContextX86
+{ };
+</pre><p>
+
+<a name="NWDF">As described in the OPI extender's guide </a><b>[cite&nbsp;<a href="#NWcite-bib-opi-extenders">bib-opi-extenders</a>]</b>, you
+establish this target-context object at runtime by registering a
+context-creator function, such as the one for <code>x86_halt</code>:
+<p>
+<pre><a name="NW1nuTVP-PLqgE-1" href="#NWDF"><dfn>&lt;context creator for <code>x86_halt</code>&gt;=</dfn></a>
+</pre><p>
+
+Here ``registration'' means storing the function in
+<code>the_context_creator_registry</code> under the name of the library.  For
+instance, the function <code>init_x86_halt</code> contains the line:
+<p>
+<pre>
+    the_context_creator_registry[k_x86_halt] = context_creator_x86_halt;
+</pre>
+
+
+<h5><a name=toc30>Organizing your recipes.</a></h5>
+<p>
+As mentioned earlier, recipe classes in the <code>x86_halt</code> and <code>alpha_halt</code>
+libraries that come with HALT form a hierarchy rooted at class
+<code>HaltRecipe</code>.  The primary subclasses are <code>HaltRecipeX86</code> and
+<code>HaltRecipeAlpha</code> (one in each of the HALT-enabled target libraries), and
+under these are the kind-specific classes like <code>HaltRecipeX86Cbr</code>.
+Typically, you only define <code>operator()</code> in the secondary classes, but
+sometimes you may want to override other virtual methods at this level, and
+you may also want to add helper methods and variables.
+<p>
+
+<!-- @@@-->
+
+
+<h3><a name=toc31>Extending HALT for Path Profiling</a></h3>
+<a name="sec-extending-for-pp"><b>[*]</b></a>
+<p>
+As mentioned in Section&nbsp;<a href="#sec-other-apps">[&lt;-]</a>, we have implemented the
+Ball-Larus path-profiling technique <b>[cite&nbsp;<a href="#NWcite-bib-ball-larus">bib-ball-larus</a>]</b> using HALT.
+While point profiling can identify hot <em>spots</em>, path profiling
+identifies hot <em>traces</em>, multi-block sequences that are worth
+subjecting to concentrated optimization.  You can't just extrapolate from
+point frequencies.  You lose information at every join point.  For example,
+consider a piece of code that looks schematically like
+<p>
+<pre>
+    if (...)
+      A;
+    else
+      B;
+    if (C)
+      D;
+    else
+      E;
+</pre>
+
+The edge frequencies for <code>AC</code>, <code>BC</code>, <code>CD</code>, and <code>CE</code> might all be
+nearly the same, and yet paths <code>ACE</code> and <code>BCD</code> could be very hot, while
+<code>ACD</code> and <code>BCE</code> are very cold.
+<p>
+Path profiling detects such correlations that point profiling cannot, but
+it is tricky to extract the extra precision with acceptable efficiency.
+<p>
+Here's how the Ball-Larus method does it.  At every point that can be the
+start of an acyclic path (e.g., the entry of a procedure or the head of a
+loop), a special register called the <em>path sum</em> register is set to a
+small constant value (which may differ from one path-start point to
+another).  Then, at strategically-chosen points along any path, the path
+sum is incremented or decremented by other small constants.  The Ball-Larus
+method cleverly picks the places to adjust the path sum and the values of
+the constant adjustments so that, when the end of a path is reached, the
+path sum register holds a small positive integer that uniquely identifies
+the path just taken.  Furthermore, the path identifiers for a given
+procedure are in <i>[0,k)</i>, where <i>k</i> is the number of Ball-Larus paths in
+the procedure.  So it is easy to use a path's identifying number to index
+an array of counters that collect path frequencies.
+<p>
+
+
+
+<!--  ######  #  #    #  #    #  ######-->
+<!--  #       #   #  #   ##  ##  #-->
+<!--  #####   #    ##    # ## #  #####-->
+<!--  #       #    ##    #    #  #-->
+<!--  #       #   #  #   #    #  #-->
+<!--  #       #  #    #  #    #  ######-->
+<!-- -->
+<!--  Create one more extended kind, and change all the names:-->
+<!-- -->
+<!--  PATH_SUM_INIT, PATH_SUM_INCR, and PATH_SUM_READ-->
+
+
+<h5><a name=toc32>Instrumentation kind extensions.</a></h5>
+<p>
+Our implementation adds two kinds of instrumentation to the ones that come
+with HALT, and it extends the purpose of an existing kind.  For the points
+along a path where the path sum is incremented, we introduce a
+``lightweight'' instrumentation kind, meaning that the inserted code
+doesn't save or restore state and it doesn't call an analysis routine.  It
+can be just a single instruction that adds a signed constant to the path
+sum register.  The kind identifier for this first new kind is <code>INC</code>.
+<p>
+The second new kind is for the ends of paths, where we want the
+instrumentation to record the traversal of the path just ended and to get
+ready to identify the next one.  This time we use an analysis routine.  It
+needs to take the value of the path sum as an argument.  At the end of a
+path, the path sum is the integer identifier of the path just traversed.
+The analysis routine can use it to find and increment a counter
+representing the execution frequency of the path.  After calling the
+analysis routine, the path-end instrumentation code must initialize the
+path-sum register for detecting the next path.  The kind identifier for
+this second new instrumentation kind is <code>PATHEND</code>.
+<p>
+Our third extension is a simple addition to the role of the <code>ENTRY</code> kind,
+which normally just records the fact that a procedure has been entered.
+For our Ball-Larus path-profiling implementation, we extend this kind to
+initialize the path-sum register as well.  This prepares it for identifying
+any of the paths that begin at the entry of the procedure in question.
+<p>
+<h5><a name=toc33>Instrumenting Ball-Larus paths.</a></h5>
+<p>
+To identify Ball-Larus paths and compute the constant values that are used
+at runtime to initialize and increment the path sum, we've written a pass
+called <code>blpp</code>.  This pass inserts <code>HaltLabelNote</code> annotations that mark
+the points at which the <code>PATH_SUM_INIT</code>, <code>PATH_SUM_INCR</code>, and
+<code>PATH_SUM_READ</code> instrumentation code should be inserted.  These
+annotations carry the constant values computed by the Ball-Larus algorithm.
+Since <code>blpp</code> adds all the HALT annotations needed for path profiling, we
+don't have to run the <code>label</code> pass at all.
+<p>
+The <code>blpp</code> pass also creates a text file describing the Ball-Larus paths
+that it has identified.  This file is read later, during profiling runs, so
+that analysis routines know how many procedures are being profiled and how
+many paths each one contains.  And it is used still later to correlate
+profile results with source code.
+<p>
+After running <code>blpp</code>, we use the <code>instrument</code> pass as in ordinary point
+profiling, to turn the annotations into instrumentation code.  We run
+<code>instrument</code> before register allocation because our path-specific
+instrumentation kinds introduce a virtual register to hold the path sum.
+<a name="NWDG">This scheme relies on register allocation to assign it to a real register</a>
+before the instrumented program is ready for execution.
+<p>
+<h5><a name=toc34>Adding the extended kinds.</a></h5>
+<p>
+Recall from Section&nbsp;<a href="#sec-users-guide">[&lt;-]</a> that the builtin kind identifiers
+like <code>CBR</code> and <code>LOAD</code> are defined as <code>enum</code> constants in namespace
+<code>halt</code>.
+<p>
+<pre><a name="NW1nuTVP-1ovzwr-2" href="#NWD4"><dfn>&lt;kinds list&gt;+=</dfn></a> <b>[<a href="#NWD4">&lt;-</a>D]</b>
+namespace halt {
+
+enum {
+    STARTUP = 0,        // whole-program entry
+    CBR,                // conditional branch
+    MBR,                // multi-way branch
+    ENTRY,              // procedure entry
+    EXIT,               // procedure exit
+    SETJMP,             // setjmp call
+    LONGJMP,            // longjmp call
+    LOAD,               // reads memory
+    STORE,              // writes memory
+    BLOCK,                      // basic block
+    CYCLE               // cycle count
+};
+} // namespace halt
+<a name="NW1nuTVP-1ovzwr-2-u1" href="#NWDH"><i>&lt;last kind value&gt;</i></a>
+</pre><p>
+
+<a name="NWDH">The HALT library also uses a preprocessor macro called </a><code>LAST_HALT_KIND</code>
+to remember the value of the last builtin kind:
+<p>
+<pre><a name="NW1nuTVP-1lsBX3-1" href="#NWDH"><dfn>&lt;last kind value&gt;=</dfn></a> <b>(<a href="#NWD4">&lt;-U</a> <a href="#NWDG">&lt;-U</a>)</b>
+
+#define LAST_HALT_KIND halt::CYCLE
+
+</pre><p>
+
+<a name="NWDI">The new kinds we're adding must have identifiers whose values don't</a>
+conflict with the ones built in, so we use the definition of
+<code>LAST_HALT_KIND</code> to start the new series of kind identifiers.
+<p>
+<pre><a name="NW1nuTVP-8jcFI-1" href="#NWDI"><dfn>&lt;blpp kinds list&gt;=</dfn></a>
+</pre><p>
+
+<a name="NWDJ">Then we redefine </a><code>LAST_HALT_KIND</code> to allow for possible further
+extensions.
+<p>
+<pre><a name="NW1nuTVP-3wZVou-1" href="#NWDJ"><dfn>&lt;path-profiling last value kind&gt;=</dfn></a>
+</pre><p>
+
+Let's look at how the path-profiling instrumentation kinds are implemented
+for the <i>x</i>86 target.  For each kind there is a recipe class, that is, a
+subclass of <code>HaltRecipeX86</code>.  As with the builtin kinds discussed
+earlier, the point of these subclasses is to provide specialized
+<code>operator()</code> methods that control the insertion of instrumentation code.
+<p>
+One things that these methods have in common is that they need to refer to
+the path sum.  They do this using a special local variable symbol with name
+<code><a name="NWDK">__path_sum</a></code>.  A helper function called <code>path_sum</code> produces an operand
+representing this local variable.
+<p>
+<h5><a name=toc35>Kind <code>PATH_SUM_INIT</code>.</a></h5>
+<p>
+The <code>operator()</code> method for the procedure-entry instrumentation that
+initializes the path-sum register is short, because it only needs to insert
+one instruction.
+<p>
+<pre><a name="NW1nuTVP-34ezDJ-1" href="#NWDK"><dfn>&lt;x86 <code>PATH_SUM_INIT</code> <code>operator()</code>&gt;=</dfn></a>
+void
+HaltRecipeX86PathSumInit::operator()
+    (HaltLabelNote, InstrHandle handle, CfgNode *block,
+     const NatSet*, const NatSet*)
+{
+    debug(2, &quot;%s:HaltRecipeX86PathSumInit&quot;, __FILE__);
+
+    Instr *mi =
+        new_instr_alm(opnd_path_sum(), x86::MOV, opnd_immed(0, type_u32));
+    append(instr_pot[KIND], mi);
+
+    insert_instrs(AFTER, block, handle);
+}
+</pre><p>
+
+Note that the method above doesn't call <code>follow_recipe</code>, since the stages
+of a typical recipe are unnecessary in this case.  It inserts a single
+<a name="NWDL">instruction to zero the path sum after the instruction holding the HALT</a>
+annotation with kind <code>PATH_SUM_INIT</code>.  The <code>blpp</code> pass places this
+annotation on the <code>proc_entry</code> instruction of each procedure.  Apart from
+the kind itself, this note carries no values.
+<p>
+<h5><a name=toc36>Kind <code>PATH_SUM_INCR</code>.</a></h5>
+<p>
+The instrumentation for incrementing the path sum is nearly as simple.
+<p>
+<pre><a name="NW1nuTVP-2Ii7XU-1" href="#NWDL"><dfn>&lt;x86 <code>PATH_SUM_INCR</code> <code>operator()</code>&gt;=</dfn></a>
+void
+HaltRecipeX86PathSumIncr::operator()
+    (HaltLabelNote note, InstrHandle handle, CfgNode *block,
+     const NatSet*, const NatSet*)
+{
+    debug(2, &quot;%s:HaltRecipeX86PathSumIncr&quot;, __FILE__);
+
+    Opnd path_sum  = opnd_path_sum();
+    Opnd incr = opnd_immed(note.get_static_arg(0), type_s32);
+
+    Instr *mi = new_instr_alm(path_sum, x86::ADD, path_sum, incr);
+    append(instr_pot[KIND], mi);
+
+    insert_instrs(AFTER, block, handle);
+}
+</pre><p>
+
+Again, a single instruction alters the path sum, this time by the addition
+of a signed constant.  The value of the constant is carried by the HALT
+annotation that marks the instrumentation point.
+<p>
+<h5><a name=toc37>Kind <code>PATH_SUM_READ</code>.</a></h5>
+<p>
+This kind of instrumentation consumes the path-sum value at the end of a
+path and then resets the path-sum register.  In the most general case,
+the inserted code must
+<p>
+<ul>
+
+<li>Add one last increment to the path sum.
+<p>
+<li>Call the analysis routine, passing the unique identifier of the
+instrumentation point, another numeric identifier for the current
+procedure, and the value of the path sum.
+<p>
+<li>Reinitialize the path-sum register to a constant value in preparation
+for identifying the next path.
+<p>
+</ul>
+
+<a name="NWDM">The static arguments to the analysis routine, i.e., the numeric identifiers</a>
+for the current procedure and the current point within it, are given by the
+HALT note.  The dynamic argument is just the path sum.  Sometimes the final
+path-sum increment along a path is folded into the end-of-path handling;
+that's when the increment instruction is inserted before the analysis
+routine is called.  In all cases, we need to reset the path sum after the
+call.  The value to set it to comes from the HALT annotation as a ``static
+argument'', although it is not a value that's passed to the runtime routine.
+<p>
+<pre><a name="NW1nuTVP-1EP6tE-1" href="#NWDM"><dfn>&lt;x86 <code>PATH_SUM_READ</code> <code>operator()</code>&gt;=</dfn></a>
+void
+HaltRecipeX86PathSumRead::operator()
+    (HaltLabelNote note, InstrHandle handle, CfgNode *block,
+     const NatSet *before, const NatSet *after)
+{
+    debug(2, &quot;%s:HaltRecipeX86PathSumRead&quot;, __FILE__);
+
+    Opnd path_sum  = opnd_path_sum();
+
+    long incr_value = note.get_static_arg(0);
+    if (incr_value != 0)
+    {
+        Opnd incr = opnd_immed(incr_value, type_s32);
+        Instr *mi = new_instr_alm(path_sum, x86::ADD, path_sum, incr);
+        append(instr_pot[KIND], mi);
+    }
+
+    // dynamic argument
+    args.push_back(opnd_path_sum());
+
+    // static arguments
+    args.push_back(opnd_immed(note.get_unique_id(), type_s32));
+    args.push_back(opnd_immed(note.get_static_arg(2), type_s32)); // proc id
+
+    // Save away the value to which restore_state will cause the
+    // path sum to be set.
+    next_path_sum = note.get_static_arg(1);
+
+    follow_recipe(PATH_SUM_READ, after);
+
+    insert_instrs(AFTER, block, handle);
+}
+</pre><p>
+
+The method above is unusual in a couple of ways.  Normally, the
+<code>static_args</code> helper would be used to put all static argument values
+ontto the <code>args</code> list of the analysis routine.  In this case, however,
+the annotation has one <code>static_arg</code> field (the new path-sum value) that
+is not meant to be passed in that way.  So the static arguments to the
+analysis routine are handled manually.
+<p>
+Furthermore, the code to reset the path sum has to be inserted <em>after</em>
+<a name="NWDN">the analysis-routine call.  The </a><code>operator()</code> method doesn't have a
+kind-specific ``pot'' for instructions that must go after the call, so
+instead class <code>HaltRecipeX86PathSumRead</code> overrides the helper method
+<code>restore_state</code>, which is called by <code>follow_recipe</code> after the call has
+been inserted in the instruction stream.  The constant to load into the
+path sum is transmitted to <code>restore_state</code> through the instance variable
+<code>next_path_sum</code>.  <code>restore_state</code> first invokes the method that it
+overrides, and then adds one instruction to reset the path-sum register.
+<p>
+<pre><a name="NW1nuTVP-2pyt2o-1" href="#NWDN"><dfn>&lt;x86 <code>PATH_SUM_READ</code> <code>restore_state</code>&gt;=</dfn></a>
+void
+HaltRecipeX86PathSumRead::restore_state(NatSet *saved_reg_set)
+{
+    debug(2, &quot;%s:restore_state&quot;, __FILE__);
+
+    HaltRecipeX86::restore_state(saved_reg_set);
+
+    Opnd init = opnd_immed(next_path_sum, type_u32);
+    Instr* mi = new_instr_alm(opnd_path_sum(), x86::MOV, init);
+    append(instr_pot[RESTORE], mi);
+}
+</pre><p>
+<h2><a name=toc38>Summary</a></h2>
+<a name="sec:summary"><b>[*]</b></a>
+<p>
+The HALT system is a flexible and extensible way for a user to instrument a
+program to study its run-time behavior.  HALT comes with tools for setting
+up typical instrumentation-assisted measurements.  Using the Machine-SUIF
+OPI as leverage, HALT gives precise control over placement of
+instrumentation and transmission of data to run-time analysis routines.
+The library's design makes it easy to extend to new target machines and to
+new kinds of experiments based on instrumentation.
+<p>
+
+<h2><a name=toc39>Acknowledgments</a></h2>
+<p>
+This work has been supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).
+We also gratefully acknowledge the generous support of this research
+by Advanced Micro Devices, Compaq, Digital Equipment, Hewlett-Packard,
+International Business Machines, Intel, and Microsoft.
+<p>
+Cliff Young and Mike Smith developed HALT as part of Machine SUIF version 1
+<b>[cite&nbsp;<a href="#NWcite-bib-halt1">bib-halt1</a>]</b>.  The current library retains much of his original design.
+Adon Hwang, Vijak Sethaput and Dario Vlah made the initial port to Machine
+SUIF 2.  This was completed by Mike Smith and Martha Mercaldi.
+<p>
+<h2><a name=toc40>References</a></h2>
+<p>
+<a name="NWcite-bib-halt1"><b>[1]</b></a>  C. Young. <em>The Harvard Atom-like Tool (Halt)
+Manual.</em>  Harvard University, 1998.
+<p>
+<a name="NWcite-bib-atom"><b>[2]</b></a>  A. Sricastava and A. Eustace <em>ATOM: A System for 
+Building Customized Program Analysis Tool</em>  Proc. ACM SIGPLAN '94 Conf. 
+on Prog. Lang. Design and Impl. New York: ACM, June 1994.
+<p>
+<!-- \bibitem{bibhalt3} R. Wilson, R. French, C. Wilson, S. Amarasinghe, J. -->
+<!-- Anderson, S. Tjiang, S. Liao, c. Tseng, M. Hall, M. Lam, and J. Hennessy. -->
+<!-- {\em SUIF: An Infrastructure for Research on Parallelizing and-->
+<!-- Optimizing Compilers.}  ACM SIGPLAN Notices, 29.12 (Dec. 1994): 31-37.-->
+
+<a name="NWcite-bib-ball-larus"><b>[3]</b></a>  T. Ball, J. Larus <em>Efficient Path Profiling</em>
+Proc. 29th IEEE/ACM Int. Symp. on Microarchitecture.  Paris, France:
+ACM/IEEE, Dec. 1996: 46-57.
+<p>
+<a name="NWcite-bib-scbp"><b>[4]</b></a>  C. Young and M. Smith. <em>Static Correlated Branch
+Prediction</em> ACM Transactions on Programming Languages and Systems, 21.5
+(Sept. 1999): 1028-1075.
+<p>
+<a name="NWcite-bib-opi-extenders"><b><a name="NWDO">[5]</a></b></a>  G. Holloway and M. D. Smith.  <em>An
+Extender's Guide to the Optimization Programming Interface and Target
+Descriptions.</em>  The Machine-SUIF documentation set, Harvard University,
+2000.
+<p>
+
+
+<!-- Make \end{document} a chunk by itself to allow cross-reference info-->
+<!-- to be dumped in before it (noweave -delay).-->
+
+
+
+
+<ul>
+<li><a href="#NWDE"><i>&lt;<i>x</i>86 HALT context inheritance&gt;</i></a>: <a href="#NWDE">D1</a>
+<li><a href="#NWDI"><i>&lt;blpp kinds list&gt;</i></a>: <a href="#NWDI">D1</a>
+<li><a href="#NWDC"><i>&lt;class <code>HaltContext</code>&gt;</i></a>: <a href="#NWDC">D1</a>
+<li><a href="#NWD5"><i>&lt;Class <code>HaltLabelNote</code>&gt;</i></a>: <a href="#NWD5">D1</a>
+<li><a href="#NWD7"><i>&lt;class <code>HaltRecipe</code>&gt;</i></a>: <a href="#NWD7">D1</a>
+<li><a href="#NWDD"><i>&lt;class <code>HaltRecipeX86</code>&gt;</i></a>: <a href="#NWDD">D1</a>
+<li><a href="#NWDF"><i>&lt;context creator for <code>x86_halt</code>&gt;</i></a>: <a href="#NWDF">D1</a>
+<li><a href="#NWDB"><i>&lt;insertion-point names&gt;</i></a>: <a href="#NWDB">D1</a>
+<li><a href="#NWD4"><i>&lt;kinds list&gt;</i></a>: <a href="#NWD4">D1</a>, <a href="#NWDG">D2</a>
+<li><a href="#NWDH"><i>&lt;last kind value&gt;</i></a>: <a href="#NWD4">U1</a>, <a href="#NWDG">U2</a>, <a href="#NWDH">D3</a>
+<li><a href="#NWDA"><i>&lt;method <code>follow_recipe</code>&gt;</i></a>: <a href="#NWDA">D1</a>
+<li><a href="#NWDJ"><i>&lt;path-profiling last value kind&gt;</i></a>: <a href="#NWDJ">D1</a>
+<li><a href="#NWD9"><i>&lt;recipe component names&gt;</i></a>: <a href="#NWD9">D1</a>
+<li><a href="#NWD8"><i>&lt;x86 <code>CBR</code> <code>operator()</code>&gt;</i></a>: <a href="#NWD8">D1</a>
+<li><a href="#NWDL"><i>&lt;x86 <code>PATH_SUM_INCR</code> <code>operator()</code>&gt;</i></a>: <a href="#NWDL">D1</a>
+<li><a href="#NWDK"><i>&lt;x86 <code>PATH_SUM_INIT</code> <code>operator()</code>&gt;</i></a>: <a href="#NWDK">D1</a>
+<li><a href="#NWDM"><i>&lt;x86 <code>PATH_SUM_READ</code> <code>operator()</code>&gt;</i></a>: <a href="#NWDM">D1</a>
+<li><a href="#NWDN"><i>&lt;x86 <code>PATH_SUM_READ</code> <code>restore_state</code>&gt;</i></a>: <a href="#NWDN">D1</a>
+</ul>
+</body></html>
+

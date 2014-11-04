@@ -1,0 +1,158 @@
+\section{Glossary}
+\label{sec-glossary}
+
+This glossary summarizes our naming conventions and patterns.  If we
+abbreviate a word or phrase, we use the same abbreviation everywhere
+in our code.  If a word or an abbreviation for that word does not
+appear in our list, we probably spell it out.  However, we encourage
+you to check the list for synonyms.  If multiple words seem
+appropriate, we often use the shortest English word instead of using
+an abbreviation.
+
+As discussed in Section~\ref{sec-conventions}, we are consistent in
+our naming of the IR components and their accessors/manipulators,
+espeically when there is a pattern in their structure.  Some of this
+consistency is evident in the list below.
+
+Lastly, we do not claim to follow these conventions for variable names
+in our code that are local in scope.  We're not dictators.  We just
+want to make it easy to use the functions, classes, and objects in the
+OPI and our other support packages.
+
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[addr]]          & Shorthand for ``address''.                           \\
+[[alm]]           & Shorthand for ``ALU, logic, or memory''.             \\
+annotation        & See [[note]].                                        \\
+[[append]]        & The way to put an object before the last element in
+                    a sequence.                                          \\
+[[arg]]           & Shorthand for ``argument''.                          \\
+[[assert]]        & See [[claim]].
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[cfg]]           & Shorthand for ``control flow graph''.                \\
+[[claim]]         & Our replacement for assert to avoid name clashes.    \\
+[[cmove]]         & Shorthand for ``conditional move''.                  \\
+[[count]]         & A count value.  Not used to refer to the cardinality
+                    of a sequence.  See [[size]].                        \\
+[[cti]]           & Shorthand for ``control transfer instruction''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[desc]]          & Shorthand for ``description''.                       \\
+[[def]]           & Shorthand for ``definition''.                        \\
+[[disp]]          & Shorthand for ``displacement''.                      \\
+[[dom]]           & Shorthand for ``dominator'' or ``dominance'',
+                    depending upon the context. (This is one case where
+                    we don't always use the abbreviation.)               \\
+[[dst]]           & Shorthand for ``destination''.  Often referring to an
+                    [[instr]]'s destination operand.                     \\
+[[dsts]]          & A sequence of destinations.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+\ldots[[_end]]    & A handle just beyond the last element of the \ldots\
+                    sequence.                                            \\ 
+[[exp]]           & Shorthand for ``expression''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[get_]]\ldots    & The way to get a copy of the structure member \ldots.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[id]]            & Shorthand for ``identifier''.                        \\
+[[immed]]         & Shorthand for ``immediate''.                         \\
+[[init]]          & Shorthand for ``initialize'' (or any variant of
+                    initial).                                            \\
+[[insert_after]]  & The way to put an object after the specified handle
+                    into a sequence.                                     \\
+[[insert_before]] & The way to put an object before the specified handle
+                    into a sequence.                                     \\
+[[instr]]         & Shorthand for ``instruction''.                       \\
+[[ir]]            & Shorthand for ``intermediate representation''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[k_]]\ldots      & The global [[IdString]] constant for the string
+                    ``\ldots''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[ldc]]           & Shorthand for ``load constant''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[mbr]]           & Shorthand for ``multiway branch''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[note]]          & Annotation attached to an [[IrObject]].
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[op]]            & Should never appear in the OPI.  See [[opcode]].     \\
+[[opcode]]        & When we refer to the opcode of an [[IrObject]], we
+                    always write opcode and never write ``op'', which
+                    may mean opcode, operation, or operand.              \\ 
+opi               & Shorthand for ``optimization programming interface''.\\
+[[opnd]]          & Shorthand for ``operand''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[param]]         & Shorthand for ``parameter''.                         \\
+[[prepend]]       & The way to put an object before the first element in
+                    a sequence.                                          \\
+[[pred]]          & Shorthand for ``predecessor''.                       \\
+[[preds]]         & A sequence of predecessors.                          \\
+[[proc]]          & Shorthand for ``procedure''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[reg]]           & Shorthand for ``register''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[set_]]\ldots    & The way to set the value of the structure member
+                    \ldots.                                              \\
+[[size]]          & Always refers to the cardinality of a sequence.      \\
+\ldots[[_size]]   & The number of items in the \ldots\ sequence.         \\
+[[src]]           & Shorthand for ``source''.  Often referring to a
+                    source operand of an instruction.                    \\
+[[srcs]]          & A sequence of sources.                               \\
+\ldots[[_start]]  & A handle to the start of the \ldots\ sequence.       \\
+[[succ]]          & Shorthand for ``successor''.                         \\
+[[succs]]         & A sequence of successors.                            \\
+[[sym]]           & Shorthand for ``symbol''.                            \\
+[[sym_table]]     & Shorthand for ``symbol table''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[ubr]]           & Shorthand for ``unconditional branch''.
+\end{tabular}
+\end{flushleft}
+\begin{flushleft}
+\begin{tabular}{p{.15\textwidth}p{.78\textwidth}}
+[[var]]           & Shorthand for ``variable''.
+\end{tabular}
+\end{flushleft}
+
+% Make \end{document} a chunk by itself to allow cross-reference info
+% to be dumped in before it (noweave -delay).
+@
+\end{document}

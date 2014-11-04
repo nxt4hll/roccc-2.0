@@ -1,0 +1,502 @@
+#	===================================
+#	searchable_list
+#	===================================
+
+<def searchable_list_extra_constraints the_type field_id parent_type>
+  <notice_linefeeds>
+  <let temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+       parent_temp_type be parent_type.type_spec.template_part.type_specifications.type_specification,
+       parent_par_type0 be [<suitable_par_type parent_temp_type>],
+       sing_name be [<!SING field_id>],
+       par_type0 be [<suitable_par_type temp_type>]>
+
+    // overrides of parent methods
+    virtual void append_<sing_name>(<parent_par_type0> key);
+    // new methods specialized to this class
+    virtual void append_<sing_name>(<par_type0> key);
+    virtual void remove_<sing_name>(<par_type0> key);
+    virtual bool has_<sing_name>_member(<par_type0> key);
+
+    # if the element type has a key, we need to be able to do lookups
+    # on the key fields.
+
+    <foreach element_field in class_declarations[<temp_type.type_spec.identifier>].construct_parts.construct_part.regular_field_declaration
+        such that (exists element_field.key_dec.text) >
+      <let key_name be [<!SING element_field.identifier>]>
+        <type_spec temp_type> remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>);
+        <type_spec temp_type> lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>) const;
+        int num_<sing_name>_of_<key_name>(<suitable_par_type element_field.type_specification>);
+        <type_spec temp_type> lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>,int no) const;
+        <type_spec temp_type> remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>,int no);
+      <endlet>
+    <endfor>
+  <endlet>
+<enddef>
+
+<def searchable_list_extra_constraints_imp the_type field_id class_name parent_name parent_type>
+  <notice_linefeeds>
+  <let temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+       parent_temp_type be parent_type.type_spec.template_part.type_specifications.type_specification,
+       parent_par_type0 be [<suitable_par_type parent_temp_type>],
+       sing_name be [<!SING field_id>],
+       par_type0 be [<suitable_par_type temp_type>]>
+    // overrides of parent methods
+    void <class_name>::append_<sing_name>(<parent_par_type0> key) {</+2>
+        suif_assert(is_kind_of\<<parent_temp_type.type_spec.identifier>\>(key));
+	<parent_name>::append_<sing_name>(key);
+        }</-2>
+    // new methods specialized to this class
+
+    void <class_name>::append_<sing_name>(<par_type0> key){</+2></>
+	<parent_name>::append_<sing_name>(key);
+	}</-2>
+    void <class_name>::remove_<sing_name>(<par_type0> key){</+2></>
+	<parent_name>::remove_<sing_name>(key);
+	}</-2>
+    bool <class_name>::has_<sing_name>_member(<par_type0> key){</+2></>
+	return <parent_name>::has_<sing_name>_member(key);
+	}</-2>
+
+    # if the element type has a key, we need to be able to do lookups
+    # on the key fields.
+
+    <foreach element_field in class_declarations[<temp_type.type_spec.identifier>].construct_parts.construct_part.regular_field_declaration
+        such that (exists element_field.key_dec.text) >
+      <let key_name be [<!SING element_field.identifier>]>
+        <type_spec temp_type> <class_name>::remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification> key){</+2></>
+	<parent_name>::remove_<sing_name>_by_<key_name>(key);
+	}</-2>
+        <type_spec temp_type> <class_name>::lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>key) const {</+2></>
+	return <parent_name>::lookup_<sing_name>_by_<key_name>(key);
+	}</-2>
+        int <class_name>::num_<sing_name>_of_<key_name>(<suitable_par_type element_field.type_specification> key){</+2></>
+	return <parent_name>::num_<sing_name>_of_<key_name>(key);
+	}</-2>
+        <type_spec temp_type> <class_name>::lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>key,int no) const {</+2></>
+	<parent_name>::lookup_<sing_name>_by_<key_name>(key,no);
+	}</-2>
+        <type_spec temp_type> <class_name>::remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>key,int no){</+2></>
+	return <parent_name>::remove_<sing_name>_by_<key_name>(key,no);
+	}</-2>
+      <endlet>
+    <endfor>
+  <endlet>
+<enddef>
+
+<def searchable_list_extras_dec field_dec>
+  <notice_linefeeds>
+  <let the_type be field_dec.type_specification,
+       temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+       sing_name be [<!SING field_dec.identifier>],
+       par_type0 be [<suitable_par_type temp_type>],
+       virtual   be [<?field_dec.virtual.text virtual >]>
+    <virtual>void append_<sing_name>(<par_type0> key);
+    <virtual>Iter\<<type_spec temp_type> \> get_<sing_name>_iterator() const;
+    <virtual>void remove_<sing_name>(<par_type0> key);
+    <virtual>bool has_<sing_name>_member(<par_type0> key);
+    <virtual>int get_<sing_name>_count() const;
+    virtual void insert_<sing_name>(int pos,<par_type0> x);
+    <virtual><par_type0> remove_<sing_name>(int pos);
+    <virtual><par_type0> get_<sing_name> (int pos) const;
+
+    # if the element type has a key, we need to be able to do lookups
+    # on the key fields.
+
+    <foreach element_field in class_declarations[<temp_type.type_spec.identifier>].construct_parts.construct_part.regular_field_declaration
+	such that (exists element_field.key_dec.text) >
+      <let key_name be [<!SING element_field.identifier>]>
+	<virtual><type_spec temp_type> remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>);
+        <virtual><type_spec temp_type> lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>) const;
+	<virtual>int num_<sing_name>_of_<key_name>(<suitable_par_type element_field.type_specification>);
+        <virtual><type_spec temp_type> lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>,int no) const;
+	<virtual><type_spec temp_type> remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>,int no);
+      <endlet>
+    <endfor>
+  <endlet>
+<enddef>
+
+<def searchable_list_forwarder trid fid field_dec>
+  <notice_linefeeds>
+  <let the_type be field_dec.type_specification,
+       rid be trid.identifier,
+       temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+       sing_name be [<!SING field_dec.identifier>],
+       par_type0 be [<suitable_par_type temp_type>],
+       virtual   be [<?field_dec.virtual.text virtual >]>
+
+    <if (rid = [append_<sing_name>])>
+        void <fproc_name trid>(<par_type0> key);
+    <elseif (rid = [get_<sing_name>_iterator])>
+        Iter\<<type_spec temp_type> \> <fproc_name trid>();
+    <elseif (rid = [remove_<sing_name>])>
+        void <fproc_name trid>(<par_type0> key);
+    <elseif (rid = [has_<sing_name>_member])>
+        bool <fproc_name trid>(<par_type0> key);
+    <elseif (rid = [get_<sing_name>_count])>
+        int <fproc_name trid>() const;
+    <endif>
+
+    <foreach element_field in class_declarations[<temp_type.type_spec.identifier>].construct_parts.construct_part.regular_field_declaration
+        such that (exists element_field.key_dec.text) >
+      <let key_name be [<!SING element_field.identifier>]>
+          <if (rid = [remove_<sing_name>_by_<key_name>])>
+              <type_spec temp_type> <fproc_name trid>(<suitable_par_type element_field.type_specification>);
+          <elseif (rid = [lookup_<sing_name>_by_<key_name>])>
+              <type_spec temp_type> <fproc_name trid>(<suitable_par_type element_field.type_specification>);
+          <elseif (rid = [num_<sing_name>_of_<key_name>])>
+              int <fproc_name trid>(<suitable_par_type element_field.type_specification>);
+          <elseif (rid = [lookup_<sing_name>_by_<key_name>])>
+              <type_spec temp_type> <fproc_name trid>(<suitable_par_type element_field.type_specification>,int no);
+          <elseif (rid = [remove_<sing_name>_by_<key_name>])>
+              <type_spec temp_type> <fproc_name trid>(<suitable_par_type element_field.type_specification>,int no);
+          <endif>
+       <endlet>
+     <endfor>
+   <endfor>
+  <endlet>
+<enddef>
+
+<def searchable_list_forwarder_imp trid fid field_dec class_id>
+  <notice_linefeeds>
+  <let the_type be field_dec.type_specification,
+       rid be trid.identifier,
+       temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+       sing_name be [<!SING field_dec.identifier>],
+       par_type0 be [<suitable_par_type temp_type>],
+       virtual   be [<?field_dec.virtual.text virtual >]>
+    <if (rid = [append_<sing_name>])>
+        void <class_id>::<fproc_name trid>(<par_type0> key) {_<fid>append_<sing_name>(key);}
+    <elseif (rid = [get_<sing_name>_iterator])>
+        Iter\<<type_spec temp_type> \> <class_id>::<fproc_name trid>() {return _<fid>get_<sing_name>_iterator();}
+    <elseif (rid = [remove_<sing_name>])>
+        void <class_id>::<fproc_name trid>(<par_type0> key) {_<fid>remove_<sing_name>(key);}
+    <elseif (rid = [has_<sing_name>_member])>
+        bool <class_id>::<fproc_name trid>(<par_type0> key) {return _<fid>has_<sing_name>_member(key);}
+   <elseif (rid = [get_<sing_name>_count])>
+      int <class_id>::<fproc_name trid>() const {return _<fid>get_<sing_name>_count();}
+    <endif>
+
+    <foreach element_field in class_declarations[<temp_type.type_spec.identifier>].construct_parts.construct_part.regular_field_declaration
+        such that (exists element_field.key_dec.text) >
+      <let key_name be [<!SING element_field.identifier>]>
+          <if (rid = [remove_<sing_name>_by_<key_name>])>
+              <type_spec temp_type> <class_id>::<fproc_name trid>(<suitable_par_type element_field.type_specification> key) {</+2>
+      	    return _<fid>remove_<sing_name>_by_<key_name>(key);
+      	    }</-2>
+          <elseif (rid = [lookup_<sing_name>_by_<key_name>])>
+              <type_spec temp_type> <class_id>::<fproc_name trid>(<suitable_par_type element_field.type_specification> key) {</+2>
+      	    return _<fid>lookup_<sing_name>_by_<key_name>(key);
+      	    }</-2>
+          <elseif (rid = [num_<sing_name>_of_<key_name>])>
+              int <class_id>::<fproc_name trid>(<suitable_par_type element_field.type_specification> key) {</+2>
+      	    return _<fid>num_<sing_name>_of_<key_name>(key);
+      	    }</-2>
+          <elseif (rid = [lookup_<sing_name>_by_<key_name>])>
+              <type_spec temp_type> <class_id>::<fproc_name trid>(<suitable_par_type element_field.type_specification> key,int no) {</+2>
+      	    return _<fid>lookup_<sing_name>_by_<key_name>(key,no);
+      	    }</-2>
+          <elseif (rid = [remove_<sing_name>_by_<key_name>])>
+              <type_spec temp_type> <class_id>::<fproc_name trid>(<suitable_par_type element_field.type_specification> key,int no) {</+2>
+      	    return _<fid>remove_<sing_name>_by_<key_name>(key,no);
+      	    }</-2>
+          <endif>
+	<endlet>
+      <endfor>
+  <endlet>
+<enddef>
+
+
+<def searchable_list_extras_imp field_dec>
+    <notice_linefeeds>
+    <let  the_type be field_dec.type_specification,
+        class_id be [<!CPZ class_dec.identifier>],
+        temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+        sing_name be [<!SING field_dec.identifier>],
+        plural_name be [<field_dec.identifier>],
+        par_type0 be [<suitable_par_type temp_type>]>
+	<if (exists field_dec.virtual.text)>
+           void <class_id>::append_<sing_name>(<par_type0> key)
+                { suif_assert_message(false, ("attempting to add to virtual field") ); }
+           Iter\<<type_spec temp_type> \> <class_id>::get_<sing_name>_iterator() const
+                {return get_aggregate_meta_class()->get_virtual_iterator(this,"<plural_name>");}
+           void <class_id>::remove_<sing_name>(<par_type0> key)
+                { suif_assert_message(false,( "attempting to remove from a virtual field" ));}
+
+           bool <class_id>::has_<sing_name>_member(<par_type0> key)
+                { suif_assert_message(false,( "attempting to perform has_member on virtual field" )); return false; }
+           int <class_id>::get_<sing_name>_count() const
+                { suif_assert_message(false,( "attempting to perform get_<sing_name>_count on virtual field" ) );
+		  return 0;
+		}
+
+                void <class_id>::insert_<sing_name>(int pos,<suitable_par_type temp_type> x) {</+2>
+		  	suif_assert_message(false,( "attempting to perform insert_<sing_name>(pos) on virtual field" ) );
+                        }</-2></>
+
+                <suitable_par_type temp_type> <class_id>::remove_<sing_name>(int pos) {</+2>
+		    suif_assert_message(false,( "attempting to perform remove_<sing_name>_count on virtual field" ) );
+		    return remove_<sing_name>(pos);
+                     }</-2></>
+
+                <suitable_par_type temp_type>
+                        <class_id>::get_<sing_name> (int pos) const {</+2>
+		    suif_assert_message(false,( "attempting to perform get_<sing_name> on virtual field" ) );
+		    return get_<sing_name>(pos);
+		     }</-2></>
+
+
+
+	    <foreach element_field in class_declarations[<temp_type.type_spec.identifier>].construct_parts.construct_part.regular_field_declaration
+	        such that (exists element_field.key_dec.text) >
+	      <let key_name be [<!SING element_field.identifier>]>
+	        bool <class_id>::remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>)
+		    { suif_assert_message(false,( "attempting to remove from a virtual field" ) );return false;}
+	        <type_spec temp_type> <class_id>::lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification> key)
+		    { suif_assert_message(false,( "attempting to perform has_member on virtual field" ) );
+		      return lookup_<sing_name>_by_<key_name>(key);}
+	  	int <class_id>::num_<sing_name>_of_<key_name>(<suitable_par_type element_field.type_specification> key)
+		    { suif_assert_message(false,( "attempting to perform num_of on virtual field" ) );
+		      return 0;}
+          	<type_spec temp_type> <class_id>::lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification> key,int no)
+		    { suif_assert_message(false,( "attempting to remove from a virtual field") );
+		      return lookup_<sing_name>_by_<key_name>(key,no);}
+        	bool <class_id>::remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification>,int no);
+		    { suif_assert_message(false,( "attempting to remove from a virtual field") );return false;}
+
+	      <endlet>
+	    <endfor>
+
+
+	<else>
+            void <class_id>::append_<sing_name>(<par_type0> key) {</+2>
+                _<field_dec.identifier>.push_back(key);
+                <if ([<owns_object temp_type>])>
+                      if(key)key->set_parent(this);
+                <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                      _<field_dec.identifier>.back().set_parent(this);
+                <endif>
+		<if (exists field_dec.notify.text)>
+                    key<connector temp_type>notifier(true,this);
+                <endif>
+
+                }</-2>
+
+             int <class_id>::get_<sing_name>_count() const { return _<field_dec.identifier>.size(); }
+              Iter\<<type_spec temp_type> \> <class_id>::get_<sing_name>_iterator() const {</+2>
+                          static const LString field_name("_<field_dec.identifier>");
+                          FieldDescription* field = ((AggregateMetaClass *)get_meta_class())->get_field_description(field_name);
+                          return new STLIterator\<<type_spec field_dec.type_specification> \> ( (Address)&_<field_dec.identifier>,field->get_meta_class());
+                          // a very inefficient way to do this?
+                          }</-2></>
+
+
+              void <class_id>::remove_<sing_name>(<par_type0> key) {</+2>
+		<type_spec the_type>::iterator iter = _<field_dec.identifier>.find(key);
+		suif_assert_message(iter != _<field_dec.identifier>.end(),( "attempt to remove missing key") );
+		<if (exists field_dec.notify.text)>
+		    (*iter)<connector temp_type>notifier(false,this);
+		<endif>
+
+                     <if ([<owns_object temp_type>])>
+                            if(*iter)(*iter)->set_parent(0);
+                     <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                             (*iter).set_parent(0);
+                     <endif>
+
+		_<field_dec.identifier>.erase(iter);
+                }</-2>
+
+              bool <class_id>::has_<sing_name>_member(<par_type0> key) {</+2>
+                return _<field_dec.identifier>.is_member(key);
+                }</-2>
+
+                void <class_id>::insert_<sing_name>(int pos,<suitable_par_type temp_type> x) {</+2>
+                    suif_assert_message( pos >= 0,( "Invalid index value" ));
+                    suif_assert_message_on_object( (unsigned)pos <= _<field_dec.identifier>.size(), ( this, "Index %d too large\n", pos ) );
+
+                        _<field_dec.identifier>.insert(pos,x);
+                        <if ([<owns_object temp_type>])>
+                                if(x)x->set_parent(this);
+                          <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                                    _<field_dec.identifier>[pos].set_parent(this);
+                          <endif>
+                        <if (exists field_dec.notify.text)>
+                            x<connector temp_type>notifier(true,this);
+                        <endif>
+                        }</-2></>
+
+                <suitable_par_type temp_type> <class_id>::remove_<sing_name>(int pos) {</+2>
+                    suif_assert_message( pos >= 0, ( "Invalid index value" ) );
+                    suif_assert_message( (unsigned)pos < _<field_dec.identifier>.size(),( "Index too large" ) );
+
+                    <if (exists field_dec.notify.text)>
+                    _<field_dec.identifier>[pos]<connector temp_type>notifier(false,this);
+                    <endif>
+                     <suitable_par_type temp_type> tmp = _<field_dec.identifier>[pos];
+                     _<field_dec.identifier>.erase(pos);
+                     <if ([<owns_object temp_type>])>
+                            if(tmp)tmp->set_parent(0);
+                     <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                             tmp.set_parent(0);
+                     <endif>
+
+                     return(tmp);
+                     }</-2></>
+
+                <suitable_par_type temp_type>
+                        <class_id>::get_<sing_name> (int pos) const {</+2>
+                    suif_assert_message( pos >= 0,( "Invalid index value") );
+                    suif_assert_message( (unsigned)pos < _<field_dec.identifier>.size(), ( "Index too large" ) );
+
+                        return _<field_dec.identifier>[pos];
+                        }</-2></>
+
+            <foreach element_field in class_declarations[<temp_type.type_spec.identifier>].construct_parts.construct_part.regular_field_declaration
+                such that (exists element_field.key_dec.text) >
+              <let key_name be [<!SING element_field.identifier>]>
+                <type_spec temp_type> <class_id>::remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification> key) {</+2>
+			<type_spec the_type>::iterator iter = _<field_dec.identifier>.begin();
+			while (iter != _<field_dec.identifier>.end()) {</+2>
+			    if ((*(*iter)) == key) {</+2>
+				<if (exists field_dec.notify.text)>
+                    		    (*iter)<connector temp_type>notifier(false,this);
+                		<endif>
+				<type_spec temp_type> tmp = (*iter);
+                    		<if ([<owns_object temp_type>])>
+                            	    if(tmp)tmp->set_parent(0);
+                     		<elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                             	    tmp.set_parent(0);
+                     		<endif>
+
+				_<field_dec.identifier>.erase(iter);
+				return tmp;
+				}</-2>
+			    iter ++;
+			    }</-2>
+			return 0;
+			}</-2></>
+
+                <type_spec temp_type> <class_id>::lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification> key) const { </+2>
+                        <type_spec the_type>::iterator iter = _<field_dec.identifier>.begin();
+                        while (iter != _<field_dec.identifier>.end()) {</+2>
+                            if ((*(*iter)) == key) {</+2>
+                                return (*iter);
+                                }</-2>
+                            iter ++;
+                            }</-2>
+                        return 0;
+			}</-2></>
+
+                int <class_id>::num_<sing_name>_of_<key_name>(<suitable_par_type element_field.type_specification> key) { </+2>
+                       <type_spec the_type>::iterator iter = _<field_dec.identifier>.begin();
+			int count = 0;
+                        while (iter != _<field_dec.identifier>.end()) {</+2>
+                            if ((*(*iter)) == key) {</+2>
+                                count ++;
+                                }</-2>
+                            iter ++;
+                            }</-2>
+                        return count;
+                        }</-2></>
+
+                <type_spec temp_type> <class_id>::lookup_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification> key,int no) const { </+2>
+                        <type_spec the_type>::iterator iter = _<field_dec.identifier>.begin();
+                        while (iter != _<field_dec.identifier>.end()) {</+2>
+                            if ((*(*iter)) == key) {</+2>
+				no --;
+				if (no <= 0) return (*iter);
+                                }</-2>
+                            iter ++;
+                            }</-2>
+                        return 0;
+                        }</-2></>
+
+                <type_spec temp_type> <class_id>::remove_<sing_name>_by_<key_name>(<suitable_par_type element_field.type_specification> key,int no) { </+2>
+                        <type_spec the_type>::iterator iter = _<field_dec.identifier>.begin();
+                        while (iter != _<field_dec.identifier>.end()) {</+2>
+                            if ((*(*iter)) == key) {</+2>
+				no --;
+				if (no <= 0) {</+2>
+				    <if (exists field_dec.notify.text)>
+                    			(*iter)<connector temp_type>notifier(false,this);
+                		    <endif>
+
+				  <type_spec temp_type> tmp = (*iter);
+                                <if ([<owns_object temp_type>])>
+                                    if(tmp)tmp->set_parent(0);
+                                <elseif (exists is_value_class[<temp_type.type_spec.identifier>])>
+                                    tmp.set_parent(0);
+                                <endif>
+
+                                  _<field_dec.identifier>.erase(iter);
+				  return tmp;
+				  }</-2>
+                                }</-2>
+                            iter ++;
+                            }</-2>
+                        return 0;
+                        }</-2></>
+
+              <endlet>
+            <endfor>
+
+
+	  <endif>
+      <endlet>
+    <endlet>
+<enddef>
+
+#	And the print macros
+
+<def searchable_list_print field_dec>
+    <list_print field_dec>
+<enddef>
+
+#	and the list meta builder
+
+<def searchable_list_meta_builder the_type>
+   <list_meta_builder the_type>
+<enddef>
+
+#	and the list add_virtual fields builder
+
+<def searchable_list_add_virtual the_class the_type_spec field_id>
+  <let ctype be the_type_spec.template_part.type_specifications.type_specification>
+    <if (exists ctype.pointer_qual.text)>
+      <add_virtual_fields_inner the_class ctype.type_spec, [<field_id>/*]>
+    <else>
+      <add_virtual_fields_inner the_class ctype.type_spec, [<field_id>/*]>
+    <endif>
+  <endlet>
+<enddef>
+
+<def searchable_list_add_virtual_fields_in_clause the_class the_type_spec field_id in_id>
+  <let ctype be the_type_spec.template_part.type_specifications.type_specification>
+    <if (exists ctype.pointer_qual.text)>
+      <add_virtual_value the_class, in_id, [<field_id>/*]>
+    <else>
+      <add_virtual_value the_class,  in_id, [<field_id>/*]>
+    <endif>
+  <endlet>
+<enddef>
+
+<def searchable_list_delete_all_entries field_dec>
+  <notice_linefeeds>
+  <let  the_type be field_dec.type_specification,
+        temp_type be the_type.type_spec.template_part.type_specifications.type_specification>
+        <if (!([<owns_object temp_type>]))>
+            <endmac>
+        <endif>
+
+        {</+4>
+            <type_spec the_type>::iterator iter =<>
+                   _<field_dec.identifier>.begin();
+
+            while (iter != _<field_dec.identifier>.end()) {</+2>
+                delete (*iter);
+                iter ++;
+                }</-2>
+
+            }</-4>
+   <endlet>
+<enddef>

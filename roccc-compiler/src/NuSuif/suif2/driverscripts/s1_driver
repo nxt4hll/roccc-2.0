@@ -1,0 +1,142 @@
+#!/bin/sh -f
+
+usage() {
+   echo "Usage: $0 [-f tmp] [-keep] [-Ddefine] file(s).c"
+   exit 1;
+}
+
+keep=0
+
+prog=program
+
+args=""
+
+tmpfile=drv.sh
+
+while [ ! -z $1 ];
+  do case x"$1" in 
+    x-D*)  args="$args $1"
+      shift ;;
+    x-f)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      tmpfile=$1
+      shift ;;
+    x-p)  shift
+      if [ -z $1 ] 
+          then usage; fi
+      prog=$1
+      shift;;
+    x-keep) keep=1
+      shift;;
+    x-*) 
+      echo "Bad option $1"; 
+      usage;;
+    *) break;;
+  esac
+done
+
+if [ -z $1 ] 
+    then usage; fi
+if [ $# -eq 1 ]
+    then if [ $prog = "program" ]
+       then prog=`basename $1 .c`
+    fi
+fi
+
+infiles=$*
+   
+echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+echo scc -option SNOOT '-enum-is-int -builtin __builtin_va_alist -builtin __builtin_va_arg_incr' -.spd $args $infiles
+scc -option SNOOT '-enum-is-int -builtin __builtin_va_alist -builtin __builtin_va_arg_incr' -.spd $args $infiles
+if [ $? != 0 ]
+   then echo "failed scc"
+   exit 1
+fi
+
+base=`echo $infiles|sed 's/\.c//g'`
+spd=`echo $infiles|sed 's/\.c/.spd/g'`
+for name in  $base 
+   do echo loop_norm $name.spd $name.sln
+   loop_norm $name.spd $name.sln
+   if [ $? != 0 ]
+      then echo "failed loop_norm $name.spd $name.sln"
+      exit 1
+   fi
+done
+if [ $keep -eq 0 ]
+  then echo rm -f $spd
+  rm -f $spd
+fi
+
+
+sln=`echo $infiles|sed 's/\.c/.sln/g'`
+echo argh linksuif -.slk $sln
+argh linksuif -.slk $sln
+if [ $? != 0 ]
+   then echo "failed linksuif"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then echo rm -f $sln
+  rm -f $sln
+fi
+
+
+slk=`echo $infiles|sed 's/\.c/.slk/g'`
+echo mergesuif $slk $prog.lnked
+mergesuif $slk $prog.lnked
+if [ $? != 0 ]
+   then echo "failed mergesuif"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then echo rm -f $slk
+  rm -f $slk
+fi
+
+cat <<EOF > $tmpfile
+import convertsuif1to2
+convertsuif1to2 $prog.lnked
+save $prog.s1s2
+import transforms
+# build field access expressions
+# from the suif1 annotations
+build_field_access_expressions
+save ${prog}.s2fld
+import usefulpasses
+recycle_trash
+insert_struct_final_padding
+avoid_label_collisions
+avoid_external_collisions
+name_all_symbols
+dismantle_field_access_expressions
+
+# dismantle the field access expressions for suif2
+# from the suif1 annotations
+save ${prog}.s2
+import convertsuif2to1
+convertsuif2to1 $prog.s1
+EOF
+
+echo suifdriver -f $tmpfile
+suifdriver -f $tmpfile
+if [ $? != 0 ]
+   then echo "failed s1->s2->s1 gen"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then echo rm -f $prog.lnked $prog.s1s2 $prog.s2 $prog.s2fld $tmpfile
+  rm -f $prog.lnked $prog.s1s2 $prog.s2 $tmpfile
+fi
+
+echo s2c $prog.s1 $prog.s1.c
+s2c $prog.s1 $prog.s1.c
+if [ $? != 0 ]
+   then echo "failed s1 c-gen"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then echo rm -f $prog.s1
+  rm -f $prog.s1
+fi

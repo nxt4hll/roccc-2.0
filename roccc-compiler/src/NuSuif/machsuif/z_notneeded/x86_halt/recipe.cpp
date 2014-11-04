@@ -1,0 +1,681 @@
+/* file "x86_halt/recipe.cpp" */
+
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the "machine/copyright.h" include file.
+*/
+
+#include <machine/copyright.h>
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma implementation "x86_halt/recipe.h"
+#endif
+
+#include <machine/machine.h>
+#include <cfg/cfg.h>
+#include <halt/halt.h>
+#include <x86/x86.h>
+
+#include <x86_halt/recipe.h>
+
+#ifdef USE_DMALLOC
+#include <dmalloc.h>
+#define new D_NEW
+#endif
+
+using namespace x86;
+using namespace halt;
+
+Vector<HaltRecipe*> halt_recipes_x86;
+
+void
+init_halt_recipes_x86()
+{
+    static bool init_done = false;
+
+    if (init_done)
+        return;
+    init_done = true;
+
+    halt_recipes_x86.resize(LAST_HALT_KIND + 1, NULL);
+
+    halt_recipes_x86[STARTUP] = new HaltRecipeX86Startup;
+    halt_recipes_x86[CBR]     = new HaltRecipeX86Cbr;
+    halt_recipes_x86[ENTRY]   = new HaltRecipeX86Entry;
+    halt_recipes_x86[EXIT]    = new HaltRecipeX86Exit;
+    halt_recipes_x86[MBR]     = new HaltRecipeX86Mbr;
+    halt_recipes_x86[LOAD]    = new HaltRecipeX86Load;
+    halt_recipes_x86[STORE]   = new HaltRecipeX86Store;
+    halt_recipes_x86[BLOCK]   = new HaltRecipeX86Block;
+    halt_recipes_x86[CYCLE]   = new HaltRecipeX86Cycle;
+    halt_recipes_x86[SETJMP]  = new HaltRecipeX86Setjmp;
+    halt_recipes_x86[LONGJMP] = new HaltRecipeX86Longjmp;
+}
+
+void
+clear_halt_recipes_x86()
+{
+    for (unsigned i = 0; i < halt_recipes_x86.size(); i++)
+	if (halt_recipes_x86[i])
+	    delete halt_recipes_x86[i];
+
+    halt_recipes_x86.resize(0);		// avoid repeating deletions
+}
+
+
+/**
+ ** HaltRecipeX86 methods
+ **/
+
+HaltRecipeX86::HaltRecipeX86()
+{
+    cur_stack_loc = BaseDispOpnd(opnd_reg_sp, opnd_immed(0, type_s32));
+    next_stack_loc = BaseDispOpnd(opnd_reg_sp, opnd_immed(-4, type_s32));
+}
+
+/*
+ * Insert all static arguments into the argument list.  Start with the
+ * unique id of the instrumentation point, and follow with any optional
+ * static args.
+ */
+void
+HaltRecipeX86::static_args(HaltLabelNote note)
+{
+    args.push_back(opnd_immed(note.get_unique_id(), type_s32));
+
+    int size_static_args = note.get_size_static_args();
+    for (int i = 0; i < size_static_args; ++i)
+	args.push_back(opnd_immed(note.get_static_arg(i), type_s32));
+}
+
+// Converts the set of live registers into a set of maximal registers
+// that we want to save before the instrumentation call.
+void
+HaltRecipeX86::build_save_set(NatSet *save, const NatSet *live)
+{
+    for(NatSetIter iter(live->iter()); iter.is_valid(); iter.next()) {
+	int r = iter.current();
+
+	// don't bother saving registers saved by the calling convention
+	if (r == ESP || r == EBP || reg_callee_saves()->contains(r))
+	    continue;
+
+	if (FP0 <= r && r <= FP7)
+	    save->insert(FP0);
+	else
+	    save->insert(reg_maximal(r));
+    }
+}
+
+void
+HaltRecipeX86::setup_stack()
+{
+    debug(2, "%s:setup_stack", __FILE__);
+    claim(size(instr_pot[SETUP]) == 0);
+
+    // nothing to do on x86
+}
+
+void
+HaltRecipeX86::save_state(NatSet *saved_reg_set)
+{
+    Instr *mi;
+
+    debug(2, "%s:save_state", __FILE__);
+    claim(size(instr_pot[SAVE]) == 0);
+    
+    bytes_pushed = 0;
+
+    if (saved_reg_set->contains(EFLAGS)) {
+	mi = new_instr_alm(next_stack_loc, PUSHF);
+	set_dst(mi, 1, opnd_reg_sp);
+	append(instr_pot[SAVE], mi);
+	bytes_pushed += 4;
+    }
+
+    for (NatSetIter rs(saved_reg_set->iter()); rs.is_valid(); rs.next()) {
+	int r = rs.current();
+	
+	if (r != EFLAGS && reg_allocables()->contains(r)) {	// r is a general register
+	    mi = new_instr_alm(next_stack_loc, PUSH, opnd_reg(r, type_s32));
+	    set_dst(mi, 1, opnd_reg_sp);
+	    append(instr_pot[SAVE], mi);
+	    bytes_pushed += 4;
+	}
+    }
+
+    // build_save_set inserts FP0 for _any_ FP reg that it sees.
+    if (saved_reg_set->contains(FP0)) {
+
+	// We save the whole fp state any time at least one fp register
+	// needs saving.  We start by making room on the stack for the fp
+	// state (108 bytes worth).  Using LEA instead of ADD prevents
+	// clobbering EFLAGS.
+	mi = new_instr_alm(opnd_reg_sp, x86::LEA,
+			   BaseDispOpnd(opnd_reg_sp,
+					opnd_immed(-108, type_s32)));
+	append(instr_pot[SAVE], mi);
+	bytes_pushed += 108;
+
+	// save the fp state using fnsave
+	mi = new_instr_alm(cur_stack_loc, FNSAVE);
+
+	// build a regs_used note indicating all state saved by FNSAVE
+	NatSetDense  fp_saved_state;
+	fp_state_builder(&fp_saved_state);
+	set_note(mi, k_regs_used, NatSetNote(&fp_saved_state));
+	append(instr_pot[SAVE], mi);
+    }
+}
+
+void
+HaltRecipeX86::insert_args()
+{
+    Instr *mi;
+    debug(2, "%s:insert_args", __FILE__);
+    claim(size(instr_pot[ARGS]) == 0);
+
+    // push arguments onto stack in reverse order
+    for (int i = ((int)args.size()) - 1; i >= 0; i--) {
+
+	// If args[i] is an address symbol, it can only be the name of a
+	// literal char array.  Make the symbolic address an immed arg,
+	// after qualifying it with the name of the current unit.
+	// FIXME: this is a hack.
+
+	if (is_addr_sym(args[i])) {
+	    String qualified = get_name(get_proc_sym(the_local_unit)).chars();
+	    qualified += '.';
+	    qualified += get_name(get_sym(args[i]));
+	    args[i] = opnd_immed(qualified);
+	} else {
+	    claim(is_integral(get_type(args[i])));
+	}
+
+	mi = new_instr_alm(next_stack_loc, PUSH, args[i]);
+	set_dst(mi, 1, opnd_reg_sp);
+	append(instr_pot[ARGS], mi);
+    }
+}
+
+
+void
+HaltRecipeX86::insert_call(ProcSym *ps)
+{
+    debug(2, "%s:insert_call", __FILE__);
+    claim(size(instr_pot[halt::CALL]) == 0);
+
+    Instr *cal = new_instr_cti(next_stack_loc, x86::CALL, ps);
+    set_dst(cal, 1, opnd_reg_sp);
+    set_note(cal, k_regs_defd, NatSetNote((reg_caller_saves())));
+
+    append(instr_pot[halt::CALL], cal);
+}
+
+void
+HaltRecipeX86::clean_args()
+{
+    debug(2, "%s:clean_args", __FILE__);
+    claim(size(instr_pot[CLEAN]) == 0);
+
+    if (args.size() > 0) {
+	Instr *mi = new_instr_alm(opnd_reg_sp,
+				  x86::ADD,
+				  opnd_reg_sp,
+				  opnd_immed(args.size() * 4, type_s32));
+	set_dst(mi, 1, opnd_reg_eflags);
+	append(instr_pot[CLEAN], mi);
+	args.resize(0);
+    }
+}
+
+void
+HaltRecipeX86::restore_state(NatSet *saved_reg_set)
+{
+    Instr *mi;
+
+    debug(2, "%s:restore_state", __FILE__);
+    claim(size(instr_pot[RESTORE]) == 0);
+
+    for(NatSetIter rs(saved_reg_set->iter()); rs.is_valid(); rs.next()) {
+	int r = rs.current();
+
+	if (r == EFLAGS)
+	    continue;	// restoring of eflags done after this loop
+
+	if (reg_allocables()->contains(r)) {	// r is a general register
+	    mi = new_instr_alm(opnd_reg(r, type_s32), POP, cur_stack_loc);
+	    set_dst(mi, 1, opnd_reg_sp);
+	    prepend(instr_pot[RESTORE], mi);
+	}
+	else if (FP0 <= r && r <= FP7) {	// r is floating-point
+	    // Remove stack space.  Since we're prepending instructions in this loop,
+	    // this will be emitted after restoration of the fp state.
+
+	    mi = new_instr_alm(opnd_reg_sp, x86::ADD, opnd_reg_sp,
+			       opnd_immed(108, type_s32));
+	    set_dst(mi, 1, opnd_reg_eflags);  // assumes eflags not yet restored
+	    prepend(instr_pot[RESTORE], mi);
+
+	    // Restore all of the fp state.
+	    mi = new_instr_alm(FRSTOR, cur_stack_loc);
+
+	    // build a regs_used note indicating all state restored
+	    NatSetDense fp_saved_state;
+	    fp_state_builder(&fp_saved_state);
+	    set_note(mi, k_regs_defd, NatSetNote(&fp_saved_state));
+	    prepend(instr_pot[RESTORE], mi);
+	}
+	else {
+	    claim(false, "unexpected register in live set");
+	}
+    }
+
+    if (saved_reg_set->contains(EFLAGS)) {
+	// restore last so rest of the code can use this reg
+	mi = new_instr_alm(opnd_reg_eflags, POPF, cur_stack_loc);
+	set_dst(mi, 1, opnd_reg_sp);
+	append(instr_pot[RESTORE], mi);
+    }
+}
+
+void
+HaltRecipeX86::destroy_stack()
+{
+    debug(2, "%s:destroy_stack", __FILE__);
+    claim(size(instr_pot[DESTROY]) == 0);
+
+    // nothing to do on x86
+}
+
+
+/** other helper functions **/
+
+// Build a bit set marking the registers saved
+// during a fnsave operation.
+void
+HaltRecipeX86::fp_state_builder(NatSet *save_set)
+{
+    save_set->insert(reg_lookup("st(7)"));
+    save_set->insert(reg_lookup("st(6)"));
+    save_set->insert(reg_lookup("st(5)"));
+    save_set->insert(reg_lookup("st(4)"));
+    save_set->insert(reg_lookup("st(3)"));
+    save_set->insert(reg_lookup("st(2)"));
+    save_set->insert(reg_lookup("st(1)"));
+    save_set->insert(reg_lookup("st"));
+    save_set->insert(reg_lookup("fpcr"));
+    save_set->insert(reg_lookup("fptw"));
+    save_set->insert(FPFLAGS);
+
+    // fnsave also saves the fp data pointer, instruction pointer,
+    // and last instruction opcode.  We don't represent those
+    // resources in our x86 RegInfo block (i.e., don't care about
+    // them (yet)).
+}
+
+int
+HaltRecipeX86::jcc_to_setcc(int opcode)
+{
+    using namespace x86;
+
+    switch(opcode) {
+      case JA:   return SETA;
+      case JAE:  return SETAE;
+      case JB:   return SETB;
+      case JBE:  return SETBE;
+      case JC:   return SETC;
+      case JE:   return SETE;
+      case JG:   return SETG;
+      case JGE:  return SETGE;
+      case JL:   return SETL;
+      case JLE:  return SETLE;
+      case JNA:  return SETNA;
+      case JNAE: return SETNAE;
+      case JNB:  return SETNB;
+      case JNBE: return SETNBE;
+      case JNC:  return SETNC;
+      case JNE:  return SETNE;
+      case JNG:  return SETNG;
+      case JNGE: return SETNGE;
+      case JNL:  return SETNL;
+      case JNLE: return SETNLE;
+      case JNO:  return SETNO;
+      case JNP:  return SETNP;
+      case JNS:  return SETNS;
+      case JNZ:  return SETNZ;
+      case JO:   return SETO;
+      case JP:   return SETP;
+      case JPE:  return SETPE;
+      case JPO:  return SETPO;
+      case JS:   return SETS;
+      case JZ:   return SETZ;
+
+      default:
+	claim(false, "unexpected opcode");
+    }
+    return 0;	// to keep the compiler quiet
+}
+
+
+/**
+ ** HaltRecipeX86* operator() implementations
+ **/
+
+// instrument_start_x86
+void
+HaltRecipeX86Startup::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+				 const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:HaltRecipeX86Startup", __FILE__);
+
+    // build args list -- no dynamic arguments
+    static_args(note);
+
+    follow_recipe(STARTUP, after);
+    insert_instrs(AFTER, n, h);
+}
+
+void
+HaltRecipeX86Cbr::operator()
+    (HaltLabelNote note, InstrHandle handle, CfgNode *block,
+     const NatSet *live_before, const NatSet *live_after)
+{
+    debug(2, "%s:HaltRecipeX86Cbr", __FILE__);
+
+    Instr *mi;
+    Opnd opnd_reg_al  = opnd_reg(AL,  type_s8);
+    Opnd opnd_reg_eax = opnd_reg(EAX, type_s32);
+
+    // find the setCC opcode matching the branch's jCC opcode
+    int setcc = jcc_to_setcc(get_opcode(*handle));
+
+    // build one dynamic arg in EAX: a 1 if branch will take, else 0
+    mi = new_instr_alm(opnd_reg_al, setcc, opnd_reg_eflags);
+    append(instr_pot[KIND], mi);			// setCC %al
+
+    mi = new_instr_alm(opnd_reg_eax, MOVZX, opnd_reg_al);
+    append(instr_pot[KIND], mi);			// movzx %al -> %eax
+
+    // put argument operands (dynamic and static) into `args'
+    args.push_back(opnd_reg_eax);
+    static_args(note);
+
+    // save/restore regs live before the branch, including EFLAGS
+    NatSetDense to_save = *live_before;
+    to_save.insert(EFLAGS);
+
+    follow_recipe(CBR, &to_save);
+    insert_instrs(BEFORE, block, handle);
+}
+
+// instrument_entry_x86
+void
+HaltRecipeX86Entry::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			       const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:HaltRecipeX86Entry", __FILE__);
+
+    // build args list -- no dynamic arguments
+    static_args(note);
+
+    follow_recipe(ENTRY, after);
+    insert_instrs(AFTER, n, h);
+}
+
+// instrument_exit_x86
+void
+HaltRecipeX86Exit::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			      const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:HaltRecipeX86Exit", __FILE__);
+
+    // build args list -- no dynamic arguments
+    static_args(note);
+
+    follow_recipe(EXIT, before);
+    insert_instrs(BEFORE, n, h);
+}
+
+
+// instrument_mbr_x86
+//
+// The instrumented instruction is not the actual multiway branch.  It is
+// an earlier instruction that computes the target address for the branch.
+// (It is identified by the k_mbr_target_def annotation.)  For x86, it is a
+// load instruction (opcode MOV) whose source operand is an address
+// expression of kind opnd::INDEX_SCALE_DISP.  The index field of this
+// address expression holds the dispatch-table index that is to be passed
+// to _record_mbr.
+
+void
+HaltRecipeX86Mbr::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			     const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:HaltRecipeX86Mbr", __FILE__);
+ 
+    claim(has_note(*h, k_mbr_target_def) || has_note(*h, k_mbr_index_def));
+
+    IndexScaleDispOpnd isdo = get_src(*h, 0);
+    claim(!is_null(isdo), "Can't recognize mbr index calculation");
+    Opnd index = isdo.get_index();
+    args.push_back(index);
+    static_args(note);
+
+    follow_recipe(MBR, before);
+    insert_instrs(BEFORE, n, h);	// NB: before the k_mbr_target_def instr
+}
+
+
+/*
+ * Below are two routines which calculate the number of bytes moved
+ * by a load or store instruction.
+ */
+
+int 
+HaltRecipeX86Load::num_bytes_ld (InstrHandle h) 
+{
+    Opnd src;
+    
+    for (int i=0; i<srcs_size(*h); i++) {
+	src = get_src(*h, i);
+	if (is_addr(src))
+	    return (get_bit_size(get_deref_type(src)) / 8);
+    }
+    return 0;
+}
+
+int 
+HaltRecipeX86Store::num_bytes_st (InstrHandle h) {
+
+    Opnd dst;
+    
+    for (int i=0; i<dsts_size(*h); i++) {
+	dst = get_dst(*h, i);
+	if (is_addr(dst))
+	    return (get_bit_size(get_deref_type(dst)) / 8);
+    }	
+    return 0;
+}	
+
+// instrument_load_x86
+void
+HaltRecipeX86Load::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			      const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:instrument_load_x86", __FILE__);
+    
+    Instr* mi;
+    Opnd ea, tmp_opnd, bytes_opnd;
+
+    ea = get_src(*h, 0);    
+
+    tmp_opnd = opnd_reg(EAX, type_ptr);
+    mi = new_instr_alm(tmp_opnd, LEA, ea);
+    append(instr_pot[KIND], mi);
+
+    // find the number of bytes loaded and create operand (below)
+    bytes_opnd = opnd_immed(num_bytes_ld(h), type_u32);
+
+    // if instr has a repetition annotation, multiply the # bytes by val in ecx
+    // and push that value onto the args list (dynamic arg. #1)
+    ListNote<long> rep_note = get_note(*h, k_instr_opcode_exts);
+    if (!is_null(rep_note) && rep_note.get_value(0) == REP) {
+	Opnd reps = opnd_reg(ECX, type_u32);
+	mi = new_instr_alm(reps, IMUL, reps, bytes_opnd);
+	append(instr_pot[KIND], mi);
+	args.push_back(reps);
+    } else {
+	args.push_back(bytes_opnd);
+    }
+
+    // effective address (dynamic arg. #2)
+    args.push_back(tmp_opnd);
+    
+    static_args(note);
+
+    follow_recipe(LOAD, before);
+    insert_instrs(BEFORE, n, h);    
+}
+
+// instrument_store_x86
+void
+HaltRecipeX86Store::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			       const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:instrument_store_x86", __FILE__);
+
+    Instr* mi;
+    Opnd ea, tmp_opnd, bytes_opnd; 
+
+    ea = get_dst(*h);
+
+    tmp_opnd = opnd_reg(EAX, type_ptr); 
+    mi = new_instr_alm(tmp_opnd, LEA, ea); 
+    append(instr_pot[KIND], mi);
+    
+    // find # bytes stored and create immed (below)
+    bytes_opnd = opnd_immed(num_bytes_st(h), type_u32);
+
+    // if instr has a repetition annotation, multiply the # bytes by val in ecx
+    // and push that value onto the args list (dynamic arg. #1)
+    ListNote<long> rep_note = get_note(*h, k_instr_opcode_exts);
+    if (!is_null(rep_note) && rep_note.get_value(0) == REP) {
+	Opnd reps = opnd_reg(ECX, type_u32);
+	mi = new_instr_alm(reps, IMUL, reps, bytes_opnd);
+	append(instr_pot[KIND], mi);
+	args.push_back(reps);
+    } else {
+	args.push_back(bytes_opnd);
+    }
+    // effective address (dynamic arg. #2)
+    args.push_back(tmp_opnd);
+
+    static_args(note);
+
+    follow_recipe(STORE, after);
+    insert_instrs(AFTER, n, h);
+}
+
+// instrument_block_x86
+void
+HaltRecipeX86Block::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			       const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:instrument_block_x86", __FILE__);
+
+    // There are no dynamic arguments to _record_block.
+    static_args(note);
+
+    follow_recipe(BLOCK, after);
+    insert_instrs(AFTER, n, h);
+}
+
+// instrument_cycle_x86
+void
+HaltRecipeX86Cycle::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			       const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:instrument_cycle_x86", __FILE__);
+
+    // There are no dynamic args to _record_cycle.
+    static_args(note);
+
+    follow_recipe(CYCLE, after);
+    insert_instrs(AFTER, n, h);
+}
+
+// instrument_setjmp_x86
+void
+HaltRecipeX86Setjmp::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			       const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:instrument_setjmp_x86", __FILE__);
+
+    // Here you want to fill instr_pot before preparing the kind-specific 
+    // arguments because you need to know the number of bytes pushed onto
+    // the stack (calculated in save_state)
+    follow_recipe(SETJMP, before);
+
+    Opnd jmp_buf = opnd_reg(EAX, type_s32);
+    Opnd bytes_pushed_opnd = opnd_immed(bytes_pushed, type_u32);
+    Opnd stack_ptr = opnd_reg(ESP, type_ptr);
+
+    BaseDispOpnd adjusted_stack(stack_ptr, bytes_pushed_opnd);
+
+    Instr *mi = new_instr_alm(jmp_buf, MOV, adjusted_stack);
+    append(instr_pot[KIND], mi);
+
+    args.push_back(jmp_buf);
+    static_args(note);
+
+    // Although these functions were called earlier by follow_recipe, they
+    // depend on args, which had not been filled when they were first called.
+    insert_args();
+    clean_args();
+
+    insert_instrs(BEFORE, n, h);
+}
+
+// instrument_longjmp_x86
+void
+HaltRecipeX86Longjmp::operator()(HaltLabelNote note, InstrHandle h, CfgNode *n,
+			       const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:instrument_long_jmp_x86", __FILE__);
+
+    // Here you want to fill instr_pot before preparing the kind-specific 
+    // arguments because you need to know the number of bytes pushed onto
+    // the stack (calculated in save_state)
+    follow_recipe(LONGJMP, before);
+
+    Opnd jmp_buf = opnd_reg(EAX, type_s32);
+    Opnd segment = opnd_reg(ECX, type_s32);
+    Opnd bytes_pushed_opnd = opnd_immed(bytes_pushed, type_u32);
+    Opnd stack_ptr = opnd_reg(ESP, type_ptr);
+
+    // prepare jmp_buf operand
+    BaseDispOpnd adjusted_stack(stack_ptr, bytes_pushed_opnd);
+    Instr *mi = new_instr_alm(jmp_buf, MOV, adjusted_stack);
+    append(instr_pot[KIND], mi);
+
+    // prepare segment operand
+    bytes_pushed_opnd = opnd_immed(bytes_pushed+4, type_u32);
+    BaseDispOpnd next_back(stack_ptr, bytes_pushed_opnd);
+    mi = new_instr_alm(segment, MOV, next_back);
+    append(instr_pot[KIND], mi);
+
+    args.push_back(jmp_buf);
+    args.push_back(segment);
+    static_args(note);
+
+    // Although these functions were called earlier by follow_recipe, they
+    // depend on args, which had not been filled when they were first called.
+    insert_args();
+    clean_args();
+    
+    insert_instrs(BEFORE, n, h);
+}

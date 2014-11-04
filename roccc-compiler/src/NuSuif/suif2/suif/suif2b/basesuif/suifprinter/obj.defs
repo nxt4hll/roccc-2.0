@@ -1,0 +1,28 @@
+  HANDLE_DISPATCH(expression, Expression);
+  HANDLE_DISPATCH(unary_expression, UnaryExpression);
+  HANDLE_DISPATCH(binary_expression, BinaryExpression);
+  HANDLE_DISPATCH(array_reference_expression, ArrayReferenceExpression);
+  HANDLE_DISPATCH(load_expression, LoadExpression);
+  HANDLE_DISPATCH(load_variable_expression, LoadVariableExpression);
+//  HANDLE_DISPATCH(call_expression, CallExpression);
+  HANDLE_DISPATCH(symbol_address_expression, SymbolAddressExpression);
+  HANDLE_DISPATCH(va_arg_expression, VaArgExpression);
+  HANDLE_DISPATCH(int_constant, IntConstant);
+  HANDLE_DISPATCH(float_constant, FloatConstant);
+// Statements
+  HANDLE_DISPATCH(statement, Statement);
+  HANDLE_DISPATCH(call_statement, CallStatement);
+  HANDLE_DISPATCH(store_variable_statement, StoreVariableStatement);
+  HANDLE_DISPATCH(store_statement, StoreStatement);
+  HANDLE_DISPATCH(return_statement, ReturnStatement);
+  HANDLE_DISPATCH(mark_statement, MarkStatement);
+  HANDLE_DISPATCH(if_statement, IfStatement);
+  HANDLE_DISPATCH(branch_statement, BranchStatement);
+  HANDLE_DISPATCH(jump_statement, JumpStatement);
+  HANDLE_DISPATCH(label_location_statement, LabelLocationStatement);
+  HANDLE_DISPATCH(eval_statement, EvalStatement);
+// Symbols
+  HANDLE_DISPATCH(variable_symbol, VariableSymbol);
+  HANDLE_DISPATCH(code_label_symbol, CodeLabelSymbol);
+  HANDLE_DISPATCH(procedure_symbol, ProcedureSymbol);
+

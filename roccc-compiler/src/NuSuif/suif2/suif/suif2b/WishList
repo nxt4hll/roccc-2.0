@@ -1,0 +1,78 @@
+This file is a WishList of features and changes for suif2.
+
+This is not currently prioritized.
+
+WishList from David Heine
+
+Remove the Makefile.*.* configuration and move it all to
+the configure process
+
+standard gnu ./configure
+
+Nightly build/regressions/spec build.
+
+More performance work on the s2c backend.
+
+  A trivial dead-code pass  (remove empty StatementLists,
+EvalStatements with no side effects, etc.)
+
+  a validation of the dataflow dead_code pass.
+
+  I'd like to start defining some useful annotations.
+An example might be a "prefered_name" for marking
+the original name of a SymbolTableObject.  We can place these
+when we strip conflicting symbol names, then use it as a base
+to construct a new unique new name on the symbols.
+
+  Making  suif1->2 more robust.
+
+  A mechanism to warn the user when they attempt to load a file before
+all of the libraries that define nodes in the file have not been
+imported.
+
+Cleaning up the walkers/iokernel to use the ObjectWrapper everywhere.
+
+Defining an ObjectIter<> that only iterates over Objects and validates
+them before returning.
+
+  Getting the GroupSymbolTable to have a get_field_symbol_iterator()
+method.
+
+  A real caching typebuilder implementation (probably with an extensible
+type equivalence function)
+
+Validate the inline() function.
+remove WalkingMaps from the suifkernel and put it somewhere else.
+It doesn't really need to be in basesuif.
+
+Allowing smgn to work on multiple input files (not a single cat'ed file)
+
+   The StatementList manipulations are very clunky. Almost all operations
+are order N. Insert After, Insert Before, next and prev functionality
+on a Statement should be constant time.
+
+Iterators that don't visit annotations.
+
+An extensible constant folding mechanism
+
+Adding "zlib" compression library hooks into the file when placed
+onto disk.
+
+Adding magic bytes "pigs" and version # to the output files that
+are compatible with the suif1 magic bytes
+so that suif1 passes will give errors for suif2 files and suif2
+files will give errors for suif1 files.
+
+Really far-out stuff
+   smgn Specification of the valid "opcodes" for 
+BinaryExpression, UnaryExpression, etc
+
+integration of the suif1 and suif2 build system so we can just export
+a single tarball.
+
+Good documentation of the "predefined classes" in the iokernel (and
+maybe a name-change from "rudimentary" to "predefined"
+
+An Explicit floating point representation and machine-independent
+constant folders for these.
+

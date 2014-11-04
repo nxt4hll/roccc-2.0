@@ -1,0 +1,519 @@
+#!/usr/bin/perl -w
+#
+# This is intended to be a general purpose pass driver for
+#  The suif system.
+# Each of the "pass_spec_names" must be found in the pass_spec_db
+#  The default location for the pass_spec_db is $(NCIHOME)/pass_spec_db
+#  However, a user can add new ones.
+#
+
+sub Usage {
+  my($message) = @_;
+  print STDERR "Usage: $0 { options } pass_list input_file[s]\n";
+  print STDERR "  Options::\n";
+  print STDERR "     -v       verbose\n";
+  print STDERR "     -n       do not execute the suifdriver, just print commands\n";
+  print STDERR "     --help   print this message\n";
+  print STDERR "     -suifdriver driver  specify the suif driver\n";
+  print STDERR "     -ext .ext    specify the output file default extension\n";
+  print STDERR "     -require DLL1:DLL2:...  load the modules before execution\n";
+  print STDERR "  The pass_list is a ':' separated list of pass specs\n";
+  print STDERR "      pass_spec files are normally found in \$ROCCC_HOME/pass_spec_db\n";
+  print STDERR "Error: $message\n";
+  exit(2);
+};
+
+###############
+# Local Variables
+###############
+#
+# This will be set when the driver is installed
+my($ROCCC_HOME) = "@ROCCC_HOME@";
+
+# Original pass spec db location
+my($PASS_SPEC_PATH_ROCCC) = "$ROCCC_HOME/src/hi_cirrf_pass/pass_spec_db";
+
+# custom location set by user
+my($CUSTOM_PASS_SPEC_DB_LOC) = "";
+
+
+my($verbose) = 0;
+my($no_exe) = 0;
+
+my($requires) = [];
+my($user_ext) = "";
+$suifdriver = "$ROCCC_HOME/bin/suifdriver";
+
+
+### PARSE ARGS ###
+while ($#ARGV != -1) {
+  if ($ARGV[0] eq "-v") {
+    shift @ARGV;
+    $verbose = 1;
+    next;
+  }
+  if ($ARGV[0] eq "-n") {
+    shift @ARGV;
+    $no_exe = 1;
+    next;
+  }
+  if ($ARGV[0] eq "--help") {
+    shift @ARGV;
+    &Usage("Help requested");
+    next;
+  }
+  if ($ARGV[0] eq "-ext") {
+    shift @ARGV;
+    if ($#ARGV == -1) {
+        &Usage("-ext requires an argument");
+    }
+    $user_ext = shift;
+    next;
+  }
+  if ($ARGV[0] eq "-suifdriver") {
+    shift @ARGV;
+    if ($#ARGV == -1) {
+	&Usage("-suifdriver requires an argument");
+    }
+    $suifdriver = shift;
+    next;
+  }
+  if ($ARGV[0] eq "-require") {
+    shift @ARGV;
+    if ($#ARGV == -1) {
+	&Usage("-require requires an argument");
+    }
+    my($reqlist) = shift;
+    my(@req) = split(/:/,$reqlist);
+    push(@$requires, @req);
+    next;
+  }
+  if($ARGV[0] eq "--pass_spec_db_location") {
+    shift @ARGV;
+    if ($#ARGV == -1) {
+	&Usage("--pass_spec_db_location requires an argument");
+    }
+    $CUSTOM_PASS_SPEC_DB_LOC = shift;
+    next;
+  }
+  last;
+}
+
+if ($#ARGV < 1) {
+  &Usage("Not enough arguments");
+}
+
+##########################
+## LOCAL ENVIRONMENT VARS 
+##########################
+
+my($PASS_SPEC_PATH_ABSOLUTE) = "/dev/null";
+
+# if the path exists as a third option make the 
+# path local to that
+if ( length $CUSTOM_PASS_SPEC_DB_LOC == 0 ) {
+    $PASS_SPEC_PATH_ABSOLUTE = "$PASS_SPEC_PATH_ROCCC";
+} else {
+    $PASS_SPEC_PATH_ABSOLUTE = "$CUSTOM_PASS_SPEC_DB_LOC";
+}
+
+sub get_pass_spec_paths {
+   #print STDERR "ABSOLUTE PASS SPEC PATH = $PASS_SPEC_PATH_ABSOLUTE \n";
+   return(["$PASS_SPEC_PATH_ABSOLUTE"]); 
+};
+
+# The separator is different across platforms.
+# currently we only support UNIX, but when someone
+# wants to use NT, add support here.
+sub append_filename {
+  my($path, $name) = @_;
+  return("$path/$name");
+};
+
+sub path_is_absolute {
+  my($path) = @_;
+  if ($path =~ m+^/+) {
+    return(1);
+  }
+  return(0);
+};
+
+sub find_pass_spec {
+  my($pass_spec_name) = @_;
+  if (&path_is_absolute($pass_spec_name)) {
+    my($filename) = $pass_spec_name;
+    if (-f $filename) {
+      return($filename);
+    }
+    print STDERR "Error: Could not find pass_spec file $filename\n";
+    exit(1);
+  }
+
+  my($pass_spec_paths) = &get_pass_spec_paths();
+
+  my($path);
+  foreach $path (@$pass_spec_paths) {
+    my($filename) = &append_filename($path, $pass_spec_name);
+    if (-f $filename) {
+      return($filename);
+    }
+  }
+  print STDERR "Error: Could not find '$pass_spec_name' in PATH=".join(":",@$pass_spec_paths)."\n";
+  exit(1);
+}
+
+sub build_pass_spec_list {
+  my($path_spec_list) = @_;
+  my(@psl) = split(/\s*\:\s*/, $path_spec_list);
+  return(\@psl);
+}
+
+
+
+
+#########
+# ORIGINAL LOCATION OF ARGUMENT PROCESSING
+##########
+my($pass_spec_arg) = shift(@ARGV);
+my($pass_spec_list) = &build_pass_spec_list($pass_spec_arg);
+my($input_file_list) = \@ARGV;
+
+# validate that the pass spec list makes sense:
+#  i.e. frontend pass -> transforms -> link -> transforms -> backend
+#
+# skipping this for now.
+
+# build the string to pass to suifdriver
+# Check that we can find all of the pass specs.
+my($pspec);
+foreach $pspec (@$pass_spec_list) {
+  &find_pass_spec($pspec);
+}
+
+my($seen_frontend) = 0;
+my($pass_info_list) = [];
+
+
+foreach $pspec (@$pass_spec_list) {
+  my($pass_spec_file) = &find_pass_spec($pspec);
+#  print "parsing $pass_spec_file\n";
+  my($pass_info) = &parse_pass_spec($pass_spec_file);
+  $pass_info->{"pspec"} = $pspec;
+  $pass_info->{"pass_spec_file"} = $pass_spec_file;
+  push(@$pass_info_list, $pass_info);
+}
+
+# now, build the complete requires list
+my($pass_info);
+foreach $pass_info (@$pass_info_list) {
+  if (defined($pass_info->{"REQUIRES"})) {
+#    print "adding requires \n";
+    push(@$requires, @{$pass_info->{"REQUIRES"}});
+#    print "requires = ".join(" ", @$requires)."\n";
+  }
+}
+
+
+## TBD we should also require the list of
+my($requires_string) = "";
+if ($#{$requires} >= 0) {
+  $requires_string .= "require ".join(" ",@$requires)." ; ";
+}
+
+#if ($#$input_file_list != 0) {
+#  print STDERR "ERROR: Sorry, multiple input files are not yet supported\n";
+#  exit(1);
+#}
+
+# we would like to specify the base of this name in the 
+# pass spec.
+
+# ideally, this would specify a tree of execution where
+# all executions that could go in parallel would go in parallel.
+# for now it is just a list
+my($exelist) = [];
+
+foreach $inputfile (@$input_file_list) {
+  my($suifdriver_string) = $requires_string;
+  my($outputext) = ".suifout";
+  
+  my($outputfilebase) = $inputfile;
+  # remove the .ext
+  $outputfilebase =~ s/(.*)\..*/$1/;
+  my($infiledir) = $outputfilebase;
+  # remove the directory name.
+  $outputfilebase =~ s+^.*/++;
+  $infiledir =~ s+^(.*)/.*+$1+;
+
+  my($outdir) = "./";
+
+  $outputfile = $outdir . $outputfilebase . $outputext;
+  
+  # the following assumes a single input file, no linking
+  my($found_frontend) = 0;
+  my($found_backend) = 0;
+  foreach $pass_info (@$pass_info_list) {
+    
+    if (defined($pass_info->{"OUTPUT_EXT"})) {
+      $outputext = $pass_info->{"OUTPUT_EXT"};
+      $outputfile = $outdir . $outputfilebase . $outputext;
+    }
+      
+    if ($user_ext ne "") {
+      $outputext = $user_ext;
+      $outputfile = $outdir . $outputfilebase . $user_ext;
+    }
+      
+    if ($found_backend) {
+      print STDERR "ERROR: backend pass already found. ".$pass_info->{"pspec"}." is invalid\n";
+      exit(1);
+    }
+      
+#    print "PASS_TYPE: ".$pass_info->{"PASS_TYPE"}."\n";
+    if ($pass_info->{"PASS_TYPE"} eq "FRONTEND_PASS") {
+      if ($found_frontend) {
+	print STDERR "ERROR: Frontend pass ".$pass_info->{"pspec"}." must be first\n";
+	exit(1);
+      }
+      $found_frontend = 1;
+      my($pass_spec);
+      foreach $pass_spec (@{$pass_info->{"PASS_SPEC"}}) {
+	# put the frontend pass in here with the filename in the
+	# @INPUTFILE@
+	$pass_spec =~ s/\@INPUTFILE\@/$inputfile/g;
+	
+	$suifdriver_string .= "$pass_spec ; ";
+      }
+    } else {
+	if (!$found_frontend) {
+	    # put the frontend here.  Load the suif file
+	    # expect a single SUIF input file.
+	    # 
+	    $suifdriver_string .= "load $inputfile ; ";
+	    $found_frontend = 1;
+	}
+    }
+
+    if ($pass_info->{"PASS_TYPE"} eq "TRANSFORM_PASS") {
+      # guaranteed to have loaded the file already
+#      print "TRANSFORM: \n";
+      my($pass_spec);
+      foreach $pass_spec (@{$pass_info->{"PASS_SPEC"}}) {
+	# put the frontend pass in here with the filename in the
+	# @INPUTFILE@
+	#$pass_spec =~ s/@INPUTFILE@/$inputfile/g;
+      
+	$suifdriver_string .= "$pass_spec ; ";
+      }
+    }
+    if ($pass_info->{"PASS_TYPE"} eq "BACKEND_PASS") {
+      my($pass_spec);
+      foreach $pass_spec (@{$pass_info->{"PASS_SPEC"}}) {
+	# put the frontend pass in here with the filename in the
+	# @OUTPUTFILE@
+	$pass_spec =~ s/\@OUTPUTFILE\@/$outputfile/g;
+	$suifdriver_string .= "$pass_spec ; ";
+      }
+      $found_backend = 1;
+    }
+  }
+  # if no backend, just save
+  if (!$found_backend) {
+    $suifdriver_string .= "save $outputfile ; ";
+  }
+
+  # blow away any extra "; ;" or 
+  #     "; " at the end of a line
+  $suifdriver_string =~ s/\;\s*\;/\;/g;
+  $suifdriver_string =~ s/\;\s*$//;
+  
+  
+
+  # run the suifdriver
+  my($needs_gc) = 0;
+  #  my($suifdriver) = "$ROCCC_HOME/bin/suifdriver";
+  if ($needs_gc)  {
+    $suifdriver .= "gc";
+  }
+  my($ldlib) = "";
+  my($is_csh) = 0;
+  my($extrapath) = "";
+  if ($ENV{"LD_LIBRARY_PATH"}) {
+    $extrapath = ":".$ENV{"LD_LIBRARY_PATH"};
+  }
+  if ($is_csh) {
+    $ldlib = "setenv LD_LIBRARY_PATH $ROCCC_HOME/solib$extrapath";
+  } else {
+    $ldlib = "LD_LIBRARY_PATH=$ROCCC_HOME/solib$extrapath ; export LD_LIBRARY_PATH";
+  }
+  my($exe) = "$ldlib ; $suifdriver -e '$suifdriver_string'\n";
+#  print "$exe";
+  # this should get more complex and specify all of the available
+  # parallelism and the files generated
+  push(@$exelist, $exe);
+}
+
+# currently, these are one per input file.
+my($exe);
+my($ok) = 1;
+foreach $exe (@$exelist) {
+
+  if ($no_exe) {
+      print "$exe\n";
+  } else {
+      if ($verbose) {
+	  print "Executing: $exe\n";
+      }
+      if (system($exe)) {
+	  print "ERROR : executing '$exe'\n";
+	  $ok = 0;
+	  next;
+      }
+      if ($?) {
+	  print "ERROR : return value $? from  '$exe'\n";
+	  $ok = 0;
+	  next;
+      }
+  } 
+}
+exit(!$ok);
+
+
+#package PassSpec;
+
+#sub new {
+#  my $self = {};
+#  bless $self;
+#  return $self;
+#}
+
+sub remove_comments_and_newline {
+  my($line) = @_;
+  chomp($line);
+  if ($line =~ /\\$/) {
+    # do not remove the continuation
+    $line =~ s/\#.*\\$/\\/;
+  } else {
+    $line =~ s/\#.*$//;
+  }
+  return($line);
+}
+
+sub read_next_line {
+  my($line) = "";
+  my($orig_line) = "";
+  if (defined($line = <FILE>)) {
+    # we may need to be able to escape this later.  perhaps an
+    # XML spec would work here?
+    $line = &remove_comments_and_newline($line);
+    while (!eof(FILE) && ($line =~ /\\$/)) {
+      $line =~ s/\\$//;
+      $line .= <FILE>;
+      chomp($line);
+      $line = remove_comments_and_newline($line);
+    }
+    return($line);
+  }
+  return($line);
+}
+  
+
+sub parse_pass_spec {
+  my($filename) = @_;
+#  print "filename = $filename\n";
+  my ($pass_info) = {};
+  open (FILE, "<$filename") || die "Could not open $filename";
+  my($supported_field_types) = 
+    { "PASS_TYPE" => "required unique",
+      "REQUIRES" => "",
+      "PASS_SPEC" => "",
+      "OUTPUT_EXT" => ""
+    };
+  my($ok) = 1;
+
+  while (!eof(FILE)) {
+    my($line) = &read_next_line();
+    if ($line ne "") {
+      if ($line =~ /^\s*(\w+)\s*=\s*(.*)/) {
+	my($field, $arg) = ($1, $2);
+	$arg =~ s/\s*$//;
+	if (!defined($supported_field_types->{$field})) {
+	  print "WARNING: $filename: '$field' field type not supported\n";
+	  print "\t Valid field types are: ".
+	    join(", ", keys(%$supported_field_types))."\n";
+	  #$ok = 0;
+	  #exit(1);
+	}
+	my($field_type_prop) = $supported_field_types->{$field};
+	if ($field_type_prop =~ /unique/
+	    && defined($pass_info->{$field})) {
+	  print "ERROR: $filename: unique field $field already defined\n";
+	  exit(1);
+	}
+	if ($field eq "PASS_TYPE") {
+	  # validate it 0 means we reserve the keyword but it is not
+	  # supported yet
+	  my($supported_pass_types) = 
+	    { "FRONTEND_PASS" => 1,
+	      "TRANSFORM_PASS" => 1,
+	      "BACKEND_PASS" => 1,
+	      "LINKING_PASS" => 0,
+	      "SPLITTING_PASS" => 0
+	    };
+	  my($pass_type) = $arg;
+	  if (!defined($supported_pass_types->{$pass_type})) {
+	    print "ERROR: $filename: $field: '$pass_type' not supported\n";
+	    print "\t Valid $field arguments are: ".
+	      join(", ", keys(%$supported_pass_types))."\n";
+	    exit(1);
+	  }
+	  if ($supported_pass_types->{$pass_type} == 0) {
+	    print "ERROR: $filename: $field: '$pass_type' not yet implemented\n";
+	    exit(1);
+	  }
+	  $pass_info->{$field} = $pass_type;
+	}
+	if ($field eq "REQUIRES") {
+	  # split with " "
+	  my(@require_list) = split(/\s+/, $arg);
+	  if (!defined($pass_info->{$field})) {
+	    $pass_info->{$field} = [];
+	  }
+	  push(@{$pass_info->{$field}}, @require_list);
+#	  print "Current require list: ".join(" ", @{$pass_info->{$field}})."\n";
+	}
+	if ($field eq "PASS_SPEC") {
+	  # split with ;
+	  my(@pass_list) = split(/\s*\;\s*/, $arg);
+	  if (!defined($pass_info->{$field})) {
+	    $pass_info->{$field} = [];
+	  }
+	  push(@{$pass_info->{$field}}, @pass_list);
+#	  print "Current pass list: ".join(";", @{$pass_info->{$field}})."\n";
+#	  print " from '$arg'\n";
+	  # do not know what to do with this yet.
+	  #$pass_info->{$field} = $arg;
+	}
+	if ($field eq "OUTPUT_EXT") {
+	  $pass_info->{$field} = $arg;
+	}
+      } else {
+	print "Unparsed line: '$line'\n";
+      }
+      
+    }
+  }
+  # check that all of the required fields are here.
+  my($field);
+  foreach $field (keys (%$supported_field_types)) {
+    my($field_type_prop) = $supported_field_types->{$field};
+    if ($field_type_prop =~ /required/) {
+      if (!defined($pass_info->{$field})) {
+	print STDERR "Error: $filename: required field $field not defined\n";
+	exit(1);
+      }
+    }
+  }
+  close(FILE);
+  return($pass_info);
+}

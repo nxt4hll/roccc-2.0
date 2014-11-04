@@ -1,0 +1,21 @@
+# EXTRA_CXXFLAGS += -DLONG_LONG_ALLOWED
+# EXTRA_CFLAGS +=  -DLONG_LONG_ALLOWED
+
+## THESE VARIABLES SHOULD NOW BE SET UP BY THE ./install
+## script.  They can be overridden in the install script
+##  --with-GC_LIBDIRS='-L/usr/lib -lgc'
+##  --with-GC_INCLDIRS=-I/usr/include/gc
+##
+## See the file SUPPORTED_COMPILERS for a current list of
+##   GC_LIBDIRS and GC_INCLDIRS for various local platforms
+##
+#GC_DIRS_SET=1
+#GC_INCLDIRS=-I$(HOME)/gc
+#GC_LIBDIRS=-L$(HOME)/gc -lgc -lpthread
+
+# gcc options to pass to the gnu linker
+#SHARED_LIB_FLAGS += -Wl,-rpath-link -Wl,$(LIBDIR)
+#CXXLINKFLAGS += -rdynamic -Wl,-rpath-link -Wl,$(LIBDIR) -Wl,-defsym,_DYNAMIC=0
+CCFLAGS += -fPIC -Wno-invalid-offsetof# -fpermissive
+DYNAMIC_LIBEXT = dylib
+SHARED_LIB_FLAGS = -dynamiclib 

@@ -1,0 +1,27 @@
+\section{Ex2 -- Analyzing an Instruction List}
+
+Now that you know how to build and run a Machine-SUIF pass, we will
+now begin to focus on the interesting stuff: what you can do in
+[[do_opt_unit]].  All of the files in this example are identical to
+those in [[ex1]]\footnote{We have, of course, changed all strings of
+the form [[ex1]] to [[ex2]].} except that we've added some more code
+to [[do_opt_unit]].
+
+<<[[Ex2::do_opt_unit]]>>=
+@
+
+After printing the name of the current procedure (as was done in
+[[ex1]]), the code above grabs the procedure's body and casts it to an
+[[InstrList]].  Remember that the body of an [[OptUnit]] may be in
+several different forms, from a simple list of instructions to many
+separate instruction lists connected by explicit control-flow
+information (i.e., CFG form) to other forms that you may add.
+
+We can apply several kinds of OPI functions to [[InstrList]], and
+we've illustrated a few here.  We use [[size]], which indicates the
+number of total [[Instr]] elements in the [[InstrList]], and
+[[start]], which provides us with a handle at the beginning of the
+[[InstrList]].  This handle allows us to iterate through the entire
+[[Instr]] sequence and use some of the [[Instr]] predicates to collect
+information about the distribution of instruction kinds in this
+procedure.

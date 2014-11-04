@@ -1,0 +1,134 @@
+#
+#      Copyright (c) 1998,1999 Stanford University
+#
+#      All rights reserved.
+#
+#      This software is provided under the terms described in
+#      the "suif_copyright.h" include file.
+
+#include "basicnodes/basic.hoof"
+#include "suifnodes/suif.hoof"
+module cfe
+  {
+  include "basicnodes/basic.h";
+  include "suifnodes/suif.h";
+  # really just need the suif_forwarders.h for the include file.
+  import basicnodes;
+  import suifnodes;
+
+##########################################################
+#
+# Type
+#
+##########################################################
+
+
+#########################################################
+#
+# Symbols
+#
+#########################################################
+
+
+##################################################################
+#
+# Statements
+#
+##################################################################
+
+
+  concrete CForStatement [for] : Statement
+    {
+      Statement * owner before;
+      Expression * owner test;
+      Statement * owner step;
+      Statement * owner body in child_statements;
+      Statement * owner pre_pad in child_statements build {0};
+      CodeLabelSymbol * reference break_label in defined_labels build {0};
+      CodeLabelSymbol * reference continue_label in defined_labels build {0};
+    };
+
+
+############################################################
+#
+# Expressions
+#
+############################################################
+
+  concrete CallExpression [proccall] : Expression
+    {
+      Expression * owner callee_address in source_ops;
+      vector<Expression * owner> arguments in source_ops;
+    };
+
+  # This can be embedded anywhere.
+  # and must be dismantled before analysis
+  concrete CExpression [cexpr] : Expression
+    {
+      Statement * owner statement;
+      Expression * owner expression;
+    };
+
+#   concrete FieldAccessExpression [field_access] :  Expression
+#    {
+#      Expression * owner base_group_address in source_ops;
+#      FieldSymbol * reference field;
+#    };
+
+    concrete BitSizeOfExpression [bit_size_of] : Expression
+      {
+        Type * reference ref_type;
+      };
+
+    concrete ByteSizeOfExpression [byte_size_of] : Expression
+      {
+        Type * reference ref_type;
+      };
+
+    concrete BitAlignmentOfExpression [bit_alignment_of] : Expression
+      {
+        Type * reference ref_type;
+      };
+
+    concrete ByteAlignmentOfExpression [byte_alignment_of] : Expression
+      {
+        Type * reference ref_type;
+      };
+
+    concrete BitOffsetOfExpression [bit_offset_of] : Expression
+      {
+        FieldSymbol * reference field;
+      };
+
+    concrete ByteOffsetOfExpression [byte_offset_of] : Expression
+      {
+        FieldSymbol * reference field;
+      };
+
+    concrete ScAndExpression [sc_and] : Expression
+      {
+        Expression * owner source1 in source_ops;
+        Expression * owner source2 in source_ops;
+      };
+
+    concrete ScOrExpression [sc_or] : Expression
+      {
+        Expression * owner source1 in source_ops;
+        Expression * owner source2 in source_ops;
+      };
+
+    concrete ScSelectExpression [sc_select] : Expression
+      {
+        Expression * owner selector in source_ops;
+        Expression * owner selection1 in source_ops;
+        Expression * owner selection2 in source_ops;
+      };
+
+
+
+    concrete CStringConstant : Constant
+      {
+        String value;
+      };
+
+ }

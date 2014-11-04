@@ -1,0 +1,6 @@
+; Some useful definitions for NCI that affect the way objects are shown in the debugger
+;
+SuifObject = <,t>
+LString = <m_p->pStr,st>
+String = <_head->_text,st>
+IInteger = <_value.long_val>

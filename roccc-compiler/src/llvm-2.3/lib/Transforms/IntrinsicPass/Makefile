@@ -1,0 +1,14 @@
+#Makefile for float pass
+
+# Path to top level of LLVM heirarchy
+LEVEL = ../../..
+
+# Name of the library to build
+LIBRARYNAME = FloatPass
+
+# Make the shared library become a loadable module so the tools can 
+# dlopen/dlsym on the resulting library.
+LOADABLE_MODULE = 1
+
+# Include the makefile implementation stuff
+include $(LEVEL)/Makefile.common

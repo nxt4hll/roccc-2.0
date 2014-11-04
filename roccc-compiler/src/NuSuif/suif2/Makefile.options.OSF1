@@ -1,0 +1,22 @@
+
+# Alpha/OSF1-specific makefile
+
+#	We must build everything dynamic on OSF
+
+STATIC_LIBS =
+NO_DYNAMIC_LIBS =
+
+EXTRA_CXXFLAGS += -DLONG_LONG_ALLOWED
+
+DYNAMIC_LINKING_LIBRARY =
+
+#
+#	Sometimes alpha compiles fail with multiply defined 
+#	standard symbols in libstdc++.a. The second of these
+#	SHARED_LIB_FLAGS settings overcomes that. You will
+#	get some undefuned externel settings which can be ignored
+#SHARED_LIB_FLAGS =      -shared 
+
+SHARED_LIB_FLAGS =      -shared -nostdlib
+
+

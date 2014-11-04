@@ -1,0 +1,1915 @@
+#
+#	Clean up pass, David Moore, 2 Dec 1998
+#
+#	To orthogonalize the code somewhat, I have made the following changes:
+#
+#	The distinction between inbuilt types and non-inbuilt types is removed.
+#
+#	There is now a set of macros, and variables as follows:
+#
+#		is_inbuilt[<type>] exists if inbuilt type
+#		no_setters[<type>] exists if do not emit set_ method
+#		no_getters[<type>] exists if do not emit get_method
+#		extras[<type>]     exists if macro <type>_extras_dec and <type>_extras_imp exists
+#		meta_builer[<type>] exists if <type>_meta_builder exists
+#		print[<type>]	   exists if macro <type>_print exists
+#		add_virtual[<type>] exists if macro <type>_add_virtual exists
+#
+#		use_const_ref_pars  exists if pass pars of type bu const <type> & rather than
+#			by value
+#
+#		These are all set up by the following macro:
+<def special_type type>
+<set extras[<type>] to exists>
+<set no_setters[<type>] to exists>
+<set no_getters[<type>] to exists>
+<set print[<type>] to exists>
+<set meta_builder[<type>] to exists>
+<set add_virtual[<type>] to exists>
+<set is_inbuilt[<type>] to exists>
+<include <type>_builders.mac>
+<enddef>
+
+<def setup_type_info>
+<set is_inbuilt[int] to exists>
+<set is_inbuilt[char] to exists>
+<set is_inbuilt[short] to exists>
+<set is_inbuilt[bool] to exists>
+<set is_inbuilt[double] to exists>
+<set is_inbuilt[LString] to exists>
+<set is_inbuilt[String] to exists>
+<set is_inbuilt[long] to exists>
+<set is_inbuilt[IInteger] to exists>
+<set use_const_ref_pars[String] to exists>
+<set use_const_ref_pars[Brick] to exists>
+<set use_const_ref_pars[LString] to exists>
+<special_type [list]>
+<special_type [indexed_list]>
+<special_type [searchable_list]>
+<special_type [vector]>
+<set implementation_name[vector] to suif_vector>
+<enddef>
+
+# =========================================================================================================
+#	Add virtual fields for a class
+# =========================================================================================================
+<def add_virtual_value the_class tid field_id>
+     <if (exists the_class.virtual_value[<tid>])>
+         <set the_class.virtual_value[<tid>] to <the_class.virtual_value[<tid>]>;<field_id>>
+     <else>
+         <set the_class.virtual_value[<tid>] to "<tid>","<field_id>>
+     <endif>
+<enddef>
+
+<def add_virtual_fields_inner the_class the_type_spec field_id>
+  <let tid be the_type_spec.identifier>
+      <if (exists add_virtual[<tid>])>
+            <[<tid>]_add_virtual the_class the_type_spec field_id>
+      <else>
+	    <add_virtual_value the_class tid field_id>
+
+	    <if (exists parent_dec[<tid>])>
+		<add_virtual_fields_inner the_class parent_dec[<tid>] field_id>
+	    <endif>
+      <endif>
+  <endlet>
+<enddef>
+
+<def add_virtual_fields_in_clause the_class the_type_spec field_id in_id>
+  <let tid be the_type_spec.identifier>
+      <if (exists add_virtual[<tid>])>
+            <[<tid>]_add_virtual_fields_in_clause the_class the_type_spec field_id in_id>
+      <else>
+            <add_virtual_value the_class in_id field_id>
+      <endif>
+  <endlet>
+<enddef>
+
+<def add_contains_fields the_class>
+    <foreach field_dec in the_class.construct_parts.construct_part.regular_field_declaration
+                such that (exists field_dec.containing_clauses.text)>
+        <foreach contains in field_dec.containing_clauses.containing_clause.contains>
+	    meta_<the_class.identifier>->add_virtual_field("<!SING contains.identifier>","^;<field_dec.identifier>/
+		<!SING contains.identifier>");</>
+	<endfor>
+    <endfor>
+<enddef>
+
+<def add_virtual_fields the_class>
+    # disabled for the moment
+    # <endmac>
+    <foreach field_dec in the_class.construct_parts.construct_part.regular_field_declaration
+		such that (!(exists field_dec.virtual.text))>
+	<if (exists field_dec.type_specification.pointer_qual.text)>
+#	    <add_virtual_fields_inner the_class field_dec.type_specification.type_spec, [_<field_dec.identifier>/*]>
+	    <if (exists field_dec.in_clause.identifier)>
+		<add_virtual_fields_in_clause the_class,
+                        field_dec.type_specification.type_spec, [_<field_dec.identifier>],
+                        [<field_dec.in_clause.identifier>]>
+	    <endif>
+	<else>
+#	    <add_virtual_fields_inner the_class field_dec.type_specification.type_spec, [_<field_dec.identifier>]>
+            <if (exists field_dec.in_clause.identifier)>
+                <add_virtual_fields_in_clause the_class,
+			field_dec.type_specification.type_spec, [_<field_dec.identifier>],
+			field_dec.in_clause.identifier>
+            <endif>
+
+	<endif>
+    <endfor>
+    <foreach decl in the_class.virtual_value.?>
+        meta_<!CPZ the_class.identifier>->add_virtual_field(<decl>");</>
+    <endfor>
+<enddef>
+
+<def map_base_type field_dec parent imp_id>
+    <foreach pfield_dec in parent.construct_parts.construct_part.regular_field_declaration
+	such that (pfield_dec.identifier == imp_id)>
+	<if ([<type_spec field_dec.type_specification>] != [<type_spec pfield_dec.type_specification>])>
+	  <map pfield_dec.type_specification to field_dec.base_type_specification>
+ 	<endif>
+	<endmac>
+    <endfor>
+    <if (exists parent_dec[<parent.identifier>])>
+      <map_base_type field_dec parent_dec[<parent.identifier>] imp_id>
+      <endmac>
+    <endif>
+    <echo missing implements base type for <field_dec.identifier> in <parent.identifier>>
+<enddef>
+
+#		Establish any inbuilts
+#
+#
+<def map_inbuilts>
+  <foreach inbuilt in modules.module_spec.inbuilts.inbuilt.identifier>
+    <set is_inbuilt[<inbuilt>] to exists>
+  <endfor>
+<enddef>
+#
+#		Link the parents to each declaration. We also generate some
+#		other information here. For each aggregate, we create the
+#		aggregates.class_name field. For each aggregate and value
+#		class we create the host_module.class_name field. These allow
+#		us later to quickly determine the host module for a class and
+#		whether it is an aggregate or a value class
+#
+<def map_parents>
+ <foreach module in modules>
+   <foreach class_dec in module.module_spec.declarations.declaration.construct_declaration>
+    <map class_dec to class_declarations[<class_dec.identifier>]>
+    <foreach declaration in modules.module_spec.declarations.declaration.construct_declaration
+          such that (declaration.identifier == class_dec.parent.identifier)>
+      <map declaration to parent_dec[<class_dec.identifier>]>
+    <endfor>
+      <set host_module[<class_dec.identifier>] to <module.module_spec.identifier>>
+      <set aggregate[<class_dec.identifier>] to <module.module_spec.identifier>>
+  <endfor>
+
+   <foreach decl_name in module.module_spec.declarations.declaration.value_declaration.identifier>
+     <set host_module[<decl_name>] to <module.module_spec.identifier>>
+   <endfor>
+
+ <endfor>
+ <foreach module in modules>
+    <foreach class_dec in module.module_spec.declarations.declaration.construct_declaration>
+      <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+        such that (exists field_dec.implements_clause.text)>
+       <map_base_type field_dec parent_dec[<class_dec.identifier>] field_dec.implements_clause.identifier>
+       <endfor>
+
+    <endfor>
+  <endfor>
+<enddef>
+
+#
+#	Output the parameter list for the constructor, parent fields first
+#
+#
+<def default field_dec>
+ <if (exists field_dec.may_be_present.text)>
+  <if (exists field_dec.may_be_present.default_value)>
+    = <field_dec.may_be_present.default_value.verbatim>
+  <else>
+    = 0
+  <endif>
+ <endif>
+<enddef>
+
+<def par_iterator_nl class_dec>
+  <if (exists parent_dec[<class_dec.identifier>])>
+        <par_iterator_nl parent_dec[<class_dec.identifier>]>
+  <endif>
+  <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+     such that ((!(exists no_setters[<field_dec.type_specification.type_spec.identifier>])) &
+               !(exists field_dec.virtual.text))>
+    <do_par_whatever>
+  <endfor>
+<enddef>
+
+<def output_pars_nl class_dec par_no>
+    <def do_par_whatever>
+
+	<if (exists field_dec.may_be_present.text)>
+	    <endmac>
+	<endif>
+       <if (par_no != 1)>,<endif>
+       <if (exists actual_class_dec.constraints_array[<field_dec.identifier>])>
+	  <suitable_par_type actual_class_dec.constraints_array[<field_dec.identifier>].type_specification> <field_dec.identifier>
+       <else>
+          <suitable_par_type field_dec.type_specification> <field_dec.identifier>
+       <endif>
+       <set par_no to <eval (par_no + 1)>>
+    <enddef>
+    <let actual_class_dec be class_dec>
+        <par_iterator_nl class_dec>
+    <endlet>
+    <def do_par_whatever>
+
+        <if (!(exists field_dec.may_be_present.text))>
+            <endmac>
+        <endif>
+
+        <if (exists field_dec.may_be_present.omitted)>
+            <endmac>
+        <endif>
+       <if (par_no != 1)>,<endif>
+       <if (exists actual_class_dec.constraints_array[<field_dec.identifier>])>
+          <suitable_par_type actual_class_dec.constraints_array[<field_dec.identifier>].type_specification> <field_dec.identifier><default field_dec>
+       <else>
+          <suitable_par_type field_dec.type_specification> <field_dec.identifier><default field_dec>
+       <endif>
+	<set par_no to <eval (par_no + 1)>>
+    <enddef>
+
+    <let actual_class_dec be class_dec>
+        <par_iterator_nl class_dec>
+    <endlet>
+<enddef>
+
+<def output_pars_nl_imp class_dec par_no>
+    <def do_par_whatever>
+        <if (exists field_dec.may_be_present.text)>
+            <endmac>
+        <endif>
+       <if (par_no != 1)>,<endif>
+       <if (exists actual_class_dec.constraints_array[<field_dec.identifier>])>
+	   <suitable_par_type actual_class_dec.constraints_array[<field_dec.identifier>].type_specification> <field_dec.identifier>
+       <else>
+           <suitable_par_type field_dec.type_specification> <field_dec.identifier>
+	<endif>
+	<set par_no to <eval (par_no + 1)>>
+    <enddef>
+    <let actual_class_dec be class_dec>
+        <par_iterator_nl class_dec>
+    <endlet>
+   <def do_par_whatever>
+        <if (!(exists field_dec.may_be_present.text))>
+            <endmac>
+        <endif>
+
+        <if (exists field_dec.may_be_present.omitted)>
+            <endmac>
+        <endif>
+       <if (par_no != 1)>,<endif>
+       <if (exists actual_class_dec.constraints_array[<field_dec.identifier>])>
+           <suitable_par_type actual_class_dec.constraints_array[<field_dec.identifier>].type_specification> <field_dec.identifier>
+       <else>
+           <suitable_par_type field_dec.type_specification> <field_dec.identifier>
+        <endif>
+	<set par_no to <eval (par_no + 1)>>
+    <enddef>
+    <let actual_class_dec be class_dec>
+        <par_iterator_nl class_dec>
+    <endlet>
+
+<enddef>
+
+<def output_par_list class_dec>
+    <set par_no to 1>
+    <def do_par_whatever>
+        <if (exists field_dec.may_be_present.text)>
+            <endmac>
+        <endif>
+
+       <if (par_no != 1)>,<endif>
+       <field_dec.identifier>
+	<set par_no to <eval (par_no + 1)>>
+    <enddef>
+    <par_iterator_nl class_dec>
+    <def do_par_whatever>
+        <if (!(exists field_dec.may_be_present.text))>
+            <endmac>
+        <endif>
+
+        <if (exists field_dec.may_be_present.omitted)>
+            <endmac>
+        <endif>
+       <if (par_no != 1)>,<endif>
+       <field_dec.identifier>
+        <set par_no to <eval (par_no + 1)>>
+    <enddef>
+    <par_iterator_nl class_dec>
+<enddef>
+
+<def output_builders_nl class_dec>
+    <set par_no to 1>
+    <def do_par_whatever>
+        <if (exists field_dec.may_be_present.omitted)>
+            <endmac>
+        <endif>
+
+      <if (exists start_class_dec.constraints_array[<field_dec.identifier>].build_value.verbatim)>
+        if (<field_dec.identifier> == 0)</+4></>
+            <field_dec.identifier> = <start_class_dec.constraints_array[<field_dec.identifier>].build_value.verbatim>;</-4></>
+
+      <elseif (exists field_dec.may_be_present.build_value)>
+	if (<field_dec.identifier> == 0)</+4></>
+	    <field_dec.identifier> = <field_dec.may_be_present.build_value.verbatim>;</-4></>
+      <endif>
+	<set par_no to <eval (par_no + 1)>>
+    <enddef>
+    <par_iterator_nl class_dec>
+<enddef>
+
+<def output_setters_nl class_dec>
+    <set par_no to 1>
+    <def do_par_whatever>
+        <if (exists field_dec.may_be_present.omitted)>
+	    obj->set_<field_dec.identifier>(0);
+            <endmac>
+        <endif>
+
+      obj->set_<field_dec.identifier>(<field_dec.identifier>);</>
+	<set par_no to <eval (par_no + 1)>>
+    <enddef>
+    <par_iterator_nl class_dec>
+<enddef>
+
+
+#
+#	output a constructor that takes all the fields that are not optional
+#	and not lists, including those in parents
+#
+#	This is done as a function as it is actually a method in the factory.
+#
+#	We need to suppress this if there is already a create in existence. This happens if
+#	there is no list in the declaration
+#
+#	output_constructor class_dex
+<def output_constructor_body class_dec>
+	<notice_linefeeds>
+            <!CPZ class_dec.identifier>* <!CPZ module_name>ObjectFactory::create_<!UNL class_dec.identifier>(<>
+	    <output_pars_nl_imp class_dec "1"><>
+	)  </+2> {
+#        MetaClass* m = _object_factory->find_meta_class( <!CPZ class_name>::get_class_name() );
+#        <!CPZ class_name>* obj= new <!CPZ class_name>();
+#        obj->set_meta_class( m );
+        <!CPZ class_name>* obj= (<!CPZ class_name>*)_object_factory->create_empty_object_by_name( <!CPZ class_name>::get_class_name() );
+	<let start_class_dec be class_dec>
+           <output_builders_nl class_dec>
+	<endlet>
+	<output_setters_nl class_dec>
+	return obj;
+	}</-2></>
+
+	<!CPZ class_dec.identifier>* create_<!UNL class_dec.identifier>(SuifEnv *suif_env<>
+		<output_pars_nl_imp class_dec "2"><>
+		)  </+2> {
+	      <!CPZ generating>ObjectFactory * current = (<!CPZ generating>ObjectFactory *)(suif_env->get_object_factory(<!CPZ generating>ObjectFactory::get_class_name()));
+	      suif_assert_message(current != NULL, ("<!CPZ generating> Object Factory not registered\\n"));
+	      return current->create_<!UNL class_dec.identifier>(<>
+		<output_par_list class_dec>);
+	}</>
+	</-2></>
+
+<enddef>
+
+#
+#       output a constructor that takes all the fields that are not optional
+#       and not lists
+#
+#       This is done as a function as it is actually a method in the factory.
+#
+#       output_constructor class_dex
+<def output_constructor_dec class_dec>
+
+    virtual <!CPZ class_dec.identifier>* create_<!UNL class_dec.identifier>(
+	<output_pars_nl class_dec "1">
+        );
+
+<enddef>
+
+#
+#	is a type owned by this object?
+#
+#	returns false for all inbuilt types as these do not have set_parent methods
+#
+<def owns_object the_type>
+   <if (exists is_inbuilt[<the_type.type_spec.identifier>])>
+        false
+        <endmac>
+        <endif>
+    <if (!(exists the_type.pointer_qual.text))>
+	false
+	<endmac>
+	<endif>
+    <if (the_type.pointer_qual.text == "owner")>
+        true
+        <endmac>
+        <endif>
+    false
+<enddef>
+
+
+
+
+
+<def output_list_builders class_dec>
+    <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+	such that (exists extras[<field_dec.type_specification.type_spec.identifier>])>
+	<if (exists field_dec.implements_clause.text)>
+	  <output_implements class_dec field_dec.implements_clause.identifier>
+	<else>
+	  <[<field_dec.type_specification.type_spec.identifier>]_extras_dec field_dec>
+	<endif>
+    <endfor>
+<enddef>
+
+
+<def output_list_builders_bodies class_dec>
+    <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+	such that (exists extras[<field_dec.type_specification.type_spec.identifier>])>
+	<if (exists field_dec.implements_clause.text)>
+	  <output_implements_bodies class_dec field_dec.implements_clause.identifier>
+	<else>
+	  <[<field_dec.type_specification.type_spec.identifier>]_extras_imp field_dec>
+	  <endif>
+	<endif>
+    <endfor>
+<enddef>
+
+<def output_forward_decs class_dec>
+  <foreach forwarder in class_dec.construct_forwarders.cons_forwarders.construct_forwarder>
+    <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+        such that (field_dec.identifier = forwarder.identifier)>
+      <foreach rid in forwarder.proc_list>
+         <put_accessor_forwards rid field_dec>
+         <if (exists extras[<field_dec.type_specification.type_spec.identifier>])>
+            <[<field_dec.type_specification.type_spec.identifier>]_forwarder rid field_dec>
+         <endif>
+      <endfor>
+    <endfor>
+  <endfor>
+<enddef>
+
+<def output_forward_decs_bodies class_dec>
+  <foreach forwarder in class_dec.construct_forwarders.cons_forwarders.construct_forwarder>
+    <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+        such that (field_dec.identifier = forwarder.identifier)>
+      <foreach rid in forwarder.proc_list>
+         <put_accessor_forwards_imp rid field_dec class_dec.identifier>
+         <if (exists extras[<field_dec.type_specification.type_spec.identifier>])>
+           <[<field_dec.type_specification.type_spec.identifier>]_forwarder_imp rid field_dec class_dec.identifier>
+         <endif>
+      <endfor>
+    <endfor>
+  <endfor>
+<enddef>
+
+<def find_parent_type constraint parent_class_dec>
+    <foreach field_dec in parent_class_dec.construct_parts.construct_part.regular_field_declaration
+        such that (field_dec.identifier = constraint.identifier)>
+	<map field_dec.type_specification to constraint.parent_type>
+	<endmac>
+    <endfor>
+    <if (exists parent_class_dec.parent)>
+	<find_parent_type constraint parent_class_dec.parent>
+    <endif>
+<enddef>
+
+<def map_constraints class_dec scan_dec>
+  <if (exists parent_dec[<scan_dec.identifier>])>
+    <map_constraints class_dec parent_dec[<scan_dec.identifier>]>
+  <endif>
+  <foreach constraint in scan_dec.constraints.constraint_list.constraint>
+    <map constraint to class_dec.constraints_array[<constraint.identifier>]>
+  <endfor>
+<enddef>
+
+<def output_constraints class_dec>
+  <foreach constraint in class_dec.constraints.constraint_list.constraint>
+ 	<put_constrained_accessors constraint.type_specification constraint.identifier>
+	<if (exists extras[<constraint.type_specification.type_spec.identifier>])>
+	    <find_parent_type constraint parent_dec[<class_dec.parent.identifier>]>
+	    <[<constraint.type_specification.type_spec.identifier>]_extra_constraints
+			constraint.type_specification constraint.identifier constraint.parent_type>
+	<endif>
+  <endfor>
+<enddef>
+
+<def output_constraints_bodies class_dec>
+  <foreach constraint in class_dec.constraints.constraint_list.constraint>
+     <put_constrained_accessors_bodies constraint.type_specification constraint.identifier class_name
+		class_dec.parent.identifier>
+
+       <if (exists extras[<constraint.type_specification.type_spec.identifier>])>
+	    <find_parent_type constraint parent_dec[<class_dec.parent.identifier>]>
+            <[<constraint.type_specification.type_spec.identifier>]_extra_constraints_imp
+		constraint.type_specification constraint.identifier class_dec.identifier class_dec.parent.identifier
+			 constraint.parent_type>
+       <endif>
+
+  <endfor>
+<enddef>
+
+
+
+<def output_implements class_dec name>
+    <if (exists class_dec.implemented[<name>])>
+        <endmac>
+    <endif>
+    <set class_dec.implemented[<name>] to true>
+    <?class_dec.virtual.text virtual >
+    void append_<name>(
+    <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+        such that (field_dec.implements_clause.identifier == name)>
+          <suitable_par_type field_dec.type_specification.type_spec.template_part.type_specifications.type_specification> <par_name field_dec>
+    <endfor>
+        );
+<enddef>
+<def output_implements_bodies class_dec name>
+    <if (exists class_dec.body_implemented[<name>])>
+        <endmac>
+    <endif>
+    <set class_dec.body_implemented[<name>] to true>
+    <?class_dec.virtual.text virtual >
+    void <!CPZ class_dec.identifier>::append_<name>(
+    <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+        such that (field_dec.implements_clause.identifier == name)>
+          <suitable_par_type field_dec.type_specification.type_spec.template_part.type_specifications.type_specification> <par_name field_dec>
+    <endfor>
+        )
+    <if (exists class_dec.virtual.text)>
+        { return; };
+    <else>
+        </+2> {
+        <foreach field_dec in class_dec.construct_parts.construct_part.regular_field_declaration
+          such that (field_dec.implements_clause.identifier == name)>
+                _<field_dec.identifier>.push_back(x<pos field_dec>);
+                <if ([<owns_object field_dec.type_specification.type_spec.template_part.type_specifications.type_specification>])>
+                        if(x<pos field_dec>)x<pos field_dec>->set_parent(this);
+		  <elseif (exists is_value_class[<field_dec.type_specification.type_spec.template_part.type_specifications.type_specification.type_spec.identifier>])>
+                                    _<field_dec.identifier>.back().set_parent(this);
+
+                <endif>
+         <endfor>
+         }</-2>
+     <endif>
+
+<enddef>
+
+#
+#	output a call to print a field value
+#
+<def output_print field_dec>
+  <notice_linefeeds>
+  <let the_type be field_dec.type_specification>
+   <if (exists print[<the_type.type_spec.identifier>])>
+     <[<the_type.type_spec.identifier>]_print field_dec>
+     <endmac>
+   <endif>
+   <if (exists the_type.pointer_qual)>
+	<if (exists is_inbuilt[<the_type.type_spec.identifier>])>
+	  x.start_block("<field_dec.identifier>=");
+	  x.set_value(*_<field_dec.identifier>);
+	<else>
+	  <if (the_type.pointer_qual.text = "owner")>
+  	    x.start_block(x.pointer_header("_<field_dec.identifier>",_<field_dec.identifier>));
+	    if(_<field_dec.identifier>)_<field_dec.identifier>->print(x);
+	    else x.set_value("NULL");
+	  <else>
+	    x.start_block("_<field_dec.identifier>");
+	    x.set_value(_<field_dec.identifier>);
+ 	  <endif>
+	<endif>
+   <elseif (exists is_inbuilt[<the_type.type_spec.identifier>])>
+  	x.start_block("<field_dec.identifier>=");
+	x.set_value(_<field_dec.identifier>);
+   <else>
+  	x.start_block("<field_dec.identifier>=");
+        _<field_dec.identifier>.print(x);
+   <endif>
+  <endlet>
+  x.end_block();
+<enddef>
+
+
+#
+#	output a name for a parameter
+#
+<def par_name field>
+x<pos field><if (!(last field_dec))>,<endif>
+<enddef>
+
+#
+#	output the standard type for passing in a parameter if the given type
+#
+#		inbuilt types are passed by value
+#		pointer types are passed by value
+#		all others are passed by reference
+<def suitable_par_type the_type_sp>
+   <if (exists the_type_sp.pointer_qual)>
+	<type_spec the_type_sp>
+   <elseif (exists use_const_ref_pars[<the_type_sp.type_spec.identifier>])>
+	const <the_type_sp.type_spec.text> &
+   <elseif (exists is_inbuilt[<the_type_sp.type_spec.identifier>])>
+        <the_type_sp.type_spec.text>
+   <elseif (exists is_value_class[<the_type_sp.type_spec.identifier>])>
+	<type_spec the_type_sp>
+   <else>
+        <type_spec the_type_sp> &
+   <endif>
+   # output a sf_owned macro if this will be owned
+
+   <if ([<owns_object the_type_sp>])>
+	sf_owned
+   <endif>
+<enddef>
+
+
+#	parameter_list field_declarations
+#
+#		Output a parameter list for a setter
+#
+#		field_declarations - list of field declarations
+
+<def parameter_list field_declarations>
+    <foreach field_dec in construct_parts.construct_part.regular_field_declaration
+	such that (!(exists field_dec.virtual.text)) & (exists field_dec.identifier)>
+	    <suitable_par_type field_dec.type_specification> <par_name field_dec>
+    <endfor>
+<enddef>
+
+#       element_type_meta list_type
+#
+#               given a list type spec, output the meta name of the type of which this is a list,
+#		making sure owner and reference is catered for
+
+<def element_type_meta list_type>
+  <meta_name list_type.type_specification>
+<enddef>
+
+<def imp_name name>
+    <if (exists implementation_name[<name>])>
+	<implementation_name[<name>]>
+    <else>
+	<name>
+    <endif>
+<enddef>
+
+
+#	output a C++ type spec for a type
+#
+#	the main thing done here is to check for a list type and to output
+#	a correct type for that case
+<def type_spec the_type>
+  <if (exists the_type.type_spec.template_part.text)>
+      <imp_name the_type.type_spec.identifier>\<
+	<foreach type in the_type.type_spec.template_part.type_specifications.type_specification>
+	    <type_spec type>
+	    <if (!(last type))>,<endif>
+	<endfor>
+      \>
+  <else>
+      <the_type.type_spec.identifier>
+  <endif>
+  <?the_type.pointer_qual * >
+<enddef>
+
+#	output a dot or an arrow
+
+<def connector the_type>
+    <if (exists the_type.pointer_qual)>
+        ->
+    <else>
+	.
+    <endif>
+<enddef>
+
+#	output the terminator for a function. We do not want to output
+#	pure methods at present but these methods have no implementation so
+#	instead we just throw zero. For non virtual fields, we will have a body
+#	in the implementation module so we just output a semicolon
+<def func_term>
+    <if (exists field_dec.virtual.text)>
+        { return; }
+        <endmac>
+    <endif>
+    ;
+<enddef>
+
+#
+#	put the accessors for a given field declaration
+#
+#	a get and a set method are created. For example, for a field called fred
+#	the routines will be getFred and setFred.
+
+<def set_return_type the_type>
+   <if (exists is_inbuilt[<the_type.type_spec.identifier>])>
+        void
+        <endmac>
+        <endif>
+    <if (!(exists the_type.pointer_qual.text))>
+        void
+        <endmac>
+        <endif>
+    <if (the_type.pointer_qual.text == "owner")>
+        <type_spec the_type>
+        <endmac>
+        <endif>
+    void
+<enddef>
+
+<def base_type_spec field_dec>
+    <if (exists field_dec.base_type_specification)>
+	<type_spec field_dec.base_type_specification>
+    <else>
+	<type_spec field_dec.type_specification>
+    <endif>
+<enddef>
+
+<def set_base_return_type field_dec>
+    <if (exists field_dec.base_type_specification)>
+        <set_return_type field_dec.base_type_specification>
+    <else>
+        <set_return_type field_dec.type_specification>
+    <endif>
+<enddef>
+
+
+<def put_accessors field_dec declaration>
+  <if (exists field_dec.base_type_specification)>
+    </0></>\#ifdef NO_COVARIANCE</0></>
+    <let the_type be field_dec.type_specification>
+
+        <if (!exists no_getters[<the_type.type_spec.identifier>])>
+          virtual <base_type_spec field_dec> get_<field_dec.identifier> () const;</>
+        <endif>
+
+        <if (exists field_dec.key_dec.text) >
+          bool operator ==(const <base_type_spec field_dec>) const;</>
+        <endif>
+        <if (!exists no_setters[<the_type.type_spec.identifier>])>
+              virtual <set_base_return_type field_dec> set_<field_dec.identifier>
+                (<base_type_spec field_dec> the_value);</>
+        <endif>
+    <endlet>
+    </0></>\#else</0></>
+  <endif>
+    <let the_type be field_dec.type_specification>
+	<if (!exists no_getters[<the_type.type_spec.identifier>])>
+          virtual <type_spec the_type> get_<field_dec.identifier> () const;</>
+	<endif>
+
+	<if (exists field_dec.key_dec.text) >
+	  bool operator ==(const <type_spec the_type>) const;</>
+	<endif>
+	<if (!exists no_setters[<the_type.type_spec.identifier>])>
+              virtual <set_return_type the_type> set_<field_dec.identifier>
+                (<type_spec the_type> the_value);</>
+	<endif>
+    <endlet>
+  <if (exists field_dec.base_type_specification)>
+    </0></>\#endif</0></>
+   <endif>
+<enddef>
+
+<def put_constrained_accessors the_type field_id>
+        <if (!exists no_getters[<the_type.type_spec.identifier>])>
+          virtual <type_spec the_type> get_<field_id> () const;</>
+        <endif>
+
+        <if (!exists no_setters[<the_type.type_spec.identifier>])>
+          virtual void set_<field_id>(<type_spec the_type> the_value);</>
+        <endif>
+<enddef>
+
+<def put_constrained_accessors_bodies the_type field_id class_name parent_name>
+        <if (!exists no_getters[<the_type.type_spec.identifier>])>
+          <type_spec the_type> <class_name>::get_<field_id> () const {</+2></>
+		return to\<<the_type.type_spec.identifier>>(<parent_name>::get_<field_id>());</>
+		}</-2></>
+        <endif>
+
+        <if (!exists no_setters[<the_type.type_spec.identifier>])>
+          void <class_name>::set_<field_id>(<type_spec the_type> the_value) {</+2></>
+		<parent_name>::set_<field_id>(the_value);</>
+                }</-2></>
+        <endif>
+<enddef>
+
+
+
+<def fproc_name rid>
+   <if (exists  rid.as_clause.identifier)>
+	<rid.as_clause.identifier>
+   <else>
+	<rid.identifier>
+   <endif>
+<enddef>
+
+<def put_accessor_forwards rid field_dec>
+ <let field_type be field_dec.type_specification,
+      ridid be rid.identifier,
+      tid be field_type.type_spec.identifier>
+  <foreach field in class_declarations[<tid>].construct_parts.construct_part.regular_field_declaration>
+    <if (ridid = [get_<field.identifier>])>
+	<type_spec field.type_specification> <fproc_name rid>() const;</>
+    <elseif (ridid = [set_<field.identifier>])>
+	void <fproc_name rid>(<type_spec field.type_specification> the_value);</>
+    <elseif (exists extras[<field.type_specification.type_spec.identifier>])>
+           <[<field.type_specification.type_spec.identifier>]_forwarder rid field_dec.identifier field>
+         <endif>
+    <endif>
+  <endfor>
+ <endlet>
+<enddef>
+
+<def put_accessor_forwards_imp rid field_dec class_id>
+ <let field_type be field_dec.type_specification,
+      ridid be rid.identifier,
+      tid be field_type.type_spec.identifier>
+  <foreach field in class_declarations[<tid>].construct_parts.construct_part.regular_field_declaration>
+    <if (ridid = [get_<field.identifier>])>
+        <type_spec field.type_specification> <class_id>::<fproc_name rid>() const {
+		return _<field_dec.identifier><connector field_type>get_<field.identifier> ();}</>
+    <elseif (ridid = [set_<field.identifier>])>
+        void <class_id>::<fproc_name rid>(<type_spec the_type> the_value) {
+		_<field_dec.identifier><connector field_type>set_<field_dec.identifier>(the_value);}</>
+    <elseif (exists extras[<field.type_specification.type_spec.identifier>])>
+           <[<field.type_specification.type_spec.identifier>]_forwarder_imp rid [<field_dec.identifier><connector field_type>] field class_id>
+         <endif>
+    <endif>
+  <endfor>
+ <endlet>
+<enddef>
+
+
+#
+#	put accessor bodies
+#
+#	This is now done for all functions. virtual ones do an suif_assert then
+#	return a dummy
+#	(see func_term)
+<def put_accessor_bodies field_dec>
+  <if (exists field_dec.base_type_specification)>
+    </0></>\#ifdef NO_COVARIANCE</0></>
+    <let the_type be field_dec.type_specification>
+      <if (!exists no_getters[<the_type.type_spec.identifier>])>
+        <base_type_spec field_dec> <!CPZ class_name>::get_<field_dec.identifier>() const{ </+2></>
+	    <if (exists field_dec.virtual.text)>
+#		<if (exists field_dec.virtual.verbatim)>
+#		  <field_dec.virtual.verbatim>
+#                <else>
+	          Iter\<<type_spec the_type>\> iter =</>
+		     get_aggregate_meta_class()->get_virtual_iterator(this,"<field_dec.identifier>");</>
+  		  suif_assert_message( iter.is_valid(), </>
+			("trying to access virtual field with no implementation") );</>
+                  <type_spec the_type> val = iter.current();</>
+		  iter.next(); </>
+  		  suif_assert_message( !iter.is_valid(),</>
+			("trying to access singular virtual field with multiple implementation") );</>
+		  return(val);</>
+#		<endif>
+	    <else>
+		return _<field_dec.identifier>;</>
+	    <endif>
+	    </>}</-2></>
+      <endif>
+      <if (exists field_dec.key_dec.text) >
+          bool <!CPZ class_name>::operator ==(const <base_type_spec field_dec> x) const {</+2></>
+	    return (x == get_<field_dec.identifier>());</>
+	    }</-2></>
+      <endif>
+
+      <if (!exists no_setters[<the_type.type_spec.identifier>])>
+
+        <set_base_return_type field_dec> <!CPZ class_name>::set_<field_dec.identifier>(<base_type_spec field_dec> the_value) {</+2></>
+	  <if (exists field_dec.virtual.text)>
+		suif_assert_message( false, ( "trying to set virtual field" ) );</>
+#                return NULL;
+	  <else>
+	    <if (exists field_dec.notify.text)>
+		<if (exists the_type.pointer_qual)>
+		    if (_<field_dec.identifier>)_<field_dec.identifier>->notifier(false,this);</>
+	 	<else>
+		    _<field_dec.identifier>.notifier(false,this);</>
+		<endif>
+	    <endif>
+	    <if ([<owns_object the_type>])>
+		<type_spec the_type> old_value = _<field_dec.identifier>;</>
+		if (old_value)old_value->set_parent(NULL);</>
+                _<field_dec.identifier> = to\<<the_type.type_spec.identifier>\>(the_value);</>
+		if(the_value)the_value->set_parent(this);</>
+		return old_value;</>
+  	    <elseif (exists is_value_class[<the_type.type_spec.identifier>])>
+		      _<field_dec.identifier> = the_value;</>
+                      _<field_dec.identifier>.set_parent(this);</>
+            <else>
+                _<field_dec.identifier> = to\<<the_type.type_spec.identifier>\>(the_value);</>
+	    <endif>
+	    <if (exists field_dec.notify.text)>
+		the_value<connector the_type>notifier(this);</>
+	    <endif>
+	  <endif>
+	    }</-2></>
+      <endif>
+    <endlet>
+    </0></>\#else</0></>
+   <endif>
+    <let the_type be field_dec.type_specification>
+      <if (!exists no_getters[<the_type.type_spec.identifier>])>
+        <type_spec the_type> <!CPZ class_name>::get_<field_dec.identifier>() const{ </+2></>
+	    <if (exists field_dec.virtual.text)>
+#		<if (exists field_dec.virtual.verbatim)>
+#		  <field_dec.virtual.verbatim>
+#                <else>
+	          Iter\<<type_spec the_type>\> iter =</>
+		     get_aggregate_meta_class()->get_virtual_iterator(this,"<field_dec.identifier>");</>
+  		  suif_assert_message( iter.is_valid(), </>
+			("trying to access virtual field with no implementation") );</>
+                  <type_spec the_type> val = iter.current();</>
+		  iter.next(); </>
+  		  suif_assert_message( !iter.is_valid(),</>
+			("trying to access singular virtual field with multiple implementation") );</>
+		  return(val);</>
+#		<endif>
+	    <else>
+		return _<field_dec.identifier>;</>
+	    <endif>
+	    </>}</-2></>
+      <endif>
+      <if (exists field_dec.key_dec.text) >
+          bool <!CPZ class_name>::operator ==(const <type_spec the_type> x) const {</+2></>
+	    return (x == get_<field_dec.identifier>());</>
+	    }</-2></>
+      <endif>
+
+      <if (!exists no_setters[<the_type.type_spec.identifier>])>
+
+        <set_return_type the_type> <!CPZ class_name>::set_<field_dec.identifier>(<type_spec the_type> the_value) {</+2></>
+	  <if (exists field_dec.virtual.text)>
+		suif_assert_message( false, ( "trying to set virtual field" ) );</>
+#                return NULL;
+	  <else>
+	    <if (exists field_dec.notify.text)>
+		<if (exists the_type.pointer_qual)>
+		    if (_<field_dec.identifier>)_<field_dec.identifier>->notifier(false,this);</>
+	 	<else>
+		    _<field_dec.identifier>.notifier(false,this);</>
+		<endif>
+	    <endif>
+	    <if ([<owns_object the_type>])>
+		<type_spec the_type> old_value = _<field_dec.identifier>;</>
+		if (old_value)old_value->set_parent(NULL);</>
+		_<field_dec.identifier> = the_value;</>
+		if(the_value)the_value->set_parent(this);</>
+		return old_value;</>
+  	    <elseif (exists is_value_class[<the_type.type_spec.identifier>])>
+		      _<field_dec.identifier> = the_value;</>
+                      _<field_dec.identifier>.set_parent(this);</>
+            <else>
+                _<field_dec.identifier> = the_value;</>
+	    <endif>
+	    <if (exists field_dec.notify.text)>
+		the_value<connector the_type>notifier(this);</>
+	    <endif>
+	  <endif>
+	    }</-2></>
+      <endif>
+    <endlet>
+  <if (exists field_dec.base_type_specification)>
+    </0></>\#endif</0></>
+  <endif>
+<enddef>
+
+#
+#	Output the field declaration for a field.
+#
+#	Nothing is output for virtual fields
+<def put_field field_dec terminator>
+    <if (!(exists field_dec.virtual.text))>
+	<if (exists field_dec.identifier)>
+            <type_spec field_dec.type_specification> _<field_dec.identifier><terminator>
+	<endif>
+    <endif>
+<enddef>
+
+#
+#	Output the meta_name for a type. This is the name of a variable
+#	which holds the description of the given type used for IO
+#
+<def meta_name the_type>
+    meta_
+    <meta_name_inner the_type>
+<enddef>
+
+<def meta_name_no_pointer_inner the_type>
+    <if (exists the_type.type_spec.template_part.text)>
+      <foreach type in the_type.type_spec.template_part.type_specifications.type_specification>
+	<meta_name_inner  type>_
+      <endfor>
+      <the_type.type_spec.identifier>
+    <elseif (exists is_inbuilt[<the_type.type_spec.identifier>])>
+        <the_type.type_spec.identifier>
+    <else>
+	<!CPZ the_type.type_spec.identifier>
+    <endif>
+<enddef>
+
+<def meta_name_inner the_type>
+    <meta_name_no_pointer_inner the_type>
+    <if (exists the_type.pointer_qual)>
+        <if (the_type.pointer_qual.text = "owner")>
+            _owner
+        <elseif (the_type.pointer_qual.text = "reference")>
+            _ref
+	<elseif (the_type.pointer_qual.text = "definer")>
+	    _def
+        <endif>
+    <endif>
+<enddef>
+
+<def meta_name_no_pointer the_type>
+    meta_
+    <meta_name_no_pointer_inner the_type>
+<enddef>
+
+
+#
+#	Output the declaration and initialization of the variable which is
+#	the meta_name of a type.A
+#
+#	Do not call this directly. Instead, call output_descriptor_if_needed. This makes sure only one
+#	copy gets created, and it handles pointers
+#
+
+<def output_descriptor the_type>
+    <if (exists meta_builder[<the_type.type_spec.identifier>])>
+	<[<the_type.type_spec.identifier>]_meta_builder the_type>
+	<endmac>
+    <endif>
+    <if (exists is_inbuilt[<the_type.type_spec.identifier>])>
+       MetaClass* <meta_name_no_pointer the_type> = _object_factory->find_meta_class("<the_type.type_spec.identifier>");</>
+       <endmac>
+    <endif>
+
+    <output_id_meta the_type.type_spec.identifier>
+<enddef>
+
+<def output_id_meta id>
+     <if (!(exists host_module[<id>]))>
+       # <echo <id> not set up>
+       <set host_module[<id>] to UNKNOWN>
+       <set aggregate[<id>] to true>
+     <endif>
+
+     <if (host_module[<id>] = generating)>
+       <if (exists aggregate[<id>])>
+         AggregateMetaClass* meta_<!CPZ id>
+           = mcof->findOrCreateAggregateMetaClass(<!CPZ id>::get_class_name());
+       <else>
+         UnionMetaClass* meta_<!CPZ id>
+           = mcof->create_union_meta_class(<!CPZ id>::get_class_name());
+       <endif>
+     <else>
+       <if (exists aggregate[<id>])>
+           # <echo <id> imported as aggregate from <host_module[<id>]>>
+         AggregateMetaClass* meta_<!CPZ id>
+           = mcof->find_aggregate_meta_class(<!CPZ id>::get_class_name());
+       <else>
+         UnionMetaClass* meta_<!CPZ id>
+           = mcof->find_union_meta_class(<!CPZ id>::get_class_name());
+       <endif>
+     <endif>
+<enddef>
+
+#
+#	Output an inheritsFrom statement.
+#
+<def inherits_from the_class>
+    <if (exists the_class.parent)>
+	<if (!(exists module.descriptors[meta_<!CPZ the_class.parent.identifier>]))>
+	  <set module.descriptors[meta_<!CPZ the_class.parent.identifier>] to exists>
+	  <output_id_meta the_class.parent.identifier>
+	<endif>
+	meta_<!CPZ the_class.identifier>->inherits_from(meta_<!CPZ the_class.parent.identifier>);
+    <endif>
+<enddef>
+
+
+#   	Given a type, check if the meta_name declaration and initialization has been generated
+#	If not, generate it. We build a table in descriptors indexed by the meta_name of
+#	types whose declarations have been output so as to avoid duplicates.
+
+<def output_descriptor_if_needed the_type>
+
+   <let the_meta_name be [<meta_name the_type>]>
+
+      # have we already built the type?
+
+      <if (exists module.descriptors[<the_meta_name>])>
+        <endmac>
+        <endif>
+
+      # if this is a pointer, we may need to output the underlying types description first
+
+      <if (!(exists module.descriptors[<meta_name_no_pointer the_type>]))>
+         <set module.descriptors[<meta_name_no_pointer the_type>] to exists>
+         <output_descriptor the_type>
+      <endif>
+
+      <set module.descriptors[<the_meta_name>] to exists>
+
+      <if (exists the_type.pointer_qual)>
+          PointerMetaClass* <the_meta_name> = mcof->
+    		get_pointer_meta_class(meta_<!CPZ the_type.type_spec.text>,
+			<if (the_type.pointer_qual.text == "owner")>
+			    true,false,
+			<else>
+			    false,false,
+			<endif>
+                        <if (the_type.pointer_qual.text == "reference")>
+                            false);
+                        <else>
+                            true);
+                        <endif>
+            <endif>
+            <endmac>
+        <endif>
+    <endlet>
+<enddef>
+
+#
+#	Build a constructor for a class. This builds a constructor that takes
+#	each field, excluding list fields
+<def build_constructor class_dec>
+
+<enddef>
+
+#
+#       print the fields of a class and recurse to print parents fields
+<def print_fields declaration>
+       <notice_linefeeds>
+       <foreach type_decl in declaration.clauses.type_specification>
+          if (is_<!UNL type_decl.type_spec.text>()) {</+2>
+
+              <!CPZ type_decl.type_spec.text>* p = get_<!UNL type_decl.type_spec.text>();
+              x.start_block("<!CPZ type_decl.type_spec.text>");
+              if(p)p->print(x);
+              x.end_block();
+              return;
+              }</-2>
+        <endfor>
+        x.start_block("value =");
+        x.set_value("NULL");
+        x.end_block();
+<enddef>
+
+
+<def print_all_fields declaration>
+   <foreach field_dec in
+        declaration.construct_parts.construct_part.regular_field_declaration
+                      such that (!(exists field_dec.virtual.text))>
+            <output_print field_dec>
+   <endfor>
+
+<enddef>
+
+
+#==================== end of macro definitions ==============================
+#
+#==================== start of actual code     ==============================
+
+#	initialize tables
+
+<setup_type_info>
+
+#	Start out by mapping all the parent trees to the class dec trees so we can
+#	find parent trees without doing a complete search
+<map_parents>
+<map_inbuilts>
+
+<foreach declaration in modules.module_spec.declarations.declaration.value_declaration>
+    <set is_value_class[<declaration.identifier>] to true>
+<endfor>
+
+<foreach module in modules.module_spec such that (module.identifier == generating)>
+  <let module_name be module.identifier>
+
+    #	iterate through the construct declarations. Output an incomplete class
+    #	declaration for each class, so as to allow forward references.
+    #   These go to the <module_name>_forwarders.h
+
+      <notice_linefeeds>
+      <file  <!LOWS module_name>_forwarders.h>
+      \#ifndef <!CAPS module_name>_FORWARDERS_H
+      \#define <!CAPS module_name>_FORWARDERS_H
+       \#ifdef SUIF_NAMESPACE
+        namespace SUIF_NAMESPACE {
+        \#endif
+
+
+    <foreach declaration in module.declarations such that (exists declaration.declaration.construct_declaration)>
+    	class <!CPZ declaration.declaration.construct_declaration.identifier>;
+    <endfor>
+
+    <file  <!LOWS module_name>.h>
+    \#ifndef __<!CAPS module_name>_H__
+    \#define __<!CAPS module_name>_H__
+    \#include \"suifkernel/suifkernel_forwarders.h"
+    \#include \"suifkernel/suif_object.h"
+    \#include \"common/suif_list.h"
+    \#include \"common/suif_vector.h"
+    \#include \"common/suif_indexed_list.h"
+    #\#ifdef PGI_BUILD
+    #\#include \<new\>
+    #\#else
+    #\#include \<new.h\>
+    #\#endif
+    \#include \"<!LOWS module_name>_forwarders.h"
+    \#include "common/formatted.h"
+    \#include "suifkernel/iter.h"
+    \#include "common/i_integer.h"
+    \#include \<new\>
+    <foreach the_include in module.includes.include.verbatim>
+      \#include <the_include>
+    <endfor>
+	
+
+
+
+      #
+      #	Output the include files required by the implementation module. These are of two
+      #	kinds. The fixed ones, which are the infrastructure for IO, and those declared
+      #	in import statements.
+
+      \#include "iokernel/meta_class.h"
+      #<foreach import in module.imports.import.identifier>
+      #       \#include "<import>nodes/<import>.h"
+      #<endfor>
+
+      # output the init name for the module
+
+      # using namespace std;
+
+      extern "C" void EXPORT init_<generating>nodes(SuifEnv* suif);
+
+
+        \#ifdef SUIF_NAMESPACE
+        namespace SUIF_NAMESPACE {
+        \#endif
+
+      <file  <!LOWS module_name>.cpp>
+      \#include "common/system_specific.h"
+      \#include \<string.h\>
+      //\#include "suifkernel/error_macros.h"
+      \#include "<!LOWS module_name>.h"
+      \#include "<!LOWS module_name>_factory.h"
+      \#include "iokernel/aggregate_meta_class.h"
+      \#include "iokernel/union_meta_class.h"
+      \#include "iokernel/clone_stream.h"
+      \#include "iokernel/pointer_meta_class.h"
+      \#include "iokernel/stl_meta_class.h"
+      \#include "iokernel/object_factory.h"
+      \#include "iokernel/virtual_iterator.h"
+      \#include "iokernel/field_description.h"
+
+      \#include "suifkernel/real_object_factory.h"
+
+       # output the module code
+	\#include "suifkernel/suif_env.h"
+	\#include "suifkernel/module_subsystem.h"
+	\#include "suifkernel/module.h"
+     # this seems to be a bug @@@ (why hardcoded name??)
+	\#include "basicnodes/basic_factory.h"
+
+        <foreach the_cppinclude in module.cppincludes.cppinclude.verbatim>
+           \#include <the_cppinclude>
+        <endfor>
+
+	
+
+	class <!CPZ generating>Module : public Module {</+2>
+	  public:</+2>
+
+  	    <!CPZ generating>Module( SuifEnv* suif ) : Module( suif ,"<generating>") {}
+
+  	    virtual void initialize() {</+2>
+	      Module::initialize();
+	      set_interface("object_nodes", 0);
+	      <!CPZ generating>ObjectFactory * current = new <!CPZ generating>ObjectFactory();
+    	      _suif_env->add_object_factory( current );
+  	    }</-2>
+  	    virtual Module *clone() const {</+2>
+	      return((Module*)this);
+  	    }</-2>
+	
+	};</-4></>
+
+
+
+<foreach init_fn_hook in module.init_fn_hooks.init_fn_hook.identifier>
+  extern "C" void <init_fn_hook>(SuifEnv *suif);
+<endfor>
+
+extern "C" void EXPORT init_<generating>nodes( SuifEnv* suif ) {</+2>
+  ModuleSubSystem* mSubSystem = suif->get_module_subsystem();
+  if (!mSubSystem->retrieve_module("<generating>")) {</+2>
+
+  <foreach import in module.imports.import.identifier>
+  suif->require_module("<import>");
+  <endfor>
+
+  mSubSystem -> register_module( new <!CPZ generating>Module( suif ) );
+
+  <foreach init_fn_hook in module.init_fn_hooks.init_fn_hook.identifier>
+  <init_fn_hook>(suif);
+  <endfor>
+
+  }</-2>
+};</-2></>
+
+
+
+       \#ifdef SUIF_NAMESPACE
+        namespace SUIF_NAMESPACE {
+        \#endif
+
+
+
+      #		Run through the value declarations and output a class declaration for each
+
+      <foreach declaration in module.declarations.declaration.value_declaration>
+	<file <!LOWS module_name>.h>
+	class <!CPZ declaration.identifier> {</+4>
+	    SuifObject *o;</-2>
+	    bool _is_owned;
+	    bool is_ownable();
+
+	  public:</+2>
+
+	    static const LString &get_class_name();</>
+	    <!CPZ declaration.identifier>();
+	    <!CPZ declaration.identifier>(const <!CPZ declaration.identifier> &x);
+	    <!CPZ declaration.identifier> & operator =(const <!CPZ declaration.identifier> &x);
+	    ~<!CPZ declaration.identifier>();
+	    bool operator==(const <!CPZ declaration.identifier> &);
+           <if (exists declaration.member_declarations.verbatim)>
+                <declaration.member_declarations.verbatim>
+            <endif>
+
+	    <file <!LOWS module_name>.cpp>
+	    static const LString <!UNL declaration.identifier>_class_name("<!CPZ declaration.identifier>");</>
+	    const LString &<!CPZ declaration.identifier>::get_class_name() {
+		return <!UNL declaration.identifier>_class_name;
+		}
+	    <!CPZ declaration.identifier>::<!CPZ declaration.identifier>() : o(0),_is_owned(false) {} </>
+	    <!CPZ declaration.identifier>::<!CPZ declaration.identifier>(const <!CPZ declaration.identifier> &x) :<>
+		o(x.o),_is_owned(false) {}</>
+	    <!CPZ declaration.identifier> & <!CPZ declaration.identifier>::operator =(const <!CPZ declaration.identifier> &x) {</+2></>
+		if (is_owned())delete o;
+		o = x.o;
+		_is_owned = false;
+		return *this;
+		}</-2></>
+
+	    <!CPZ declaration.identifier>::~<!CPZ declaration.identifier>() {</+2></>
+		if (is_owned())delete o;
+		}</-2></>
+
+	    bool <!CPZ declaration.identifier>::operator==(const <!CPZ declaration.identifier> &other) {
+	        return(other.o == o);
+	        }
+            <if (exists declaration.member_definitions.verbatim)>
+               <declaration.member_definitions.verbatim>
+            <endif>
+
+
+
+
+	    # For each type that it can contain, output
+	    # a constructor
+	    # a getter
+	    # a type check
+	    <foreach type_decl in declaration.clauses.type_specification>
+	        <file <!LOWS module_name>.h>
+		<!CPZ declaration.identifier>(<suitable_par_type type_decl> x);
+		bool is_<!UNL type_decl.type_spec.text>() const;
+		<!CPZ type_decl.type_spec.text>* get_<!UNL type_decl.type_spec.text>() const;
+
+		<file <!LOWS module_name>.cpp>
+
+		<!CPZ declaration.identifier>::<!CPZ declaration.identifier>(<>
+                        <suitable_par_type type_decl> x) : o(x),_is_owned(false) {}
+
+		bool <!CPZ declaration.identifier>::is_<!UNL type_decl.type_spec.text>() const {</+2>
+		    if (o == 0)
+			return false;
+		    return o->isKindOf(<!CPZ type_decl.type_spec.text>::get_class_name());
+		    }</-2>
+
+		<!CPZ type_decl.type_spec.text>* <!CPZ declaration.identifier>::get_<!UNL type_decl.type_spec.text>() const {</+2>
+		    suif_assert_message(is_<!UNL type_decl.type_spec.text>(), ( "not a <!CPZ type_decl.type_spec.text>" ) );
+		    return (<!CPZ type_decl.type_spec.text>*)o;
+		    }</-2>
+
+	    <endfor>
+
+	    # look for forwarders and output suitable code
+
+	    <foreach clause in declaration.clauses
+		such that (exists clause.forwarders.text)>
+		<foreach forwarder in clause.forwarders
+			such that (!(exists declaration.forwarder[<forwarder.identifier>]))>
+		<set declaration.forwarder[<forwarder.identifier>] to true>
+		<file <!LOWS module_name>.h>
+		    <type_spec forwarder.type_specification> get_<forwarder.identifier>() const;
+		<file <!LOWS module_name>.cpp>
+		    <type_spec forwarder.type_specification> <!CPZ declaration.identifier>::get_<forwarder.identifier>() const {</+2>
+		    <foreach clause1 in declaration.clauses>
+		        <foreach forward in clause1.forwarders such that (forward.identifier = forwarder.identifier)>
+				<if (exists forward.from_clause.text)>
+				  if (is_<!UNL clause1.type_specification.type_spec.text>())<>
+				     return ((<!CPZ clause1.type_specification.type_spec.text>*)o)->get_<forward.from_clause.identifier>();
+				<else>
+				  if (is_<!UNL clause1.type_specification.type_spec.text>())<>
+				     return ((<!CPZ clause1.type_specification.type_spec.text>*)o)->get_<forward.identifier>();
+				<endif>
+			<endfor>
+		    <endfor>
+		return 0;
+		}</-2>
+		<endfor>
+	    <endfor>
+
+	    # penultimately, create a set_parent for each type that has an owner
+
+	    <file <!LOWS module_name>.h>
+		void set_parent(SuifObject *parent);
+		bool is_owner(SuifObject *obj);
+		bool is_owned();
+		void print(FormattedText &x) const;
+		static int union_selector(Address addr);
+                <!CPZ declaration.identifier> clone();
+
+
+	    <file <!LOWS module_name>.cpp>
+
+		bool <!CPZ declaration.identifier>::is_owned() {</+2>
+		    return _is_owned;
+		    }</-2></>
+
+		bool <!CPZ declaration.identifier>::is_ownable() {</+2>
+                    <foreach type_decl in declaration.clauses.type_specification>
+                      <if ([<owns_object type_decl>])>
+                        if (is_<!UNL type_decl.type_spec.text>()) {</+2>
+                            return true;
+                            }</-2>
+                      <endif>
+                    <endfor>
+		    return false;
+		}</-2></>
+
+		void <!CPZ declaration.identifier>::print(FormattedText &x) const</+2>
+		    {
+		    <print_fields declaration>
+		    }</-2></>
+
+		void <!CPZ declaration.identifier>::set_parent(SuifObject *parent) {</+2>
+		    if (is_ownable()) {o->set_parent(parent);_is_owned = true; }}</-2>
+
+		bool <!CPZ declaration.identifier>::is_owner(SuifObject *obj) {</+2>
+		    return (is_owned() && (obj->get_parent() == obj));}</-2>
+
+		int <!CPZ declaration.identifier>::union_selector(Address addr) {</+2>
+		    <!CPZ declaration.identifier> *n = (<!CPZ declaration.identifier> *)addr;
+		    <set sel_index to 0>
+		    <foreach type_decl in declaration.clauses.type_specification>
+			if (n->is_<!UNL type_decl.type_spec.text>()){</+2>
+                            return <sel_index>;
+                            }</-2>
+		        <set sel_index to <eval (sel_index + 1)>>
+		    <endfor>
+		    return -1;
+		    }</-2>
+
+               <!CPZ declaration.identifier> <!CPZ declaration.identifier>::clone() {</+2>
+                     <foreach type_decl in declaration.clauses.type_specification>
+                         if (is_<!UNL type_decl.type_spec.text>()) {</+2>
+                             <if ([<owns_object type_decl>])>
+                                 return <!CPZ declaration.identifier>((<!CPZ type_decl.type_spec.text>*)(o->deep_clone()));
+                           <else>
+                               return <!CPZ declaration.identifier>((<!CPZ type_decl.type_spec.text>*)(o));
+                             <endif>
+                         }</-2>
+                     <endfor>
+                   return <!CPZ declaration.identifier>();
+               }</-2>
+
+
+
+		# and create a constructor function. This is needed for
+		# value ops that are created as parts of lists
+
+	   <file <!LOWS module_name>.h>
+           protected:</+2>
+                //use the factory to create objects
+                friend class <!CPZ module_name>ObjectFactory;</>
+
+                static void constructor_function( Address address );</-2>
+		};</></=0>
+
+        <file  <!LOWS module_name>.cpp>
+
+        void <!CPZ declaration.identifier>::constructor_function( Address address )</+2> {
+            new (address) <!CPZ declaration.identifier>;
+            }</=0>
+
+      <endfor>
+
+      #
+      #  	Run through the construct_declarations and output a class declaration for each
+      #	declaration. We output a static name for the class, the accessors, a
+      #	special constructor function, a default constructor, a destructor, and any fields
+
+      <foreach declaration in module.declarations.declaration.construct_declaration>
+    	<let class_name be declaration.identifier>
+
+        # build map of constraints
+        <map_constraints declaration declaration>
+
+#    	#
+#    	#	output the methods in the visitor
+#    	#
+#
+#    	<file  <!LOWS module_name>_visitor.h>
+#	static void handle_static_<!UNL class_name>( Address vis, Address <!UNL class_name> );
+#	virtual void handle_<!UNL class_name>( <class_name> *<!UNL class_name> );
+#
+#    	#
+#    	#	now output the methods in the visitor implementation
+#    	#
+#
+#    	<file  <!LOWS module_name>_visitor.cpp>
+#	void <generating>_visitor::handle_static_<!UNL class_name>( Address vis, Address <!UNL class_name> ) {
+#	    ((<generating>_visitor *)vis)->handle_<!UNL class_name>((<class_name> *)<!UNL class_name>);
+#	}
+#	void <generating>_visitor::handle_<!UNL class_name>( <class_name> *<!UNL class_name> ) {}
+
+
+    	#
+    	#	First output the body text
+    	#
+    	<file  <!LOWS module_name>.cpp>
+    	</>static const LString <!UNL class_name>_class_name("<!CPZ class_name>");</>
+	const LString &<!CPZ class_name>::get_class_name() {</+2>
+	    return <!UNL class_name>_class_name;
+	    }</-2>
+
+    	<foreach field in declaration.construct_parts.construct_part.regular_field_declaration>
+                   <put_accessor_bodies field>
+            <endfor>
+
+
+    	void <!CPZ class_name>::constructor_function( Address address )</+2> {
+    	    new (address) <!CPZ class_name>;
+    	    }</=0>
+
+    	<!CPZ class_name>::<!CPZ class_name>() {}
+    	<!CPZ class_name>::~<!CPZ class_name>() {</+2>
+		 <foreach field_dec in
+        		declaration.construct_parts.construct_part.regular_field_declaration
+			such that (!(exists field_dec.virtual.text))>
+		  <let the_type be field_dec.type_specification>
+		    <if ([<owns_object field_dec.type_specification>])>
+		        delete _<field_dec.identifier>;
+		        _<field_dec.identifier> = 0;
+		    <elseif (exists the_type.type_spec.template_part.type_specifications.type_specification)>
+			<[<the_type.type_spec.identifier>]_delete_all_entries field_dec>
+		    <endif>
+		  <endlet>
+   		 <endfor>
+
+		}</-2>
+
+	#  output a body for the print routine
+
+	void <!CPZ class_name>::print(FormattedText &x) const</+2>
+  	    {
+	  x.start_block("{<!CPZ class_name>}");
+
+	  <print_all_fields declaration>
+   	  <if (exists parent_dec[<declaration.identifier>])>
+      		<parent_dec[<declaration.identifier>].identifier>::print(x);
+          <endif>
+
+	  x.end_block();
+	    }</-2></>
+
+	# output any inlined definitions
+
+        <if (exists declaration.member_definitions.verbatim)>
+             <declaration.member_definitions.verbatim>
+        <endif>
+
+	#
+	#  output the bodies for the list accessors, if these are not inline
+	#
+        <output_list_builders_bodies declaration>
+
+	<output_forward_decs_bodies declaration>
+
+	<output_constraints_bodies declaration>
+
+
+    	#
+    	#	now output the declaration
+    	#
+
+    	<file  <!LOWS module_name>.h>
+    	class <!CPZ class_name> <?declaration.parent.identifier : public > <!CPZ declaration.parent.identifier></+2> {
+    	    public:</+2>
+		<foreach frnd in declaration.construct_parts.construct_part.friend_declaration>
+			friend <frnd.verbatim> ;
+		<endfor>
+
+    	        <foreach field in declaration.construct_parts.construct_part.regular_field_declaration>
+    		    <put_accessors field declaration>
+                    <endfor>
+    		<output_list_builders declaration>
+
+		<output_forward_decs declaration>
+
+		<output_constraints declaration>
+
+    		virtual ~<!CPZ class_name>();
+
+		virtual void print(FormattedText &x) const;
+
+    		static const LString &get_class_name();</-2>
+
+    	    protected:</+2>
+      		//use the factory to create objects
+      		friend class <!CPZ module_name>ObjectFactory;</>
+
+    		<!CPZ class_name>();
+
+      		static void constructor_function( Address address );</-2>
+    	    private:</+2>
+    		<foreach field in declaration.construct_parts.construct_part.regular_field_declaration>
+    		    <put_field field ";">
+    		<endfor></-2><>
+
+	    <if (exists declaration.member_declarations.verbatim)>
+		<declaration.member_declarations.verbatim>
+	    <endif>
+                }; </=0></>
+    	<endlet>
+      <endfor>
+      </=0>
+
+#      #
+#      # create the init_all routine for the visitor
+#      #
+#      <file  <!LOWS module_name>_visitor.cpp>
+#
+#      void <generating>_visitor::init_all() {
+#      <foreach declaration in module.declarations.declaration.construct_declaration>
+#    	<let class_name be declaration.identifier>
+#	_vis_map->register_visit_method(this, <generating>_visitor::handle_static_<!UNL class_name>, <class_name>::get_class_name());
+#      <endfor>
+#      }
+
+
+      #	now we need to build the object factory for this module. For each construct class
+      #    	we need a create routine which we register.
+      #
+      <file  <!LOWS module_name>_factory.h>
+
+
+      \#ifndef <!CAPS module_name>_FACTORY_H
+      \#define <!CAPS module_name>_FACTORY_H
+
+    \#include \"common/suif_list.h"
+    \#include \"common/MString.h"
+    \#include \"common/i_integer.h"
+    \#include \"<!LOWS module_name>_forwarders.h"
+
+
+      #
+      # Output the include files required by the implementation module. These are of two
+      # kinds. The fixed ones, which are the infrastructure for IO, and those declared
+      # in import statements.
+
+      \#include "iokernel/meta_class.h"
+      \#include "suifkernel/real_object_factory.h"
+      \#include "iokernel/stl_meta_class.h"
+
+      #
+      #  Output global create_ methods
+      \#ifdef SUIF_NAMESPACE
+      namespace SUIF_NAMESPACE {
+      \#endif
+
+      <foreach class_dec in module.declarations.declaration.construct_declaration>
+        <!CPZ class_dec.identifier>* create_<!UNL class_dec.identifier>(SuifEnv *env<>
+          <output_pars_nl class_dec "2"><>
+          );</>
+      <endfor>
+
+
+
+      class <!CPZ module_name>ObjectFactory : public RealObjectFactory</+2> {
+	    public:</+2>
+		static const LString &get_class_name();
+		virtual const LString &getName();
+
+
+    	<foreach declaration in module.declarations.declaration.construct_declaration>
+
+	#  do not put out the create routine with lists
+    	#    virtual <!CPZ declaration.identifier>* create_<!UNL declaration.identifier>(
+    	#	<output_pars declaration>
+        #            );
+    	     <output_constructor_dec declaration>
+    	<endfor>
+    	</=8>
+           virtual void init_io( ObjectFactory* of );
+
+    	</=2>
+          protected:</+2>
+
+          };</=0>
+
+      <file <!LOWS module_name>.cpp>   </=0>
+
+      # Class name and get routine
+
+      static const LString <!UNL module_name>_object_factory_class_name("<module_name>");</>
+      const LString & <!CPZ module_name>ObjectFactory::get_class_name() {
+	return <!UNL module_name>_object_factory_class_name;
+	}</>
+
+      const LString & <!CPZ module_name>ObjectFactory::getName() {
+        return <!UNL module_name>_object_factory_class_name;
+        }</>
+
+
+
+      #	Here is the body for the init routine
+      #	We must register all the classes that can be built.
+
+      void <!CPZ module_name>ObjectFactory::init_io( ObjectFactory* mcof ) </=2> {
+
+        # output the basic meta variables for each class in this module. Put them in the declarations
+        # table so we do not recreate them on the next step
+
+        RealObjectFactory::init_io( mcof );
+
+
+	# we need to determine what types are imported and we need to call the
+	# appropriate find routine for them.
+
+#        <foreach import in module.imports.import.type_list>
+#           <let the_name be import.identifier>
+#            MetaClass* meta_<!CPZ the_name> = mcof->findMetaClass(<!CPZ the_name>::get_class_name());
+#    	<set module.descriptors[meta_<!CPZ the_name>] to exists>
+#           <endlet>
+#        <endfor>
+#
+
+        <foreach decl_name in module.declarations.declaration.construct_declaration.identifier>
+    	  AggregateMetaClass* meta_<!CPZ decl_name> =
+			mcof->create_object_meta_class(<!CPZ decl_name>::get_class_name(),sizeof( <!CPZ decl_name> ), <!CPZ decl_name>::constructor_function );
+    	  <set module.descriptors[meta_<!CPZ decl_name>] to exists>
+        <endfor>
+
+	<foreach decl_name in module.declarations.declaration.value_declaration.identifier>
+          UnionMetaClass* meta_<!CPZ decl_name> =
+                        mcof->create_union_meta_class(<!CPZ decl_name>::get_class_name(),sizeof(<decl_name>),<decl_name>::constructor_function);
+          <set module.descriptors[meta_<!CPZ decl_name>] to exists>
+        <endfor>
+
+
+      #
+      #   create a table of meta declarations that we need, and output the declarations. Do not duplicate those
+      #   above
+
+
+      //  Required meta class definitions
+
+
+      <foreach declaration in module.declarations.declaration.construct_declaration>
+          <foreach field_dec in
+    		declaration.construct_parts.construct_part.regular_field_declaration
+                      such that (!(exists field_dec.virtual.text))>
+    	       <output_descriptor_if_needed field_dec.type_specification>
+          <endfor>
+      <endfor>
+
+
+      #
+      #  Now output the definitions of the aggregate classes
+      #
+
+
+      //  Aggregate class definitions
+
+      <foreach declaration in module.declarations.declaration.construct_declaration>
+        <let class_name be declaration.identifier>
+    	    <inherits_from declaration>
+                <foreach field_dec in declaration.construct_parts.construct_part.regular_field_declaration
+    		such that (!(exists field_dec.virtual.text))>
+                        meta_<!CPZ class_name>-> add_field_description("_<field_dec.identifier>" , <>
+    		 	<meta_name field_dec.type_specification> , <>
+                            OFFSETOF(<!CPZ class_name>,_<field_dec.identifier>));
+                <endfor>
+	  <add_virtual_fields declaration>
+	  <add_contains_fields declaration>
+    	<endlet>
+      <endfor>
+
+	<foreach declaration in module.declarations.declaration.value_declaration>
+	  <let class_name be declaration.identifier>
+	   <foreach type_decl in declaration.clauses.type_specification>
+		<output_descriptor_if_needed type_decl>
+		meta_<!CPZ class_name>-> add_field_description("_is_owned",meta_bool,OFFSETOF(<!CPZ class_name>,_is_owned));
+		meta_<!CPZ class_name>-> add_union_field("_<!UNL type_decl.type_spec.identifier>",<meta_name type_decl> , OFFSETOF( <!CPZ class_name>, o ) );
+           <endfor>
+
+	    meta_<!CPZ class_name>->set_union_selector(<!CPZ class_name>::union_selector);
+
+	    meta_<!CPZ class_name>-> set_size( sizeof( <!CPZ class_name> ) );
+	  <endlet>
+	<endfor>
+        }</=0>
+
+
+
+      #
+      #  	Here we create the bodies of the create routines for each class. The create routine
+      #  	currently takes a list of objects which are the fields of the class. list fields
+      #	and virtual fields are not included
+      #
+      #	Note - it might be easier to do this as a constructor.
+      #
+      <foreach declaration in module.declarations.declaration.construct_declaration>
+            <let class_name be declaration.identifier>
+
+    	<output_constructor_body declaration>
+    	<endlet>
+      <endfor>
+      </=0>
+      <file  <!LOWS module_name>.h>
+        \#ifdef SUIF_NAMESPACE
+        }
+        \#ifndef NO_IMPLICIT_USING
+        using namespace SUIF_NAMESPACE;
+        \#endif
+        \#endif
+      \#endif
+
+      <file  <!LOWS module_name>_factory.h>
+      \#ifdef SUIF_NAMESPACE
+        }
+      \#ifndef NO_IMPLICIT_USING
+      using namespace SUIF_NAMESPACE;
+      \#endif
+      \#endif
+      \#endif
+
+      <file  <!LOWS module_name>_forwarders.h>
+      \#ifdef SUIF_NAMESPACE
+        }
+      \#ifndef NO_IMPLICIT_USING
+      using namespace SUIF_NAMESPACE;
+      \#endif
+      \#endif
+      \#endif
+
+      <file <!LOWS module_name>.cpp>
+      \#ifdef SUIF_NAMESPACE
+        }
+      \#endif
+
+
+#      <file  <!LOWS module_name>_visitor.h>
+#      };
+#
+#      \#endif
+    <endlet>
+<endfor>
+
+
+

@@ -1,0 +1,210 @@
+# file "machine_ir.hoof"
+#
+#    Copyright (c) 2000 The President and Fellows of Harvard College
+#
+#    All rights reserved.
+#
+#    This software is provided under the ter described in
+#    the "machine/copyright.h" include file.
+
+
+#include "basicnodes/basic.hoof"
+
+module machine_ir {
+
+    include <functional>;
+    include <basicnodes/basic.h>;
+    include <suifnodes/suif.h>;
+    include <machine/substrate.h>;
+    include <machine/types.h>;
+    include <machine/opnd.h>;
+
+    import basicnodes;
+
+# Universal machine-level ExecutionObject
+
+concrete AnyBody : ExecutionObject {
+    CPP_DECLARE
+      public:
+	virtual InstrList* to_instr_list() { suif_assert(false); return NULL; }
+    CPP_DECLARE
+};
+
+# Instruction-list class
+
+concrete InstrList : AnyBody {
+    list<Instr* owner> instrs;
+    CPP_DECLARE
+      public:
+	list<Instr*>& instrs() { return _instrs; }
+	InstrList* to_instr_list();
+    CPP_DECLARE
+    CPP_BODY
+        extern InstrList* instr_list_to_instr_list(InstrList*);
+        InstrList*
+        InstrList::to_instr_list()
+        {
+            return instr_list_to_instr_list(this);
+        }
+    CPP_BODY
+};
+
+# Instruction classes
+
+    abstract Instr : ScopedObject {
+	int opcode;
+
+	int nDFLevel;	
+	int nTokPos;	
+	int nLatchLevel	;
+	int bLatched;
+    bool isLinkedToFeedback;
+    bool hasPrintedFeedback;
+
+    int instrIdNum;
+    int LPR_SNX_level;
+     
+	LString	assignment_in_vhdl;
+	LString resetassignment_in_vhdl;
+
+    };
+
+    concrete InstrAlm : Instr {
+	vector<IrOpnd* definer> srcs;
+	vector<IrOpnd* definer> dsts;
+    IrOpnd* definer predicate;
+    bool hasPredicate;
+
+    CPP_DECLARE
+      public:
+	suif_vector<IrOpnd*>& srcs() { return _srcs; }
+	suif_vector<IrOpnd*>& dsts() { return _dsts; }
+    CPP_DECLARE
+    };
+
+    concrete InstrCti : InstrAlm {
+	Symbol* reference target;
+    };
+
+    concrete InstrLabel : Instr {
+	CodeLabelSymbol* definer label in defined_labels;
+    };
+
+    concrete InstrDot : Instr {
+	vector<IrOpnd* definer> srcs;
+    CPP_DECLARE
+      public:
+	suif_vector<IrOpnd*>& srcs() { return _srcs; }
+    CPP_DECLARE
+    };
+
+# Operand classes
+
+    abstract IrOpnd : SymbolTableObject {
+	virtual int kind;
+	virtual Type* reference type;
+
+    CPP_DECLARE
+      public:
+	friend class Opnd;
+	virtual bool operator==(const IrOpnd &other) const
+	    { suif_assert(false); return false; }
+    CPP_DECLARE
+    };
+    concrete OpndVar : IrOpnd {
+	VariableSymbol* reference var;
+    CPP_DECLARE
+      public:
+	int   get_kind() const { return opnd::VAR; }
+	Type* get_type() const { return _var->get_type(); }
+	virtual bool operator==(const IrOpnd &other) const
+	    { suif_assert(is_kind_of<OpndVar>(&other));
+	      return _var == ((const OpndVar&)other)._var; }
+    CPP_DECLARE
+    };
+    concrete OpndReg : IrOpnd {
+	Type* reference type implements type;
+	int reg;
+    CPP_DECLARE
+      public:
+	int get_kind() const
+	    { return (_reg < 0) ? opnd::REG_VIRTUAL : opnd::REG_HARD; }
+	virtual bool operator==(const IrOpnd &other) const
+	    { suif_assert(is_kind_of<OpndReg>(&other));
+	      return _reg == ((const OpndReg&)other)._reg; }
+    CPP_DECLARE
+    };
+    concrete OpndImmedInteger : IrOpnd {
+	Type* reference type implements type;
+	IInteger immed;
+    CPP_DECLARE
+      public:
+	int get_kind() const { return opnd::IMMED_INTEGER; }
+	virtual bool operator==(const IrOpnd &other) const
+	    { suif_assert(is_kind_of<OpndImmedInteger>(&other));
+	      return _immed == ((const OpndImmedInteger&)other)._immed; }
+    CPP_DECLARE
+    };
+    concrete OpndImmedString : IrOpnd {
+	Type* reference type implements type;
+	LString immed;
+    CPP_DECLARE
+      public:
+	int get_kind() const { return opnd::IMMED_STRING; }
+	virtual bool operator==(const IrOpnd &other) const
+	    { suif_assert(is_kind_of<OpndImmedString>(&other));
+	      return _immed == ((const OpndImmedString&)other)._immed; }
+    CPP_DECLARE
+    };
+    concrete OpndAddrSym : IrOpnd {
+	Symbol* reference sym;
+	Type* reference type implements type;
+    CPP_DECLARE
+      public:
+	int   get_kind() const { return opnd::ADDR_SYM; }
+	#Type* get_type() const { return type_addr(); }
+	virtual bool operator==(const IrOpnd &other) const
+	    { suif_assert(is_kind_of<OpndAddrSym>(&other));
+	      return _sym == ((const OpndAddrSym&)other)._sym; }
+    CPP_DECLARE
+    };
+    abstract OpndAddrExp : IrOpnd {
+	int kind implements kind;
+	Type* reference deref_type;
+	vector<IrOpnd* reference> srcs;
+    CPP_DECLARE
+      public:
+	suif_vector<IrOpnd*>& srcs() { return _srcs; }
+	virtual bool operator==(const IrOpnd &) const;
+        OpndAddrExp* clone() const;
+	#Type* get_type() const { return type_addr(); }
+	Type* get_type() const { return _deref_type; }
+    CPP_DECLARE
+    CPP_BODY
+	bool
+	OpndAddrExp::operator==(const IrOpnd &other) const
+	{
+	    suif_assert(get_kind() == other.get_kind());
+	    const OpndAddrExp &aeo = (const OpndAddrExp&)other;
+	    if (get_deref_type() != aeo.get_deref_type())
+		return false;
+	    suif_assert(_srcs.size() == aeo._srcs.size());
+	    suif_vector<IrOpnd*>::const_iterator sit =     _srcs.begin();
+	    suif_vector<IrOpnd*>::const_iterator oit = aeo._srcs.begin();
+	    for ( ; sit != _srcs.end(); sit++, oit++)
+		if (!(*sit == *oit))
+		    return false;
+	    return true;
+	}
+        OpndAddrExp* OpndAddrExp::clone() const
+        {
+	    OpndAddrExp *clone = create_opnd_addr_exp(the_suif_env, 0, NULL);
+	    clone->set_kind(get_kind());
+            clone->set_deref_type(get_deref_type());
+            for (unsigned i = 0; i < get_src_count(); i++)
+                clone->append_src(get_src(i));
+            return clone;
+        }
+    CPP_BODY
+    };
+}

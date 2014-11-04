@@ -1,0 +1,1214 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>An Introduction to Machine SUIF </title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>An Introduction to Machine SUIF <br>and Its Portable Libraries for Analysis and Optimization</a></h1>
+<address><em>Release version 2.02.07.15</em> <br><br>Michael D. Smith and Glenn Holloway<br>{smith,holloway}@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+
+Machine SUIF is a flexible and extensible infrastructure for
+constructing compiler back ends.  With it you can readily construct
+and manipulate machine-level intermediate forms and emit assembly
+language, binary object, or C code.  The system comes with backs ends
+for the Alpha and <i>x86</i> architectures.  You can easily add new machine
+targets and develop profile-driven optimizations.
+<p>
+Though Machine SUIF is built on top of the Stanford SUIF system
+(version 2.1), the analyses and optimizations within Machine SUIF are
+not SUIF specific.  By rewriting the implementation of an extensible
+interface layer, you can easily port the Machine-SUIF code base to
+another compilation environment.  We refer to this interface as the
+Optimization Programming Interface (OPI). The OPI allows us to write
+optimizations and analyses that are parameterized with respect to both
+a target and an underlying environment.  We use this capability to share
+optimization passes between Machine SUIF and Deco, a system for
+dynamic code optimization.
+<p>
+This document introduces Machine SUIF, presents the overall rationale
+behind its design, illustrates how one writes a parameterized pass,
+and describes how to get started using the system.  It concludes with
+a road map for the rest of the documentation that comes with Machine
+SUIF.
+<p>
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">Goals</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc5">Ease of use.</a></li>
+      <li><a href="#toc6">Quality of optimized code.</a></li>
+      <li><a href="#toc7">Reuse of optimization code.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc8">Setting Up Your Environment</a></li>
+  <ul compact>
+  <li><a href="#toc9">Compiling Machine SUIF</a></li>
+  <li><a href="#toc10">Compiling with Machine SUIF</a></li>
+  </ul>
+<li><a href="#toc11">Back-End Organization and Flow</a></li>
+  <ul compact>
+  <li><a href="#toc12">IR organization</a></li>
+  <li><a href="#toc13">Dialects</a></li>
+  <li><a href="#toc14">General flow</a></li>
+  <li><a href="#toc15">Compilation specifics</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc16">A minimal back end.</a></li>
+      <li><a href="#toc17">A fancier back end.</a></li>
+      <li><a href="#toc18">Viewing the results of intermediate stages.</a></li>
+      <li><a href="#toc19">A back end that produces C.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc20">Constraints on pass orderings</a></li>
+  </ul>
+<li><a href="#toc21">Developing a New Optimization Pass</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc22">Pass structure.</a></li>
+      <li><a href="#toc23">Binding the OPI and focusing the environment.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc24">Extending the OPI</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc25">Adding new functions.</a></li>
+      <li><a href="#toc26">Extending the IR</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc27">Adding Support for New Targets</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc28">A new target architecture.</a></li>
+      <li><a href="#toc29">A new variant of an existing target architecture.</a></li>
+      <li><a href="#toc30">A new kind of machine instruction.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc31">More Radical Changes</a></li>
+<li><a href="#toc32">Where To Look Next</a></li>
+<li><a href="#toc33">Acknowledgments</a></li>
+<li><a href="#toc34">References</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+Machine SUIF is a flexible, extensible, and easily-understood
+infrastructure for constructing compiler back ends.  We built Machine
+SUIF with the philosophy that the ``textbook'' portions, i.e. the
+optimization and analysis passes, should be coded in a way that makes
+them as independent of the compiler environment and compilation
+targets as possible.  By adhering to this philosophy, we are able to
+distribute both a working compiler and a collection of
+analyses/optimizations that can be quickly and easily inserted into a
+new compilation environment.
+<p>
+In particular, the Machine-SUIF distribution contains a working
+compiler based on the Stanford SUIF compiler infrastructure (version
+2.1).  This compiler is capable of producing optimized code for machines
+based on the Alpha or x86 architectures.  However, the analyses and
+optimizations distributed in Machine SUIF do not directly reference
+any SUIF constructs or embed constants from any target machine.
+Instead, each is written using a standardized view of the underlying
+compiler environment, an interface layer that we refer to as the
+<em>Optimization Programming Interface</em> (OPI).
+<p>
+This document is an introduction to Machine SUIF.  It briefly presents
+our overall design rationale, gets you started using the system, and
+directs you to the rest of the infrastructure documentation.  We
+assume that you are familiar with the basic concepts of SUIF 2.1;
+if not, we encourage you to see the documentation on the
+<a href="http://suif.stanford.edu/suif/suif2/">SUIF 2 home
+page</a>.
+<p>
+The next section enumerates our goals for Machine SUIF and outlines
+how we achieved them.  Section&nbsp;<a href="#secEnvironment">[-&gt;]</a> then describes how
+to install Machine SUIF and start using it to compile programs.
+Section&nbsp;<a href="#secFlow">[-&gt;]</a> provides an overview of the general flow of our
+back-end compilation system and presents several example back-end
+scripts.  Section&nbsp;<a href="#secNewPass">[-&gt;]</a> describes what's involved in
+developing optimization passes using our OPI, while
+Section&nbsp;<a href="#secExtendingOPI">[-&gt;]</a> shows you how to extend the OPI 
+for new optimizations.  Section&nbsp;<a href="#secNewTargets">[-&gt;]</a>
+describes the steps that you need to take in order to provide support
+for a new target architecture.  Section&nbsp;<a href="#secOtherChanges">[-&gt;]</a>
+discusses how you can change the structure of the Machine-SUIF
+intermediate representation (IR) and how to port the optimizations to
+a new environment.  Section&nbsp;<a href="#secWhereNext">[-&gt;]</a> briefly outlines where
+to go next for more details.
+<p>
+
+<h2><a name=toc4>Goals</a></h2>
+<p>
+We designed Machine SUIF for a wide range of users.  In particular, we
+support those interested in:
+<p>
+<ul>
+
+<li>building new optimizations that are parameterizable with respect
+to the target machine and portable across compiler environments;
+<p>
+<li>adding support for a new or augmented target architecture;
+<p>
+<li>developing a new IR, without having to rewrite
+all of our optimizations.
+<p>
+</ul>
+
+To adequately address the needs of these users, we developed Machine
+SUIF with three primary goals in mind.  First and foremost, Machine
+SUIF had to be easy to use, especially if you wanted to do something
+simple, and straightforward to retarget so that we could use it in
+architectural investigations.  Second, it had to support the modular
+development of sophisticated optimizations.  We wanted to provide our
+students and colleagues with the ability to contribute passes and
+benefit from the efforts of others.  Finally, it had to built in a
+manner that permitted reuse of existing optimizations directly in an
+optimization environment with significantly different constraints.
+Specifically, we wanted to be able to reuse optimizations built for
+Machine SUIF in Deco, a project at Harvard University in <em>dynamic</em>
+or <em>on-line</em> optimization.  The rest of this section explores each
+of these goals in greater detail.
+<p>
+
+<h5><a name=toc5>Ease of use.</a></h5>
+<p>
+For those using Machine SUIF simply as a compiler,
+Sections&nbsp;<a href="#secEnvironment">[-&gt;]</a> and&nbsp;<a href="#secFlow">[-&gt;]</a> of this overview
+should be a sufficient introduction to the system.  
+<p>
+Since we designed Machine SUIF as a research compiler, we expect that
+most of our users will want to add or change the system in some way.
+(Hey, we're never satisfied either.)  Sections&nbsp;<a href="#secNewPass">[-&gt;]</a>
+and&nbsp;<a href="#secExtendingOPI">[-&gt;]</a> should help you to develop new analysis or
+optimization passes.  These sections describe how we use libraries to
+ease the building of Machine SUIF passes.  These libraries, e.g., the
+control-flow and data-flow analysis libraries, provide abstractions
+that aid in the coding of certain kinds of optimizations.  These
+sections also discuss the OPI and its support for the development of
+<em>parameterized passes</em>: parameterization separates target- and
+environment-specific details from the algorithms of analysis or
+optimization passes.  The OPI also hides the implementation of our IR,
+many details of which are uninteresting to someone simply wanting to
+code a new optimization algorithm.  After reading these sections, we
+encourage you to read our separate documentation on the OPI.
+<p>
+In Machine SUIF, the objects that hold target-specific information are
+parameters to the analysis and optimization passes.  These objects,
+which include both functions and data structures, reside in
+target-specific libraries (or ``target libraries'' for short).  Adding
+support for a new target architecture therefore simply requires you to
+code a new target library or extend an existing one.  Existing
+optimization passes work without change for the new library.  The only
+time you need to change an existing pass is when you want to change
+that pass's algorithm.  By separating algorithmic details from the
+architectural details, we have made it easier, as described in
+Section&nbsp;<a href="#secNewTargets">[-&gt;]</a>, to experiment with new microarchitectural
+features.
+<p>
+Finally, we have tried to do the ``little things'' that make it easier
+to use someone else's software.  
+<p>
+<ul>
+
+<li>We provide extensive documentation.  In particular, we use
+Norman Ramsey's <code>noweb</code> system <b>[cite&nbsp;<a href="#NWcite-bibnoweb">bibnoweb</a>]</b> to produce the
+majority of our hypertext and hardcopy documentation.  This
+literate-programming tool lets you combine documentation and code in
+the same source file.  We develop <code>noweb</code> files for our most
+important header files, and we incorporate these files into documents
+describing the libraries that contain them.  We use
+simple code comments to document Machine-SUIF passes and library
+implementation files respectively.
+<p>
+<li>We use short, informative naming conventions in our code.
+When we use an abbreviation for a particular word, we are careful to
+use the same abbreviation everywhere.  We include a glossary of our
+most-common abbreviations at the end of <em>The OPI User's
+Guide</em>&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibopiusr">bibopiusr</a>]</b>.
+<p>
+</ul>
+
+
+<h5><a name=toc6>Quality of optimized code.</a></h5>
+<p>
+Machine SUIF is a powerful system for producing optimized code.  It is
+modular, making it easy to add, remove, and rearrange passes.  We
+typically develop optimization passes that focus on a single action,
+such as dead code elimination.  Nearly all such passes can be inserted
+at any point in the back-end flow.  Thus, the writer of an
+copy-propagation pass can focus on data flow and operand rewriting and
+assume that a subsequent run of the dead code elimination pass will
+remove any dead code produced during copy propagation.
+<p>
+
+<h5><a name=toc7>Reuse of optimization code.</a></h5>
+<p>
+Our research program is interested in a wide range of techniques for
+program optimization.  Our interest spans the spectrum from
+traditional methods performed during compilation through hardware and
+software optimization techniques performed at run time.  We would, for
+example, like to use the optimizations written for Machine SUIF in an
+on-line optimization system and debug/test optimizations written for
+the on-line optimizer in Machine SUIF.
+<p>
+Machine SUIF implements one realization of the OPI.  Since the OPI
+hides the implementation specifics of Machine SUIF (i.e., the
+substrate), we can easily produce another realization of the OPI
+appropriate for an on-line optimizer.  To ensure that the
+optimizations written for Machine SUIF are usable in this on-line
+optimizer, we write all of our Machine-SUIF optimizations to conform
+to the OPI's specification.  In this way, Machine SUIF can be a
+flexible infrastructure (with full-featured IR objects) that is easy
+to extend, while an on-line optimizer can use a different
+infrastructure employing light-weight IR objects for efficiency.  And
+both can use the same set of optimization codes.  <em>The OPI User's
+Guide</em>&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibopiusr">bibopiusr</a>]</b> discusses this issue and its implications in
+greater detail.
+<p>
+
+<h2><a name=toc8>Setting Up Your Environment</a></h2>
+<a name="secEnvironment"><b>[*]</b></a>
+<p>
+Machine SUIF depends on the base SUIF system, which is distributed from the
+<a href="http://suif.stanford.edu/suif/suif2/index.html">Stanford SUIF 2</a>
+and
+<a href="http://nci.pgroup.com/">National Compiler Infrastructure</a> (NCI)
+web sites.
+ <b>[</b>The <b>Downloads</b> page at the NCI site currently offers some
+out-of-date source files under links labeled <b>The base NCI system</b> and
+<b>Conversion code between suif1 and suif2</b>.  Ignore those links!  Take
+only the binary distributions of <b>The C front end</b> from the NCI site.
+Take the rest of SUIF from the Stanford site.<b>]</b> 
+<p>
+The following discussion assumes that you are using a UNIX-based operating
+system as your development platform.  It also assumes that you know how to
+unpack the distributions and set up the <code>nci</code> source directories.  If
+not, please first review the <code>README</code> files contained in the
+distributions.  Please pay careful attention to the instructions regarding
+the environment settings required to compile SUIF.
+<p>
+
+<h3><a name=toc9>Compiling Machine SUIF</a></h3>
+<a name="secSetupMake"><b>[*]</b></a>
+<p>
+You should first unpack and install the base SUIF distribution.
+Instructions are in <code>nci/README</code>.  The same environment variables that
+you use for this step (e.g., <code>MACHINE</code>, <code>NCIHOME</code>, and
+<code>COMPILER_NAME</code>) are required for compiling the Machine SUIF
+distribution.
+<p>
+Next, unpack the Machine SUIF.  You can put it wherever you like.  Follow
+the instructions in <code>README.machsuif</code> file in the root directory of the
+distribution to complete the installation.  Be sure to have the
+<code>MACHSUIFHOME</code> environment variable set as described there whenever you
+build or rebuild part of the Machine SUIF system.
+<p>
+
+<h3><a name=toc10>Compiling with Machine SUIF</a></h3>
+<a name="secSetupCompile"><b>[*]</b></a>
+<p>
+A machine-specific optimization must have access to information about
+the organization and microarchitecture of the target machine.  We
+encapsulate this target-specific information in target libraries
+(e.g., the <code>alpha</code> library).  During optimization, the compiler
+selects the appropriate target library and binds the information in
+this library into the current environment by constructing a
+<code>Context</code> object.  The compiler knows which library to load by
+reading the library name from an annotation incorporated in each
+Machine-SUIF IR file.  So all procedures that originated in a given
+source file are optimized using a single, consistent set of
+target-specific information.
+<p>
+So, how do you as a person running the compiler specify a
+target library?  It is fairly simple.  Only a few of our
+Machine-SUIF passes actually change the value of the <code>target_lib</code>
+annotation.  Each of these passes has a command line parameter,
+<code>-target_lib</code>, that allows you to specify the name of a
+target library.  Alternatively, if you do not specify the
+target library as a command line parameter, the compiler will
+check the environment variable <code>MACHSUIF_TARGET_LIB</code>.  The command
+line argument overrides the environment variable, and if neither
+command line argument nor environment variable is defined, the
+compiler stops with an assertion failure.
+<p>
+
+<h2><a name=toc11>Back-End Organization and Flow</a></h2>
+<a name="secFlow"><b>[*]</b></a>
+<p>
+You can think of Machine SUIF as a machine-level IR, with instructions
+having type <code>Instr</code>, that plays a role like that of <code>Statement</code> or
+<code>Expression</code> in base SUIF.  However, the Machine-SUIF infrastructure
+includes much more than just another SUIF IR; it augments SUIF with
+many new libraries and passes that make it straightforward to develop
+machine-specific optimizations for existing or future machine models.
+<p>
+For us then, the back end consists of those compiler passes that start
+with the lowering of the SUIF <code>Expression</code> or <code>Statement</code> IR into
+the Machine-SUIF IR and that end with a translation from the
+Machine-SUIF IR into assembly, machine, or C code.  During back-end
+compilation, the Machine-SUIF IR for a compiled program will
+transition through at least two Machine-SUIF IR dialects.  We begin
+with a brief discussion of the ideas that led us to the current IR and
+then move on to define what we mean by a dialect of the Machine-SUIF
+IR.  With this as background, Sections&nbsp;<a href="#secGeneralFlow">[-&gt;]</a>
+and&nbsp;<a href="#secCompilationSpecifics">[-&gt;]</a> describe the general flow of a
+Machine-SUIF back end in more detail. This section ends with some
+example back-end scripts and a word about the constraints on pass
+orderings.
+<p>
+<h3><a name=toc12>IR organization</a></h3>
+<p>
+Research on machine-specific compile-time optimizations is closely
+tied to research in computer architecture.  To support this area of
+research, a compilation system must possess an IR that is both
+extensible and expressive.  We require extensibility so that we can
+experiment with new compiler-visible instructions, architectural
+features, and hardware mechanisms.  SUIF was built with extensibility
+as a primary design goal, and thus it has been fairly simple for us to
+meet this requirement.  We desire expressiveness in our IR so that
+every single machine instruction is representable by a single IR
+instruction.  A one-to-one correspondence between IR instructions and
+actual machine instructions is required for optimizations such as
+global instruction scheduling.
+<p>
+The development of an extensible and expressive IR could be a lifelong
+project within itself.  As mentioned earlier, we would like to avoid
+actually spending our lives re-coding compiler passes every time we
+make a small change to the IR.  To avoid this problem, we have defined
+OPI functions that create, inspect, and manipulate IR objects in a
+target-machine-specific manner.  The OPI hides the details of the IR
+implementation.  In other words, the OPI supports the needs of the
+optimization writer without revealing the actual structure of the IR.
+The Deco project, for example, takes advantage of this capability to
+use the existing Machine-SUIF analysis and optimization code with a
+completely new IR.
+<p>
+<h3><a name=toc13>Dialects</a></h3>
+<p>
+Even though Machine SUIF supports optimization targeting many
+different machines, all Machine-SUIF IR files have the same binary
+representation.  We simply interpret the contents of this IR file
+differently for each different target.  We say that each
+target library defines a <em>dialect</em> of the Machine-SUIF IR.
+<p>
+Machine SUIF has one distinguished dialect called <code>suifvm</code>, which
+stands for SUIF virtual machine. This dialect is the target of the
+Machine-SUIF lowering pass.  This pass lowers from SUIF
+<code>Expression</code> and <code>Statement</code> form into <code>suifvm</code> instruction form.
+All the code generators within Machine SUIF are code generators from
+<code>suifvm</code> to some specific target architecture.  By defining this
+dialect, we are able to de-couple extensions made to base SUIF from
+Machine SUIF's provision of multiple target-specific back ends.  If an
+extender of base SUIF wishes to connect to Machine SUIF, he or she
+need only write a lowering pass to <code>suifvm</code> . If someone wants to
+add a new target to Machine SUIF, he or she need only develop a new
+target library for Machine SUIF.  The base SUIF extender and the new
+target developer do not need to know about each other's work.
+<p>
+Currently, dialects differ only in their interpretation of the integer
+opcode value stored in the <code>Instr</code> structure.  The opcode
+value is the key into many of the target-specific data tables, and
+thus it must be interpreted correctly in order to access the
+appropriate machine-specific information needed for optimization.
+<p>
+
+<h3><a name=toc14>General flow</a></h3>
+<a name="secGeneralFlow"><b>[*]</b></a>
+<p>
+We considered two basic approaches that satisfy the goal of a
+one-to-one correspondence between IR instructions and machine
+instructions.  The approaches differ in where they perform code
+generation, the actual mapping from an IR opcode to a machine opcode.
+<p>
+The first approach postpones this mapping until the last possible
+moment in the compilation process (see Figure 1a).  To ensure that
+there is a one-to-one correspondence between the IR and machine
+instructions, there is an earlier pass in the compilation process that
+restricts the IR form so that each IR instruction can be mapped
+directly to a single machine instruction.  The machine-specific
+optimization passes maintain this one-to-one correspondence.  The
+IMPACT compiler <b>[cite&nbsp;<a href="#NWcite-bibimpact">bibimpact</a>]</b> uses an approach like this.
+<p>
+<hr>
+<table><!-- alignment is c--><!-- 1 columns--><tr><td align=center>.c <i>--&gt;</i> front-end <i>--&gt;</i> IR-restriction <i>--&gt;</i> optimizations <i>--&gt;</i> code-gen <i>--&gt;</i> .s </td></tr>
+<tr><td align=center>(a) </td></tr>
+<tr><td align=center></td></tr>
+<tr><td align=center>.c <i>--&gt;</i> front-end <i>--&gt;</i> code-gen <i>--&gt;</i> optimizations <i>--&gt;</i> .s </td></tr>
+<tr><td align=center>(b) </td></tr>
+</table>
+<a name="figCgm"><b>[*]</b></a>
+<b>Two approaches that satisfy the goal of a one-to-one
+correspondence between IR and machine instructions.  The first splits
+the code generation into two pieces.  The second relies on either
+retargetable compiler technology to facilitate the quick creation of
+machine-specific optimization passes or abstraction to eliminate the
+need to re-code each optimization for each architecture.</b>
+<hr>
+<p>
+The second approach performs the mapping from IR instructions to
+machine instructions early in the compilation process (see Figure 1b).
+Machine SUIF employs this approach.  The parameterization of our
+optimization passes keeps us from having to re-implement each of our
+machine-specific optimizations for each target architecture.  This
+same idea is found in retargetable compilers, such as the vpcc/vpo
+compiler <b>[cite&nbsp;<a href="#NWcite-bibvpo">bibvpo</a>]</b>, based on compiler compiler technology.  Our
+approach simply performs target specialization of the compiler
+dynamically rather than statically.  We find this late binding of
+target-specific information useful for environments where the target
+description and compiler requirements change frequently.
+<p>
+
+<h3><a name=toc15>Compilation specifics</a></h3>
+<a name="secCompilationSpecifics"><b>[*]</b></a>
+<p>
+We now describe how to use SUIF and Machine SUIF to compile a C program
+to Digital Alpha/UNIX assembly code.  Begin by reading the
+<a href="http://suif.stanford.edu/suif/suif2/doc/howtocompile.html">directions</a>
+in the SUIF documentation that describe how to produce a <code>.suif</code> file
+from a C input file.  Next, apply <code>SUIF</code> transformations that make an
+IR file acceptable for lowering into Machine SUIF.  If your file is
+named <code>hello.suif</code>, for example, the following command produces a
+lowered SUIF version called <code>hello.lsf</code> in which some structured forms
+like loops and conditional statements have been replaced by less
+structured equivalents:
+<p>
+<pre>
+    suifdriver -e &quot;require basicnodes; \
+                   require suifnodes; \
+                   require cfenodes; \
+                   load hello.suif; \
+                   require transforms; \
+                   dismantle_field_access_expressions; \
+                   dismantle_structured_returns; \
+                   compact_multi_way_branch_statements; \
+                   dismantle_scope_statements; \
+                   dismantle_ifs_and_loops; \
+                   flatten_statement_lists; \
+                   rename_colliding_symbols; \
+                   insert_struct_padding; \
+                   insert_struct_final_padding; \
+                   save hello.lsf&quot;
+</pre>
+
+A corresponding script, called <code>do_lower</code>, comes with the Machine SUIF
+distribution.  So instead of typing the bulky command above, you can
+write:
+<p>
+<pre>
+    do_lower hello.suif hello.lsf
+</pre>
+
+
+
+<h5><a name=toc16>A minimal back end.</a></h5>
+A back end starts with a lowering pass; the lowering pass that accepts
+the output of <code>do_lower</code> is called <code>s2m</code>.  The output of
+<code>s2m</code> is a Machine-SUIF IR file that targets <code>suifvm</code>.  We supply a
+target library for <code>suifvm</code> that allows you to run
+optimization passes on a Machine-SUIF IR file of this dialect.
+<p>
+Typically, you'll want to translate the <code>suifvm</code> code into code for a
+real machine target.  This translation requires two basic steps:
+translate <code>suifvm</code> instructions into the real machine's instructions
+(code generation); and translate the <code>suifvm</code> symbol and
+virtual-register operands into machine registers and memory locations
+(register allocation).  A minimal Machine-SUIF back end consists of four
+steps related to these two basic steps: perform most of the code
+generation; allocate registers; finish machine-specific translation; and
+emit the ASCII representation of the Machine-SUIF IR file.  The
+following commands carry out these steps to generate an Alpha assembly
+file:
+<p>
+<pre>
+    do_s2m    $f.lsf $f.svm
+    do_gen    -target_lib alpha $f.svm $f.avr
+    do_il2cfg $f.avr $f.afg
+    do_raga   $f.afg $f.ara
+    do_cfg2il $f.ara $f.ail
+    do_fin    $f.ail $f.asa
+    do_m2a    $f.asa $f.s
+</pre>
+
+The <code>gen</code> pass (called <code>do_gen</code> when run from the shell) does most
+of the machine-specific code generation.  It does not allocate
+registers (beyond those necessary, for example, because a certain
+instruction uses a specific, implicit register).  Since <code>gen</code>
+translates from one Machine-SUIF dialect to another (i.e., from
+<code>suifvm</code> to <code>alpha</code> in this case), we need to supply the name of
+the target library.  Here, we used the command-line option method,
+though we could easily have set the appropriate environment variable
+instead.  To generate code for a different target, you simply provide
+a different library name.
+<p>
+The <code>il2cfg</code> pass transforms the IR from simple instruction-list form to
+CFG form, which is a prerequisite for most optimization passes.
+ <b>[</b>In particular, the <code>dce</code>, <code>raga</code> and <code>peep</code> passes expect
+their input in CFG form.<b>]</b> 
+<p>
+The <code>raga</code> pass performs register allocation using an algorithm
+described by George and Appel <b>[cite&nbsp;<a href="#NWcite-bibraga">bibraga</a>]</b>.  The <code>fin</code> pass
+completes the translation process by laying out the stack frame for each
+procedure, replacing stack-allocated symbols by their stack-based
+effective addresses, and inserting the procedure entry and exit code
+sequences.  These entry/exit sequences are delayed until this
+finalization pass so that other Machine-SUIF passes can easily
+reallocate registers in a procedure, for example, and not have to change
+the register save/restore code at that procedure's entry/exit points.
+Neither of these passes changes the target associated with the file
+being compiled.
+<p>
+The <code>cfg2il</code> pass reverses the transformation made by <code>il2cfg</code>: it
+takes in the CFG form and produces the simple instruction-list form of the
+IR.
+<p>
+The <code>m2a</code> pass translates the Machine-SUIF representation for a
+program into an architecture-specific ASCII assembly-language file (a
+<code>.s</code> file).  This pass also creates the data directives for the file
+by translating its symbol table.  Before this point, it is expected that
+all Machine-SUIF passes maintain the symbol table (and don't create
+machine-specific data directives in instruction lists).  The resulting
+<code>.s</code> file can then be assembled by the target machine's assembler to
+create a <code>.o</code> file.
+<p>
+The value of using a separate shell command (<code>do_...</code>) for each pass and
+sending intermediate results through the file system is that it gives you
+finer control when debugging.  However, you can also pass intermediate
+results in memory, which is considerably faster:
+<p>
+<pre>
+    suifdriver -e \
+      &quot;require cfenodes; \
+       load $f.lsf; \
+       require s2m;    s2m; \
+       require gen;    gen -target_lib alpha; \
+       require il2cfg; il2cfg; \
+       require raga;   raga; \
+       require cfg2il; cfg2il; \
+       require fin;    fin; \
+       require m2a;    m2a $f.s&quot;
+</pre>
+
+
+
+<h5><a name=toc17>A fancier back end.</a></h5>
+The code produced by the minimal back end described above will be highly
+unoptimized.  To improve the output-code quality, you can run
+machine-specific optimization passes between <code>s2m</code> and <code>m2a</code>.  For
+example, you may wish to run a dead-code elimination pass <code>dce</code> to
+eliminate useless operations:
+<p>
+<pre>
+    suifdriver -e \
+      &quot;require cfenodes; \
+       load $f.lsf; \
+       require s2m;    s2m; \
+       require il2cfg; il2cfg; \
+       require dce;    dce; \
+       require cfg2il; cfg2il; \
+       require gen;    gen -target_lib alpha; \
+                       il2cfg; \
+       require raga;   raga; \
+                       dce; \
+                       cfg2il; \
+       require fin;    fin; \
+       require m2a;    m2a $f.s&quot;
+</pre>
+
+This back end invokes <code>dce</code> twice: once before code generation and once
+after register allocation.  This illustrates the power of parameterized
+optimizations; the same pass works for all Machine-SUIF dialects.
+<p>
+The <code>src/machsuif/README.machsuif</code> file included with your
+distribution of Machine SUIF describes the optimization passes available.
+<p>
+<h5><a name=toc18>Viewing the results of intermediate stages.</a></h5>
+A script called <code>do_print</code> distributed with Machine SUIF allows you to
+print the contents of an intermediate file in a form resembling assembly
+language, even if it is not actually ready for assembly.  Suppose for
+example that you want to look at the output of the code-generation stage.
+If the intermediate file is called <code>hello.avr</code>, then
+<p>
+<pre>
+    do_print hello.avr hello.avr.txt
+</pre>
+
+produces a text file <code>hello.avr.txt</code> expressing instructions in assembler
+syntax.  Since the IR has yet to undergo register allocation, the listing
+contains virtual registers (e.g., <code>$vr42</code>) and also symbols used where
+the assembler would expect proper machine-register designators.
+<p>
+If you omit the second file name on the <code>do_print</code> command line, the
+listing is sent to standard output.
+<p>
+<h5><a name=toc19>A back end that produces C.</a></h5>
+Sometimes you may prefer to generate C rather than assembly language.  This
+can be useful for developing a back end when the target is not available or
+for testing the output of one pass without first having to transform it
+through other passes.  The <code>m2c</code> pass translates Machine-SUIF
+intermediate form into equivalent C code.  For example, a good way to test
+the result of performing copy propagation at the <code>suifvm</code> level would be
+to use the following simple back end:
+<p>
+<pre>
+    do_s2m $f.lsf $f.svm
+    do_dce $f.svm $f.scp
+    do_m2c $f.scp $f.scp.c
+</pre>
+
+
+<h3><a name=toc20>Constraints on pass orderings</a></h3>
+<p>
+Consistent with the SUIF philosophy, we have attempted to minimize
+restrictions on the ordering of Machine-SUIF passes.  There are,
+however, certain constraints that must be met.  For example, you must
+run <code>s2m</code> before any other Machine-SUIF pass.  You must run <code>gen</code>
+before you run a register allocator, and you must run <code>fin</code> after both
+of these.  Finally, you cannot run a base-SUIF pass on a Machine-SUIF IR
+file.
+<p>
+Again, please see the <code>src/machsuif/README.machine</code> file included with
+your distribution of Machine SUIF for information about the ordering
+constraints of the passes included in that distribution.
+<p>
+
+<h2><a name=toc21>Developing a New Optimization Pass</a></h2>
+<a name="secNewPass"><b>[*]</b></a>
+<p>
+One of Machine SUIF's key roles is to provide a programming interface,
+the OPI, for use in writing machine-level compiler optimizations.  The
+OPI is not a compiler substrate like the SUIF compiler.  It is
+designed to be implemented on top of a compiler substrate, and it
+relies on the substrate to take care of things like file I/O and the
+pipelining of passes.  The OPI segregates the specification of
+optimization algorithms from the specifics of the infrastructure
+substrate that they happen to run on.  Though you can directly
+manipulate the SUIF or Machine-SUIF IR, we recommend that you adhere
+to the OPI so that your efforts are usable by others.
+<p>
+The OPI includes data structures for implementing a low-level IR,
+e.g. instruction lists, instructions, operands, annotations, CFGs,
+etc.  It defines functions for creating, inspecting, and manipulating
+these IR objects.  The OPI relies heavily on plain old functions.
+This approach is efficient, it is easy to extend, and it leaves us
+able to revise major aspects of the implementation, should we need to,
+without disturbing optimization passes that already exist.  The OPI
+also defines data structures for describing target-machine
+characteristics (e.g. the target machine's register file)
+and access functions for these data structures.
+<p>
+Often, the best way to create a new pass is to start with an existing
+one and reshape it.  The <code>peep</code> pass distributed with Machine SUIF is
+a useful model.  It illustrates how a pass is structured and how to use
+the control- and data-flow libraries.  We also encourage you to look
+at <em>The Machine-SUIF Cookbook</em>&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibcookbook">bibcookbook</a>]</b>.
+<p>
+
+<h5><a name=toc22>Pass structure.</a></h5>
+<p>
+A pass consists of two pieces: a substrate-independent piece that
+performs the actual analysis or optimization; and a substrate-specific
+wrapper that allows the substrate-independent piece to be called as a
+pass of the current compiler substrate.  
+<p>
+We build each substrate-independent analysis or optimization pass as a
+stand-alone class.  For example, the <code>peep</code> pass defines a class
+called <code>Peep</code> in the file <code>peep/peep.h</code>.  This class, like our
+other substrate-independent pass classes, provides three basic
+methods: <code>do_opt_unit</code> which performs the actual peephole
+optimization on the specified optimization unit; <code>initialize</code> which
+allow us to write code that should run before calls to
+<code>do_opt_unit</code>; and <code>finalize</code> which contains code to be run after
+calls to <code>do_opt_unit</code>.  Our current implementation of <code>Peep</code> uses
+<code>initialize</code> to clear some statistics-gathering variables that are
+printed in <code>finalize</code>.
+<p>
+The implementation of <code>peep</code> uses several Machine-SUIF libraries
+that contain valuable tools for optimization writers.  For example, we
+provide libraries for building control-flow graphs (CFG), performing
+control-flow analysis (CFA), and gathering bit-vector-based data-flow
+analysis (BVD).  Like the optimization passes, these libraries are
+parameterized (i.e., are target independent).  You can find their
+documentation in the <code>src/machsuif/doc</code> directory.  In particular,
+the <code>peep</code> pass uses the CFG and BVD libraries to collect liveness
+information.  The CFA library is used when dominator analysis is
+needed, as in conversion to static-single-assignment form.
+<p>
+The code for the substrate-specific wrapper is contained in
+<code>suif_main.cpp</code>, <code>suif_pass.h</code>, and <code>suif_pass.cpp</code>.  The file
+<code>suif_main.cpp</code> allows us to build the stand-alone program called
+<code>do_peep</code>.  The <code>PeepSuifPass</code> class in <code>peep/suif_pass.h</code> wraps
+a <code>Peep</code> object in a subclass of SUIF's <code>PipelinablePass</code> class.
+This allows us to invoke <code>peep</code> as a pass in the SUIF compiler
+system.  SUIF provides such classes as <code>PipelinablePass</code> to capture
+the boilerplate of processing command lines, reading and writing
+intermediate files, and sequencing through the procedures in each
+file.  The methods of these classes are hooks on which to hang
+processing at strategic stages: before each file, before each
+procedure, and so on.  The file <code>suif_pass.cpp</code> illustrates how we
+connect the sequencing methods in a SUIF <code>PipelinablePass</code> with
+those in <code>Peep</code>.
+<p>
+
+<h5><a name=toc23>Binding the OPI and focusing the environment.</a></h5>
+<p>
+To access facts about the target machine, each parameterized pass must
+create a <code>Context</code> object and install it into the global
+environment.  Installation of the <code>Context</code> object binds the OPI to
+that particular target.  We perform this binding in <code>suif_pass.cpp</code>
+during the processing of each SUIF <code>FileBlock</code>.  Please note that
+this binding mechanism is particular to our current implementation of
+Machine SUIF; binding may occur in a different manner in other
+substrates.
+<p>
+We assume that all of the code within one input SUIF file corresponds
+to a single target, and we annotate each SUIF <code>FileBlock</code> with a
+Machine-SUIF <code>target_lib</code> annotation.  This annotation specifies the
+target library with which to bind the OPI.  If you look at the code in
+<code>do_file_block</code> in <code>suif_pass.cpp</code>, you see that we call the
+Machine-SUIF library function <code>focus(FileBlock*)</code> to inform the OPI
+implementation that we're now working within this <code>FileBlock</code>.  This
+call also establishes the global <code>Context</code> object based on the
+target library string specified in the <code>target_lib</code> annotation on
+<code>the_file_block</code>.  This code also appears below:
+<p>
+<pre>
+    focus(the_file_block);
+</pre>
+
+
+In addition to the focus call in <code>do_file_block</code>, we also make
+a focus call in <code>do_procedure_definition</code>.
+This call informs the OPI implementation of the specific procedure
+definition involved in the upcoming <code>do_opt_unit</code> call.
+Notice that in Machine SUIF's implementation of the OPI, an
+<code>OptUnit</code> is a <code>ProcedureDefinition</code>.  We end
+<code>do_procedure_definition</code> with a call to
+<code>defocus</code>, which informs the OPI that the
+scope has moved back to the file level.  The contents of
+<code>do_procedure_definition</code> in <code>suif_pass.cpp</code> are listed below:
+<p>
+<pre>
+     focus(the_proc_definition);
+     peep.do_opt_unit(the_proc_definition);
+     defocus(the_proc_definition);
+</pre>
+
+In summary, once you have indicated how the OPI should be ``bound''
+and ``focused'', you are able to use functions like <code>is_move</code> and
+<code>target_regs</code>.  They will work as expected for the current target.
+The <code>is_move</code> function provides a way for a parameterized
+copy-propagation algorithm, for example, to recognize register-move
+instructions in the target ISA.  The <code>target_regs</code> object summarizes
+the hardware configuration of and software conventions for the current
+target's register set.  For more information about the OPI, its setup,
+and its functions, please see <em>The OPI User's Guide</em> <b>[cite&nbsp;<a href="#NWcite-bibopiusr">bibopiusr</a>]</b>.
+<p>
+
+<h2><a name=toc24>Extending the OPI</a></h2>
+<a name="secExtendingOPI"><b>[*]</b></a>
+<p>
+The OPI is comprised of two kinds of libraries: <em>interface</em>
+libraries and <em>implementation</em> libraries.  The target
+libraries are all implementation libraries: those that implement
+the OPI functions for a single, particular machine target.
+Section&nbsp;<a href="#secNewTargets">[-&gt;]</a> describes how to augment these kinds of
+libraries.  In this section, we describe two ways in which you might
+extend the OPI by adding new functionality to the interface.
+Obviously, this functionality would be useful only if one or more
+target libraries define implementations for the new interface
+declarations.
+<p>
+<h5><a name=toc25>Adding new functions.</a></h5>
+<p>
+Suppose you wish to develop optimizations that take advantage of
+prefetch instructions.  In such a case, you probably want to be able
+to ask if an instruction is a prefetch instruction or not.  Analogous
+to the existing <code>is_move</code> function in the OPI, you create a new
+interface library (let's call it the <code>prefetch</code> library) that
+contains a declaration for a Boolean function <code>is_prefetch</code> that
+takes a single argument of type <code>Instr*</code>.  Your optimization pass
+then simply links the new prefetch library to get access to this new
+<code>is_prefetch</code> function.  It is straightforward to extend this
+example to add more sophisticated kinds of functions or objects.  We
+encourage you to look at the machinery for existing functions such as
+<code>is_move</code> (an instruction predicate), <code>type_addr</code> (which yields
+the address data type for a target), or <code>target_regs</code> (which
+produces an object that describes a target machine's register files).
+We encourage you to develop analogous machinery for the functions and
+objects you want to support.
+<p>
+Notice that the inclusion of prefetch instructions in an architecture
+would probably cause you to want to change the implementation of the
+<code>reads_memory</code> OPI function, since prefetch instructions read
+memory, and the <code>reads_memory</code> predicate identifies such instructions.
+When developing the <code>prefetch</code> library however, you add only
+new functionality.  You change the implementation of existing
+functionality, such as the <code>reads_memory</code> function, only in the
+target libraries, as explained in the next section.
+<p>
+<h5><a name=toc26>Extending the IR</a></h5> 
+<p>
+The <code>prefetch</code> example requires adding a new opcode identifier and
+extending some target-specific internal tables (e.g., the table
+mapping an opcode to the corresponding ASCII string), but it does not
+require changing the underlying IR.  You may wish however to optimize
+a target ISA that has an addressing mode not covered by those built
+into Machine SUIF.  You could create a new kind of address-expression
+operand by defining a new subclass of the <code>Opnd</code> class and by
+providing methods (analogous to those for other such subclasses)
+that compose and decompose your new address expression, that
+distinguish them from other operands, and so on.  In target libraries
+where your new operand kind is relevant, you need to accommodate it
+where target-specific treatment is appropriate.  For example, you
+arrange to emit such operands in the ASCII form that the assembler
+expects to see.  Again, note that you don't need to modify anything in
+the existing <code>machine</code> library to add a new kind of address
+expression.
+<p>
+You should read <em>The Extender's Guide</em>&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibext">bibext</a>]</b>.
+There you will find instructions for making common extensions such as
+the ones just mentioned.
+<p>
+
+<h2><a name=toc27>Adding Support for New Targets</a></h2>
+<a name="secNewTargets"><b>[*]</b></a>
+<p>
+<h5><a name=toc28>A new target architecture.</a></h5>
+<p>
+You add support for a new target by creating a new target
+library.  Here again, the best approach is probably to start from one
+of the existing libraries, such as the <code>alpha</code> library, and simply
+edit the implementations.
+<p>
+As mentioned above, a target library defines and creates a <code>Context</code>
+object, which provides the OPI functions with the means to act in a
+target-specific manner.  The details of how we exactly accomplish this
+are interesting but not relevant to the current overview.  It suffices
+to say that for each OPI function (e.g., <code>is_move</code>), you code a
+corresponding <code>Context</code>-member function.
+<p>
+For data structures that hold target-specific properties, such as
+opcode names and register-file descriptions, you write straightforward
+object-initialization code.  These structures are declared in an
+interface library, and they are referenced through functions declared
+in those
+interface libraries.  Whenever possible, you should use OPI functions
+in your code within the target library.  In this way, others
+can benefit from your efforts as explained below.
+<p>
+The OPI documentation&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibopiusr">bibopiusr</a>]</b><b>[cite&nbsp;<a href="#NWcite-bibext">bibext</a>]</b> and the
+<code>machine</code> library documentation&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibmachine">bibmachine</a>]</b> provide more
+detailed rationale for the contents of a target library.
+<p>
+
+<h5><a name=toc29>A new variant of an existing target architecture.</a></h5>
+<p>
+If you only want to specialize the description of an existing target
+by adding or changing characteristics of an existing implementation,
+then you should just supplement an existing target library.
+Machine SUIF relies on object-oriented techniques that make it easy to
+combine and refine the <code>Context</code> objects from existing libraries.
+<p>
+As an example, let's return to our previous discussion of adding
+support for prefetch instructions to Machine SUIF.  Assume that your
+original <code>alpha</code> library does not contain prefetch instructions and
+that you wish to do the minimal amount of work necessary to create a
+target library called <code>alpha_pf</code>.  This new library should
+be functionally identical to the <code>alpha</code> library except that it
+should also support Alpha architectures that contain prefetch
+instructions.
+<p>
+Within Machine SUIF, you are able to reuse the existing functionality
+from the <code>alpha</code> library that is appropriate for the <code>alpha_pf</code>
+library and override the functionality that needs to change (e.g., the
+implementation of the <code>reads_memory</code> function).  You would also
+implement any new functionality unique to <code>alpha_pf</code> (e.g., the
+<code>is_prefetch</code> function).
+<p>
+Not only can you do this with minimal effort, but you also do this
+without having to alter the distributed Machine-SUIF libraries in any
+way.  <em>The Extender's Guide</em>&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibext">bibext</a>]</b> contains
+further details and examples.
+<p>
+
+<h5><a name=toc30>A new kind of machine instruction.</a></h5>
+<p>
+To this point, our running prefetch example has only discussed how the
+system can support optimizations and analyses that are cognizant of
+prefetch instructions.  Here, we say a few words about how the
+front-end might indicate to the back end that the back end should in
+fact instantiate and use a prefetch instruction at a particular point
+in the code.  
+<p>
+Suppose that the pass that determines when and where to use a
+prefetch instruction is a base SUIF pass, and that you have already
+extended SUIF with a <code>PrefetchExpression</code>.  You want this expression
+node to compile to the appropriate prefetch instruction for the
+targets of interest, and simply to be ignored for other targets.
+There is a <code>suifvm</code> instruction (with opcode <code>ANY</code>) for
+handling extensions of this kind.  You would write an alternative
+lowering pass, either by replacing or by extending <code>s2m</code>, and you
+would have it translate each <code>PrefetchExpression</code> to a
+suitably-annotated <code>ANY</code> instruction in the <code>suifvm</code> dialect.
+The <code>instr_opcode</code> annotation of this generic <code>suifvm</code> instruction
+identifies it to target-specific code generators as a prefetch
+instruction; its operand sequences carry the necessary operands in the
+usual way.
+<p>
+
+<h2><a name=toc31>More Radical Changes</a></h2>
+<a name="secOtherChanges"><b>[*]</b></a>
+<p>
+Machine SUIF is a research compiler, and we don't claim to always know
+what's best.  As such, we have made it possible for you to make fairly
+radical changes to the code base that we distribute.  In particular,
+it is fairly easy to replace the implementation of our Machine-SUIF IR
+with a completely different implementation.  It is also fairly easy to
+replace the underlying SUIF compiler environment with your own
+favorite compiler environment.  The
+<a href="http://www.eecs.harvard.edu/machsuif/research/deco.html">Deco
+project</a> at Harvard University in fact implements both of these
+changes.
+<p>
+Exactly what do we mean by ``fairly easy''?  We mean that you need
+only make changes to the code in the <code>machine</code> library; none of the
+code in the optimization passes nor the code in the target libraries
+(e.g., the <code>alpha</code> library) needs to change.  The only pieces of the
+interface libraries (e.g., the <code>cfg</code> library) that would have to
+change are those pieces that extend the underlying IR.  All of those
+are cleanly separated in each library.
+<p>
+As long as you adhere to the OPI, it insulates the bulk of the
+back-end passes and libraries from the structure of the actual IR and
+specifics of the underlying compiler environment.  Generally speaking,
+we have parameterized all of our code with respect to the compiler
+environment; the ``values'' of these parameters are bound when you
+compile the optimization code base with a particular <code>machine</code>
+library.  We have also parameterized our code with respect to the
+compilation target machine; the ``values'' of these parameters are
+bound when you use Machine SUIF to compile an application.
+<p>
+For further information, please refer to the Machine-SUIF documents
+describing the <code>machine</code> and <code>cfg</code> libraries.
+<p>
+
+<h2><a name=toc32>Where To Look Next</a></h2>
+<a name="secWhereNext"><b>[*]</b></a>
+<p>
+In addition to the overview that you are reading, the <code>machsuif/doc</code>
+directory contains several other documents that the user of Machine
+SUIF might find helpful:
+<p>
+<ul>
+
+<li><a href="http://www.eecs.harvard.edu/machsuif/software/nci/opi-users.html">A User's Guide to the Optimization Programming Interface</a>.
+
+An introductory reference for the OPI.  This document provides an in-depth
+look at the OPI from the perspective of someone who wants to use it
+to write optimizations.
+<p>
+<li><a href="http://www.eecs.harvard.edu/machsuif/software/nci/cookbook.html">The Machine-SUIF Cookbook</a>.
+
+A listing of several complete Machine-SUIF passes that will help you to
+begin writing your own optimizations.
+<p>
+<li><a href="http://www.eecs.harvard.edu/machsuif/software/nci/opi-extenders.html">An Extender's Guide to the Optimization Programming Interface</a>.
+
+A reference to the structure of the OPI.  This document provides background
+material explaining how parameterization is accomplished, how the <code>Context</code>
+classes and objects are setup, and more detailed examples of how you can
+extend the OPI or enhance the system.
+<p>
+<li><a href="http://www.eecs.harvard.edu/machsuif/software/nci/machine.html">The SUIF Machine Library</a>.
+
+The definitive reference for the built-in OPI functions and data
+structures.  This document describes the actual structure of the
+Machine-SUIF IR and the other key structures in Machine SUIF.  It also
+describes classes that underlie some of the basic Machine-SUIF passes,
+including code finalization and code output (both in assembly language
+and in C).  Finally, it describes a number of utilities that are
+provided by the <code>machine</code> library and widely used in the rest of the
+Machine-SUIF system.
+<p>
+<li><a href="http://www.eecs.harvard.edu/machsuif/software/nci/suifvm.html">The SUIFvm Library of Machine SUIF</a>.
+
+Describes the <code>suifvm</code> dialect, an idealized machine language not unlike
+the ``low SUIF'' dialect of SUIF version 1.  This is the target language
+for lowering passes, and the source language for generators of real machine
+code.  The class <code>CodeGen</code>, which is the foundation for the system's
+current concrete code-generation facilities is described here as well.
+This is the one library in our system that contains both extensions to the
+OPI (like an interface library) and an implementation of the OPI (like a
+target library).
+<p>
+<li><a href="http://www.eecs.harvard.edu/machsuif/software/nci/cfg.html">The Machine-SUIF Control Flow Graph Library</a>.
+
+Documents the interfaces of the CFG library, which enables manipulation
+of programs through transformation of their flow graphs.
+<p>
+<li><a href="http://www.eecs.harvard.edu/machsuif/software/nci/cfa.html">The Machine-SUIF Control Flow Analysis Library</a>.
+
+The CFA library is layered on the CFG library; it adds classes for
+natural-loop analysis and dominator analysis, including computation of
+dominance frontiers.
+<p>
+<li><a href="http://www.eecs.harvard.edu/machsuif/software/nci/bvd.html">The Machine SUIF Bit-Vector Data-Flow-Analysis Library</a>.
+
+The BVD library is also built on the CFG library.  It provides a
+framework for classical iterative bit-vector-based data-flow
+analyses such as liveness, reaching definitions, and so on.
+<p>
+</ul>
+
+<!--%-->
+<!--% \section{Notes for Users of Machine SUIF 1}-->
+<!--% \label{secMachsuif1Users}-->
+<!--%-->
+<!--% {\sl This section needs a rewrite.}-->
+<!--%-->
+<!--% For users of Machine SUIF version 1.1.2, we provide a few notes by way-->
+<!--% of orientation to the new system.-->
+<!--%-->
+<!--% \paragraph{Target-specification strings.}  No longer needed.-->
+<!--% Indirection removed.  Just directly specify the name of the-->
+<!--% target library in the annotation.-->
+<!--%-->
+<!--% \paragraph{Functions manipulate the IR.}  As has been mentioned above,-->
+<!--% Machine-SUIF 2 avoids using the methods of implementation classes for-->
+<!--% creating and manipulating the intermediate representation.  Plain old-->
+<!--% functions are used in most cases.-->
+<!--%-->
+<!--% \paragraph{Instruction lists contain instructions.}-->
+<!--% The backbone of a SUIF 1 code block is a list of <code>tree_node</code>s; each-->
+<!--% instruction in such a block is tucked inside a <code>tree_node</code> (of-->
+<!--% subclass <code>tree_instr</code>).  In Machine SUIF 2, we cut out the middle man-->
+<!--% and deal directly in lists of machine instructions (of type-->
+<!--% <code>Instr*</code>).-->
+<!--%-->
+<!--% \paragraph{Operands have pointer semantics.}-->
+<!--% In Machine SUIF 2, operands are pointer-like.  This makes them-->
+<!--% inexpensive to pass around and leaves the set of operand kinds-->
+<!--% open-ended.-->
+<!--%-->
+<!--% \paragraph{In CFGs, a node is a node.}-->
+<!--% The Machine SUIF 1 CFG library defines several kinds of nodes, even-->
+<!--% though most applications only use one.  In Machine SUIF 2, there's a-->
+<!--% single node kind.  It contains a list of instructions, which you are-->
+<!--% free to edit directly.  The library does not manipulate an underlying-->
+<!--% linear representation of the whole optimization unit behind the curtain,-->
+<!--% nor does it insert ``shadow goto'' instructions.  Moreover, it is-->
+<!--% possible to leave an optimization unit in CFG form between passes, rather-->
+<!--% than translate it to and from linear form.-->
+
+
+<h2><a name=toc33>Acknowledgments</a></h2>
+<p>
+This work was supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).  We also gratefully
+acknowledge the generous support of this research by Advanced Micro
+Devices, Compaq, Digital Equipment, Hewlett-Packard, International
+Business Machines, Intel, and Microsoft.
+<p>
+
+<h2><a name=toc34>References</a></h2>
+<p>
+<a name="NWcite-bibimpact"><b>[1]</b></a>  D. August et al.  Integrated predicated and
+speculative execution in the IMPACT EPIC architecture.  <em>Proceedings
+of the 25th International Symposium on Computer Architecture</em>, July
+1998.
+<p>
+<a name="NWcite-bibvpo"><b>[2]</b></a>  M. Benitez and J. Davidson.  Target-specific global
+code improvement: principles and applications.  Technical report 94-42,
+University of Virginia, Charlottesville.
+<p>
+<a name="NWcite-bibsparseset"><b>[3]</b></a>  P. Briggs and L. Torczon.  An efficient
+representation of sparse sets.  <em>ACM Letters on Programming
+Languages and Systems</em>, 2(1-4), March-December 1993, pp. 59-70
+<p>
+<a name="NWcite-bibraga"><b>[4]</b></a>  L. George and A. Appel.  Iterated Register Coalescing.
+<em>ACM Transactions on Programming Languages and Systems</em>, 18(3), May
+1996, pp. 300-324.
+<p>
+<a name="NWcite-bibext"><b>[5]</b></a>  G. Holloway and M. D. Smith.  <em>An Extender's
+Guide to the Optimization Programming Interface and Target
+Descriptions.</em>  The Machine-SUIF documentation set, Harvard
+University, 2000.
+<p>
+<a name="NWcite-bibcookbook"><b>[6]</b></a>  G. Holloway and M. D. Smith.  <em>The Machine-SUIF
+Cookbook.</em>  The Machine-SUIF documentation set, Harvard University, 2000.
+<p>
+<a name="NWcite-bibmachine"><b>[7]</b></a>  G. Holloway and M. D. Smith.  <em>The Machine-SUIF
+Machine Library.</em>  The Machine-SUIF documentation set, Harvard University, 2000.
+<p>
+<a name="NWcite-bibopiusr"><b>[8]</b></a>  G. Holloway and M. D. Smith.  <em>A User's Guide
+to the Optimization Programming Interface.</em>  The Machine-SUIF
+documentation set, Harvard University, 2000.
+<p>
+<a name="NWcite-bibnoweb"><b><a name="NWD2">[9]</a></b></a>  N. Ramsey.  <em>Literate programming simplified.</em>
+IEEE Software, 11(5), September 1994, pp. 97-105.
+<p>
+
+
+
+<!-- Make \end{document} a chunk by itself to allow cross-reference info-->
+<!-- to be dumped in before it (noweave -delay).-->
+
+
+
+
+<ul>
+</ul>
+</body></html>
+

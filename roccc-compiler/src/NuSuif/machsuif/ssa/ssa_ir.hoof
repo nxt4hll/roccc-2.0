@@ -1,0 +1,96 @@
+# file "ssa_ir.hoof"
+#
+#    Copyright (c) 2000 The President and Fellows of Harvard College
+#
+#    All rights reserved.
+#
+#    This software is provided under the terms described in
+#    the "machine/copyright.h" include file.
+
+
+#include "machine/machine_ir.hoof"
+#include "cfg/cfg_ir.hoof"
+
+module ssa_ir {
+
+    include <machine/machine.h>;
+    include <cfg/cfg.h>;
+    include <ssa/ssa_core_ptr.h>;
+
+    import basicnodes;
+    import machine;
+    import cfg;
+
+concrete SsaCfg : AnyBody {
+    Cfg * owner cfg;
+    ProcedureDefinition * reference unit;
+    vector<IrOpnd * reference> old_names;
+    vector<IrOpnd * reference> new_names;
+    vector<int> new_to_old;
+    vector<int> formal_value_ids;
+
+    bool build_minimal_form;
+    bool build_semi_pruned_form;
+    bool build_pruned_form;
+    bool build_def_use_chains;
+    bool fold_copies;
+    bool omit_useless_phi_nodes;
+    bool report_undefined_locs;
+    bool keep_live_in_info;
+    bool keep_live_out_info;
+
+    CPP_DECLARE
+      public:
+        SsaCorePtr core;
+
+	suif_vector<IrOpnd*>& old_names() { return _old_names; }
+	suif_vector<IrOpnd*>& new_names() { return _new_names; }
+	suif_vector<int>& new_to_old() { return _new_to_old; }
+	suif_vector<int>& formal_value_ids() { return _formal_value_ids; }
+	InstrList* to_instr_list();
+
+	friend void picklify_ssa_cfg_metaclass(SuifEnv*);
+    CPP_DECLARE
+    CPP_BODY
+        extern InstrList* ssa_cfg_to_instr_list(SsaCfg*);
+        InstrList*
+        SsaCfg::to_instr_list()
+        {
+            return ssa_cfg_to_instr_list(this);
+        }
+    CPP_BODY
+};
+
+
+
+# A phi-node contains inputs, called sources, which are the names of the
+# parameters corresponding to incoming control paths.  (We use the
+# abbreviation "src" where BHS uses "parm".)
+#
+# It also holds SSA name ("dst") for the value defined by the node.
+#
+# A phi-node can be marked useless if all its sources are equivalent.
+# The library optionally removes useless phi-nodes.
+
+concrete PhiNode : ScopedObject {
+    vector<IrOpnd * definer> srcs;
+    IrOpnd * definer dst;
+    bool useless;
+
+    CPP_DECLARE
+      public:
+	suif_vector<IrOpnd*>& srcs() { return _srcs; }
+    CPP_DECLARE
+};
+
+concrete SsaPhiAnnote : Annote {
+    LString name implements name;
+    list<PhiNode * owner> phis;
+
+    CPP_DECLARE
+      public:
+	list<PhiNode*>& phis() { return _phis; }
+    CPP_DECLARE
+};
+
+}

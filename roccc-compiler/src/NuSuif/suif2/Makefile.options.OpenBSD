@@ -1,0 +1,18 @@
+
+# OpenBSD-specific makefile
+
+AWK = awk
+
+CCFLAGS += -fPIC -DPIC
+
+TARGET_LIB_RULE = defined
+
+DYNAMIC_LINKING_LIBRARY =
+
+ifneq (,$(TARGET_LIB))
+ifeq (,$(NO_DYNAMIC_LIBS))
+DLIB = $(LIBDIR)/lib$(TARGET_LIB).$(DYNAMIC_LIBEXT).0.0
+$(DLIB): $(OBJ_FILES)
+	ld -Bshareable -o $(DLIB) $(OBJ_FILES) /usr/lib/c++rt0.o $(SYS_LIBS) 
+endif
+endif

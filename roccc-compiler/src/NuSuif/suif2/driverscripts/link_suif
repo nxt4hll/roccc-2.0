@@ -1,0 +1,110 @@
+#!/bin/sh -f
+
+ncibin=@NCIHOME@/bin
+ncisolib=@NCIHOME@/solib
+if [ $LD_LIBRARY_PATH ]
+    then LD_LIBRARY_PATH=$ncisolib
+else
+    LD_LIBRARY_PATH=$ncisolib:$LD_LIBRARY_PATH
+fi
+
+usage() {
+   echo "Usage: $0 [-o outputfile] [-keep] [-v]"
+   echo "    [-arch ARCH] file1.suif file2.suif ..."
+   echo "  Link the global symbol tables of the input suif files into"
+   echo "  a single output suif file set"
+   echo "  The default output filename will be a.suif"
+   exit 1;
+}
+
+keep=0
+
+prog=program
+outputfile=""
+
+defines=""
+
+tmpfile=$$.drv
+verbose=0
+
+verbosestring=""
+
+while [ ! -z $1 ];
+  do case x"$1" in 
+    x-D*)  defines="$args $1"
+      shift ;;
+    x-U*)  defines="$args $1"
+      shift ;;
+    x-I*)  defines="$args $1"
+      shift ;;
+    x-o)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      outputfile=$1
+      shift ;;
+    x-v)  verbose=1
+          verbosestring=" -v"
+      shift ;;
+    x-f)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      tmpfile=$1
+      shift ;;
+    x-p)  shift
+      if [ -z $1 ] 
+          then usage; fi
+      prog=$1
+      shift;;
+    x-keep) keep=1
+      shift;;
+    x-*) 
+      echo "Bad option $1"; 
+      usage;;
+    *) break;;
+  esac
+done
+
+if [ -z $1 ] 
+    then usage; fi
+if [ $# -lt 1 ]
+    then echo "Error: Not enough files to link"
+    usage
+fi
+
+
+inputfiles="$*"
+
+if [ x$outputfile = x"" ]
+    then outputfile="a.suif"
+fi
+rm -f $outputfile
+
+cat <<EOF > $tmpfile
+import suifnodes
+import cfenodes
+import usefulpasses
+import transforms
+import linksuif
+link_suif ${verbosestring} ${inputfiles}
+gc_symbol_table
+avoid_file_scope_collisions
+rename_colliding_symbols
+recycle_trash
+save ${outputfile}
+EOF
+
+if [ $verbose = 1 ]
+    then echo $ncibin/suifdriver -f $tmpfile
+fi
+$ncibin/suifdriver -f $tmpfile 2>&1
+if [ $? != 0 ]
+   then echo "FAILED: $ncibin/suifdriver -f $tmpfile"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then if [ $verbose = 1 ]
+    then echo rm -f $tmpfile
+  fi
+  rm -f $tmpfile
+fi
+

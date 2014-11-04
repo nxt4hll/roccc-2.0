@@ -1,0 +1,4 @@
+import basicnodes
+import suifnodes
+load hello_world.suif
+print

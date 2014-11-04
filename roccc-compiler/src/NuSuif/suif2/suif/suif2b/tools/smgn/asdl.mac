@@ -1,0 +1,548 @@
+# macros
+<set tmp_counter to 0>
+<set index_list_counter to 0>
+<set first_if to 1>
+
+<set glob_mod_name to suif>
+
+<def print_type_spec_simple ts>
+	<if (exists ts.type_spec.identifier)>
+		<let ttext be ts.type_spec.identifier>
+		<if (ttext == "LString")>string<endmac><endif>
+		<if (ttext == "String")>string<endmac><endif>
+		<if (ttext == "IInteger")>int<endmac><endif>
+		<if (ttext == "bool")>int<endmac><endif>
+		<if (ttext == "char")>int<endmac><endif>
+		<if (ttext == "long")>int<endmac><endif>
+		<if (ttext == "double")>int<endmac><endif>
+		<if (ttext == "int")>int<endmac><endif>
+		<if (ttext == "vector")><print_type_spec ts.type_spec.template_part.type_specifications.type_specification>* <set is_list to 1><endmac><endif>
+		<if (ttext == "list")><print_type_spec ts.type_spec.template_part.type_specifications.type_specification>* <set is_list to 1><endmac><endif>
+		<if (ttext == "searchable_list")><print_type_spec ts.type_spec.template_part.type_specifications.type_specification>* <set is_list to 1><endmac><endif>
+		<if (ttext == "indexed_list")>
+			<set is_list to 1>
+			<print_type_spec_simple ts.type_spec.template_part.type_specifications[0].type_specification>X<print_type_spec_simple ts.type_spec.template_part.type_specifications[1].type_specification><print_index_list_num> *
+			<endmac>
+		<endif>
+		<endlet>
+#		<endmac>
+	<endif>
+	#
+	# Qualify types by their owning modules, if needed.  
+	# NB: This assumes/requires that type-names be unique across modules!!!
+	<let bar be ts.type_spec.identifier>
+		<set foo to <!CPZ ts.type_spec.identifier>>
+		<set foo to <!NSPC foo>>
+		<!LLC foo>
+	<endlet>
+<enddef>
+
+<def print_type_spec ts>
+	<if (exists ts.type_spec.identifier)>
+		<let ttext be ts.type_spec.identifier>
+		<if (ttext == "LString")>string <endmac><endif>
+		<if (ttext == "String")>string <endmac><endif>
+		<if (ttext == "IInteger")>int <endmac><endif>
+		<if (ttext == "bool")>int <endmac><endif>
+		<if (ttext == "char")>int <endmac><endif>
+		<if (ttext == "long")>int <endmac><endif>
+		<if (ttext == "double")>int <endmac><endif>
+		<if (ttext == "int")>int <endmac><endif>
+		<if (ttext == "vector")><print_type_spec ts.type_spec.template_part.type_specifications.type_specification>* <endmac><endif>
+		<if (ttext == "list")><print_type_spec ts.type_spec.template_part.type_specifications.type_specification>* <endmac><endif>
+		<if (ttext == "searchable_list")><print_type_spec ts.type_spec.template_part.type_specifications.type_specification>* <endmac><endif>
+		<if (ttext == "indexed_list")>
+			<set is_list to 1>
+			<print_type_spec_simple ts.type_spec.template_part.type_specifications[0].type_specification>X<print_type_spec_simple ts.type_spec.template_part.type_specifications[1].type_specification><print_index_list_num> *
+			<endmac>
+		<endif>
+		<endlet>
+#		<endmac>
+	<endif>
+	#
+	# Qualify types by their owning modules, if needed.  
+	# NB: This assumes/requires that type-names be unique across modules!!!
+	<let bar be ts.type_spec.identifier>
+		<set foo to <!CPZ ts.type_spec.identifier>>
+		<set foo to <!NSPC foo>>
+		<!LLC foo>   
+	<endlet>
+<enddef>
+
+# This prints out a unique number for the type names of indexed_list
+# pair types.  It has to be pre-incremented because I need the most
+# recent counter value for outputting translation code.
+<def print_index_list_num>
+	<set index_list_counter to <eval (index_list_counter + 1)>>
+	<index_list_counter>
+<enddef>
+
+# Print a unique name based on tmp.
+<def print_tmp tmp>
+	<tmp><tmp_counter>
+	<set tmp_counter to <eval (tmp_counter + 1)>>
+<enddef>
+
+<set list_tmp_counter to 0>
+<def print_list_temp tmp>
+	<tmp><list_tmp_counter>
+	<set list_tmp_counter to <eval (list_tmp_counter + 1)>>
+<enddef>
+
+#	Go through and build all the indexed list types.  I really hate this.
+<def build_cross_types module_spec>
+#	<foreach module_spec in modules.module_spec>
+#	<let module_name be module_spec.identifier>
+#    <file  <!LOWS module_name>.asdl>
+	<foreach declaration in module_spec.declarations.declaration>
+		<if (exists declaration.construct_declaration.text)>
+			<foreach rfd in declaration.construct_declaration.construct_parts.construct_part.regular_field_declaration>
+				<if (exists rfd.type_specification.type_spec.template_part.text)>	
+				<if (rfd.type_specification.type_spec.identifier == "indexed_list")>
+					<print_type_spec_simple rfd.type_specification.type_spec.template_part.type_specifications[0].type_specification>X
+					<print_type_spec_simple rfd.type_specification.type_spec.template_part.type_specifications[1].type_specification><print_index_list_num> = ( 
+					<print_type_spec rfd.type_specification.type_spec.template_part.type_specifications[0].type_specification>  a
+					<print_type_spec_simple rfd.type_specification.type_spec.template_part.type_specifications[0].type_specification>,  
+					<print_type_spec rfd.type_specification.type_spec.template_part.type_specifications[1].type_specification>  a
+					<print_type_spec_simple rfd.type_specification.type_spec.template_part.type_specifications[1].type_specification> ) 
+					</>
+				<endif>
+				<endif>
+			<endfor>
+		<endif>
+	<endfor>	
+#	<endlet>
+#	<endfor>
+<enddef>
+					
+# Print something for the translator that will do the right thing
+# for the constructor parameters.  RECURSION TREE FROM HELL!!!!!!
+<def print_trans ts id>
+	# If it's one of the list types then we have to do something funky.
+	# Presume that the new variable has been declared and filled in by
+	# the function below to generate list builder code.
+	<if (exists ts.type_spec.template_part.text)>
+		pNew<!CPZ id>List
+		<endmac>
+	<endif>
+
+	# Otherwise, we just spit out the appropriate accessor, translating
+	# if necessary (i.e. if it is a defined type).
+	<let ttext be ts.type_spec.identifier>
+	<if (ttext == "LString")>((char*)(const char*)(((<class_name>*)pSuifObj)->get_<!UNL id>()))<endmac><endif>
+	<if (ttext == "String")>((char*)(const char*)(((<class_name>*)pSuifObj)->get_<!UNL id>()))<endmac><endif>
+	<if (ttext == "IInteger")>(((<class_name>*)pSuifObj)->get_<!UNL id>()).c_int()<endmac><endif>
+	<if (ttext == "bool")>((<class_name>*)pSuifObj)->get_<!UNL id>()<endmac><endif>
+	<if (ttext == "char")>((<class_name>*)pSuifObj)->get_<!UNL id>()<endmac><endif>
+	<if (ttext == "long")>((<class_name>*)pSuifObj)->get_<!UNL id>()<endmac><endif>
+	<if (ttext == "double")>((<class_name>*)pSuifObj)->get_<!UNL id>()<endmac><endif>
+	<if (ttext == "int")>((<class_name>*)pSuifObj)->get_<!UNL id>()<endmac><endif>
+	<set trans_fun to trans>
+		<if (exists value_type[<ttext>])>
+			<if (value_type[<ttext>] == "true")>
+				<set trans_fun to trans_<val_id>>
+			<endif>
+		<endif>
+    (<glob_mod_name>_<!LLC ttext>*)<trans_fun>(((<class_name>*)pSuifObj)->get_<!UNL id>())
+	<endlet>
+<enddef>
+
+#<def print_trans_type mod_name type_string>
+<def print_trans_type type_string>
+	<if (type_string == "LString")>string<endmac><endif>
+	<if (type_string == "String")>string<endmac><endif>
+	<if (type_string == "IInteger")>int<endmac><endif>
+	<if (type_string == "bool")>int<endmac><endif>
+	<if (type_string == "char")>int<endmac><endif>
+	<if (type_string == "long")>int<endmac><endif>
+	<if (type_string == "double")>int<endmac><endif>
+	<if (type_string == "int")>int<endmac><endif>
+	<glob_mod_name>_<type_string>
+<enddef>
+
+<def print_trans_list_type type_string>
+	<if (type_string == "LString")>string<endmac><endif>
+	<if (type_string == "String")>string<endmac><endif>
+	<if (type_string == "IInteger")>int<endmac><endif>
+	<if (type_string == "bool")>int<endmac><endif>
+	<if (type_string == "char")>int<endmac><endif>
+	<if (type_string == "long")>int<endmac><endif>
+	<if (type_string == "double")>int<endmac><endif>
+	<if (type_string == "int")>int<endmac><endif>
+	<glob_mod_name>_<!LLC type_string>
+<enddef>
+
+# Prints translation code to get the value of an iterator.
+<def print_get_iter_value type_string tt>
+	<if (type_string == "LString")>(char*)(const char*)(<tt>.current())<endmac><endif>
+	<if (type_string == "String")>(char*)(const char*)(<tt>.current())<endmac><endif>
+	<if (type_string == "IInteger")><tt>.current()<endmac><endif>
+	<if (type_string == "bool")><tt>.current()<endmac><endif>
+	<if (type_string == "char")><tt>.current()<endmac><endif>
+	<if (type_string == "long")><tt>.current()<endmac><endif>
+	<if (type_string == "double")><tt>.current()<endmac><endif>
+	<if (type_string == "int")><tt>.current()<endmac><endif>
+	<set trans_fun to trans>
+		<if (exists value_type[<type_string>])>
+			<if (value_type[<type_string>] == 1)>
+				<set trans_fun to trans_<val_id>>
+			<endif>
+		<endif>
+	(<glob_mod_name>_<!LLC type_string>*)<trans_fun>(<tt>.current())
+<enddef>
+
+<def print_get_index_iter_val type_string tt> 
+	<if (type_string == "LString")>((char*)(const char *)<tt>)<endmac><endif>
+	<if (type_string == "String")>((char*)(const char *)<tt>)<endmac><endif>
+	<if (type_string == "IInteger")>(<tt>).c_int()<endmac><endif>
+	<if (type_string == "bool")><tt><endmac><endif>
+	<if (type_string == "char")><tt><endmac><endif>
+	<if (type_string == "long")><tt><endmac><endif>
+	<if (type_string == "double")><tt><endmac><endif>
+	<if (type_string == "int")><tt><endmac><endif>
+	<set trans_fun to trans>
+		<if (exists value_type[<type_string>])>
+			<if (value_type[<type_string>] == 1)>
+				<set trans_fun to trans_<val_id>>
+			<endif>
+		<endif>
+	(<glob_mod_name>_<!LLC type_string>*)<trans_fun>(<tt>)
+<enddef>
+
+# Print some code to build a new list from the old.
+<def print_list_builder ts id>
+	<if (exists ts.type_spec.template_part.text)>
+		<let temp_id be ts.type_spec.template_part.type_specifications[0].type_specification.type_spec.identifier> 
+		<if (ts.type_spec.identifier == "indexed_list")>
+			<let temp_id2 be ts.type_spec.template_part.type_specifications[1].type_specification.type_spec.identifier> 
+			<set big_name to <print_type_spec_simple ts.type_spec.template_part.type_specifications[0].type_specification>X<print_type_spec_simple ts.type_spec.template_part.type_specifications[1].type_specification><index_list_counter>>
+			<big_name>_list *pNew<!CPZ id>List;</>
+			<set loc_tmp to <print_list_temp "pTmp">>
+			<big_name>_list **<loc_tmp> = new <big_name>_list*;</>
+			Iter\<<class_name>::<!SING id>_pair\> <> 
+			p<!CPZ id>Iter = ((<class_name>*)pSuifObj)->get_<!SING id>_iterator();</>
+			#pTmp = &pNew<!CPZ id>List;</>
+			<loc_tmp> = &pNew<!CPZ id>List;</>
+			while (p<!CPZ id>Iter.is_valid()) {</+4></>
+				*<loc_tmp> = new <big_name>_list(0, 0);</>
+				<class_name>::<!SING id>_pair tmpPair = p<!CPZ id>Iter.current();</>
+				#(*pTmp)->head = new <big_name>(
+				(*<loc_tmp>)->head = new <big_name>(
+					<print_get_index_iter_val temp_id "tmpPair.first">,
+					<print_get_index_iter_val temp_id2 "tmpPair.second">
+				);</>
+				<loc_tmp> = &((*<loc_tmp>)->tail);</>
+				p<!CPZ id>Iter.next();</-4></>
+			}</>
+			<endlet>
+		# Else is not an indexed list, just a normal list.
+		<else>
+			<print_trans_list_type temp_id>_list *pNew<!CPZ id>List = 
+				new <print_trans_list_type temp_id>_list(0, 0);</>
+			<set loc_tmp to <print_list_temp "pTmp">>
+			<print_trans_list_type temp_id>_list **<loc_tmp> = 
+				new <print_trans_list_type temp_id>_list*;</>
+			Iter\<<temp_id>
+			<if (exists ts.type_spec.template_part.type_specifications[0].type_specification.pointer_qual.text)>*<endif>
+			\> p<!CPZ id>Iter = ((<class_name>*)pSuifObj)->get_<!SING id>_iterator();</></>
+			<loc_tmp> = &pNew<!CPZ id>List;</>
+			while (p<!CPZ id>Iter.is_valid()) {</+4></>
+				*<loc_tmp> = new <print_trans_list_type temp_id>_list(0,0);</>
+				<set raboof to p<!CPZ id>Iter>
+				(*<loc_tmp>)->head = <print_get_iter_value temp_id raboof>;</>
+				<loc_tmp> = &((*<loc_tmp>)->tail);</-4></>
+				p<!CPZ id>Iter.next();
+			}</>
+		<endif>
+		<endlet>
+		<endlet>
+	<endif>
+<enddef>
+
+# Map out the owning modules for each type.
+<def map_owner_mod>
+	<foreach mod in modules>
+		<foreach decl in mod.module_spec.declarations.declaration.construct_declaration>
+			<set type_owner[<decl.identifier>] to <mod.module_spec.identifier>> 
+		<endfor>
+	<endfor>
+<enddef>
+
+# Generate a map that defines which types are leaf types.
+<def map_childless>
+	<foreach mod in modules>
+		<foreach class_dec in mod.module_spec.declarations.declaration.construct_declaration>	
+			<set childless[<class_dec.identifier>] to 1>
+			<foreach mod2 in modules>
+				<foreach decl in mod2.module_spec.declarations.declaration.construct_declaration such that (decl.parent.identifier == class_dec.identifier)>
+					<set childless[<class_dec.identifier>] to 0>
+				<endfor>
+			<endfor>
+		<endfor>
+	<endfor>
+<enddef>
+
+<def map_parents>
+	<foreach mod in modules>
+		<foreach class_dec in mod.module_spec.declarations.declaration.construct_declaration>
+			<set parent[<class_dec.identifier>] to "NO_PARENT">
+			<foreach mod2 in modules>
+				<foreach decl in mod2.module_spec.declarations.declaration.construct_declaration such that (decl.identifier == class_dec.parent.identifier)>
+					<set parent[<class_dec.identifier>] to <decl.identifier>>
+				<endfor>
+			<endfor>
+		<endfor>
+	<endfor>
+<enddef>
+
+<def map_no_attributes>
+	<foreach mod in modules>
+		<foreach class_dec in mod.module_spec.declarations.declaration.construct_declaration>
+			<if (!exists class_dec.construct_parts.construct_part.regular_field_declaration.text)>
+				<set no_attributes[<class_dec.identifier>] to 1>
+			<endif>
+			<if (exists class_dec.construct_parts.construct_part.regular_field_declaration.text)>
+				<set no_attributes[<class_dec.identifier>] to 0>
+			<endif>
+		<endfor>
+	<endfor>
+<enddef>
+
+<def map_value_decls>
+	<foreach mod in modules>
+		<foreach decl in mod.module_spec.declarations.declaration>
+			<if (exists decl.value_declaration.text)>
+				<set value_type[<decl.value_declaration.identifier>] to 1>
+			<else>
+				<set value_type[<decl.construct_declaration.identifier>] to 0>
+			<endif>
+		<endfor>
+	<endfor>
+<enddef>
+
+#==================== start of actual code     ==============================
+
+#Start top of trans.cpp			
+<file trans.cpp>
+	\#include "forwarders.h"</>
+	\#include "basic.h"</>
+	\#include "suif.hxx"</>
+	\#include "suif.h"</>
+	\#include "suif_env.h"</>
+	\#include \<typeinfo\> </>
+	\#include "suif_map.h"</>
+	</>
+
+# Output forward reference to trans.
+void *trans(SuifObject *pSuifObj);</></>
+
+# Output translation functions for value types. *sigh*
+
+<foreach mod_spec in modules.module_spec>
+	<let module_name be mod_spec.identifier>
+	<foreach decl in mod_spec.declarations.declaration>
+		<if (exists decl.value_declaration.text)>
+			<set val_id to <decl.value_declaration.identifier>>
+			# Get module name for this value type
+			
+			<glob_mod_name>_<!LLC val_id> *</>
+			trans_<val_id>(const <val_id>& p<val_id>)</>
+			{</+4></>
+			<foreach ts in decl.value_declaration.clauses.type_specification>
+				<set mem_id to <ts.type_spec.identifier>>
+				if (p<val_id>.is_<!UNL mem_id>()) {</+4></>
+					return (new <glob_mod_name>_<val_id><!CPZ mem_id>(
+						(<glob_mod_name>_<!LLC mem_id>*)trans(p<val_id>.get_<!UNL mem_id>())));</-4></>
+				}</>
+			<endfor>
+				return 0;
+			</-4></>
+			}</>
+		<endif>
+	<endfor>
+	<endlet>
+<endfor>
+
+#	<map_owner_mod>
+<map_value_decls>
+<map_childless>
+<map_parents>
+<map_no_attributes>
+
+suif_map\<SuifObject *, void**\> theMap;</></>
+
+void *</>
+trans(SuifObject *pObj)</>
+{</+4></>
+if (!pObj)</+4>return 0;</-4></>
+
+#	Start out by mapping all the parent trees to the class dec trees so we can
+#	find parent trees without doing a complete search
+<file suif.asdl>
+module suif</>{</>
+<foreach module_spec in modules.module_spec>
+#  <let module_name be module_spec.identifier>
+  <let module_name be "suif">
+    
+#    <file  <!LOWS module_name>.asdl>
+	<file suif.asdl>
+#	module <module_name>
+	
+    </>
+#	<if (exists module_spec.imports.import.text)>
+#		</+4>
+#		(</>
+#		<foreach identifier in module_spec.imports.import.identifier>
+#				imports <identifier></>
+#      	<endfor>
+#		</-4>
+#		)</>
+#	<endif>
+#	</>
+#	{
+	</>
+	#
+
+	<set index_list_counter to 0>
+	# This following line builds up a bunch of cross-product types that
+	# correspond with the types of indexed_lists.
+	<build_cross_types module_spec>
+
+	<set index_list_counter to 0>
+	<set comma_start to 0>
+#	<file <!LOWS module_name>.asdl>
+    <foreach declaration in module_spec.declarations.declaration>
+		<if (exists declaration.construct_declaration.text)>
+    	<let class_name be declaration.construct_declaration.identifier>
+		#
+		# Output ASDL product types.
+	#	<if (exists declaration.construct_declaration.construct_parts.construct_part.text)>
+    		</>
+			<!LLC class_name> = </+8></>
+			<set saw_a_non_alias to 0>
+			<set bar_start to 0>
+			<foreach mod in modules>
+				<foreach decl in mod.module_spec.declarations.declaration.construct_declaration>
+					<let decl_id be decl.identifier>
+					<if ((parent[<decl.identifier>] == "NO_PARENT") |
+						 (class_name == parent[<decl.identifier>]))>
+						<if (bar_start == 1)>| <else>  <endif>
+						<!CPZ decl_id>
+						<set comma_start to 0>
+#						<if ((childless[<decl_id>] == 1) & (no_attributes[<decl_id>] == 0))>
+#							(
+#							<foreach rfd in decl.construct_parts.construct_part.regular_field_declaration>
+#								<if (saw_a_non_alias == 0)>
+#									<set is_list to 0>
+#									<if (comma_start == 1)>,</><endif>
+#									<print_type_spec rfd.type_specification>
+#									<if (exists rfd.may_be_present.text)>
+#										<if (is_list == 1)>* <endif>
+#									<endif> <rfd.identifier>
+#								<endif>
+#								<set comma_start to 1>	
+#							<endfor>
+#							)
+#						<endif>
+						<set comma_start to 0>
+#						<if (childless[<decl_id>] == 0)>
+							(
+#							<if (type_owner[<decl_id>] != module_name)>
+#								<type_owner[<decl_id>]>.
+#							<endif>
+							<!LLC decl_id>
+							)
+#						<endif>
+						</>
+						<set bar_start to 1>
+					<endif>
+					<endlet>
+				<endfor>
+			<endfor>
+			</-8></>
+			<if (childless[<class_name>] == 1)>
+				<!CPZ class_name>Cons</>
+			<endif>
+			<foreach rfd in declaration.construct_declaration.construct_parts.construct_part.regular_field_declaration>
+				<if (saw_a_non_alias == 0)>
+   					attributes(</+1></>
+					<set saw_a_non_alias to 1>
+				<endif>
+				<set is_list to 0>
+				<if (comma_start == 1)>,</><endif>
+				<print_type_spec rfd.type_specification>
+				<if (exists rfd.may_be_present.text)>
+					<if (is_list == 1)>
+						* 
+					<endif>
+				<endif> <rfd.identifier>
+				<set comma_start to 1>
+			<endfor>
+			<if (saw_a_non_alias == 1)>
+				</-1>
+				)</>
+			<endif>
+			<set comma_start to 0>
+		# Output translation (SUIF->Zephyr) code
+			<if (saw_a_non_alias == 1)>
+			<file trans.cpp>
+			<if (first_if != 1)>else <endif>
+			<set first_if to 0>
+			if (typeid(*pObj) == typeid(<class_name>)) { </+4></>
+				suif_map\<SuifObject*, void**\>::iterator NewObj;</>
+				if ((NewObj = theMap.find(pObj)) != theMap.end()) {</+4></>
+					return *((*NewObj).second);</-4></>
+				}</>
+				void **ppVoid = new void*;		
+				theMap.enter_value(pObj, ppVoid);
+				<class_name> *pSuifObj = dynamic_cast\<<class_name>\*>(pObj);</>
+	fprintf(stderr, "trans for %s\\n", (const char*)(pSuifObj->get_class_name()));</>
+			<foreach rfd in declaration.construct_declaration.construct_parts.construct_part.regular_field_declaration>	
+				<print_list_builder rfd.type_specification rfd.identifier>
+			<endfor>
+			<glob_mod_name>_<!LLC class_name> *pNew = new <>
+			<glob_mod_name>_<!CPZ class_name>(</+4></>
+			<foreach rfd in declaration.construct_declaration.construct_parts.construct_part.regular_field_declaration>	
+				<if (comma_start == 1)>,</><endif>
+				<print_trans rfd.type_specification rfd.identifier>
+				<set comma_start to 1>	
+			<endfor>
+			<set comma_start to 0>
+			</-4></>);</>
+			*ppVoid = (void*)pNew;</>
+			return pNew;</-4></>
+			}</>
+			<endif>
+		# Done outputting translation code
+			<file suif.asdl>
+		# End of outputing product types
+		<endlet>
+		#
+		# Else we have a value_declaration
+		<else>
+			<!LLC declaration.value_declaration.identifier> = 
+			</+4></>
+			<set bar_start to 0>
+			<foreach type_specification in declaration.value_declaration.clauses.type_specification>
+				<set val_type to <print_type_spec type_specification>>
+				<if (bar_start == 1)></>| <endif>
+				<!CPZ declaration.value_declaration.identifier><!CPZ val_type>(<val_type>)
+				<set bar_start to 1>
+			<endfor>
+			</-4>
+			</>
+		<endif>
+		
+	<endfor>
+	<endlet>
+	  
+<endfor>
+	#Output closing brace of module
+	}	
+
+# Output closing brace of function trans
+<file trans.cpp>
+</>
+	else return 0;</-4></>
+
+}</></>

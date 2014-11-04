@@ -1,0 +1,45 @@
+#!/bin/sh -f
+
+# Output using m2a with either Cfg or InstrList input form.
+#
+# do_print INPUTFILE OUTPUTFILE
+#
+
+infile="$1"
+outfile="$2"
+
+usage() {
+   echo "Usage: $0 INPUTFILE [OUTPUTFILE]"
+   exit 1;
+}
+
+if [ -z "$infile" ]
+then
+    usage
+fi
+
+me=`basename $0`
+tmp=/tmp/$me$$
+
+status=1
+trap "rm -f $tmp; exit \$status;" 0 1 2 3 15
+
+cat <<EOF > $tmp
+require basicnodes
+require suifnodes
+require cfenodes
+require machine
+require cfg
+load $infile
+require cfg2il
+cfg2il
+require m2a
+m2a $outfile
+EOF
+
+suifdriver -f $tmp
+status=$?
+if [ $status != 0 ]
+   then echo "$0 failed"
+   exit						# trap handler cleans up
+fi

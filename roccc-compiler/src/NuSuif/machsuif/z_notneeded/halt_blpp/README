@@ -1,0 +1,9 @@
+The acronym `blpp' stands for Ball-Larus path profiling, a method that
+measure the frequencies of acyclic program paths taken at run time.
+
+The HALT library document summaries the advantages of the method and
+sketches our implementation of it.
+
+Beware, however, that this implementation is new and has not been
+vigorously exercised.  We include it in the current distribution because
+it illustrates one way to use and extend the HALT system.

@@ -1,0 +1,14 @@
+cd $NCIHOME
+cd ..
+tar cvf $HOME/nci.tar `cat $NCIHOME/packing.lst`
+mkdir -p release
+cd release
+rm -rf nci
+tar xvf $HOME/nci.tar
+cd nci
+$NCIHOME/cleanup_packages
+cd ..
+tar cvf $HOME/nci.tar nci
+rm -rf release
+
+

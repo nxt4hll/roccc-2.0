@@ -1,0 +1,65 @@
+<<ex2/ex2.cpp>>=
+/* file "ex2/ex2.cpp" */
+
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard College
+
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the "machine/copyright.h" include file.
+*/
+
+#include <machine/copyright.h>
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma implementation "ex2/ex2.h"
+#endif
+
+#include <machine/machine.h>
+
+#include "ex2.h"
+
+#ifdef USE_DMALLOC
+#include <dmalloc.h>
+#define new D_NEW
+#endif
+
+<<[[Ex2::do_opt_unit]]>>
+<<[[Ex2::do_opt_unit]]>>=
+void
+Ex2::do_opt_unit(OptUnit *unit)
+{
+    IdString name = get_name(get_proc_sym(unit));
+    printf("Processing procedure \"%s\"\n", name.chars());
+
+    // get the body of the OptUnit
+    AnyBody *body = get_body(unit);
+
+    // verify that it is an InstrList
+    claim (is_a<InstrList>(body),
+	   "expected OptUnit's body in InstrList form");
+    InstrList *mil = (InstrList *)body;
+
+    printf(" ... has %d total instructions\n", size(mil));
+
+    // loop through all instructions counting some different kinds
+    int tot_cti = 0, tot_dot = 0, tot_label = 0, tot_other = 0;
+    for (InstrHandle mi_h = start(mil); mi_h != end(mil); ++mi_h) {
+	Instr *mi = *mi_h;
+
+	if (is_cti(mi))		// control-transfer instructions
+	    tot_cti++;
+	else if (is_dot(mi))	// assember directives
+	    tot_dot++;
+	else if (is_label(mi))	// labels
+	    tot_label++;
+	else
+	    tot_other++;
+    }
+
+    printf(" ...     %d control-transfer instructions\n", tot_cti);
+    printf(" ...     %d assembler directives\n", tot_dot);
+    printf(" ...     %d code labels\n", tot_label);
+    printf(" ...     %d other instructions\n", tot_other);
+}

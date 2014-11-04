@@ -1,0 +1,107 @@
+\documentclass{article}\usepackage{noweb}
+\noweboptions{smallcode}
+
+% Give the l2h (LaTeX to HTML) filter some hints
+%
+% l2h ignore nwcodepenalty =
+% l2h ignore raggedbottom
+% l2h envblock openissue blockquote
+
+% Adjust dimensions before setting \pagestyle: it looks at
+% some of them
+%
+\textwidth 16.0cm
+\textheight 22.0cm
+\oddsidemargin 0.1in
+\evensidemargin 0.1in
+\topmargin -0.2in
+\parindent 0.0in
+\parskip 1.5ex
+\sloppy
+\raggedbottom
+
+\pagestyle{noweb}
+
+% Replace some noweb.sty definitions to improve page breaks
+%
+\makeatletter
+
+\def\nw@laterfilename#1{%
+  \endgroup\markboth{#1}{#1}}		% Omit \clearpage for new source file
+
+\nwcodepenalty=9999			% Was =\@highpenalty (>9999 disallows
+					% ... _any_ break in code)
+\def\nwbegincode#1{%
+  \begingroup
+    \topsep \nwcodetopsep
+    \@beginparpenalty \nwcodepenalty	% Use \nwcodepenalty ...
+    \@endparpenalty -\nwcodepenalty	% ... instead of \@highpenalty
+    \@begincode}
+\def\nwendcode{%
+  \endtrivlist \endgroup \goodbreak}	% Use \goodbreak ...
+\let\nwdocspar=\goodbreak		% ... instead of \filbreak
+
+\makeatother
+
+\title{The Machine-SUIF Cookbook}
+\author{{\em Release version 2.02.07.15} \\
+	\\
+	Glenn Holloway and Michael D. Smith \\
+	\{holloway,smith\}@eecs.harvard.edu \\
+	Division of Engineering and Applied Sciences \\
+	Harvard University}
+
+\begin{document}
+\maketitle
+
+\vspace*{1in}
+
+\begin{abstract}
+
+This cookbook contains several complete (runnable) examples of a
+variety of simple Machine-SUIF compiler passes.  Along with the {\em
+OPI User's Guide}, these examples should help you to start writing
+Machine-SUIF optimization passes quickly.  We also provide a target
+library for a very simple machine.  Please feel free to use these
+examples as the starting point for your work.
+
+\end{abstract}
+
+\newpage
+\tableofcontents
+
+% Start a new chunk to cause noweb to put source filename in heading
+%
+@
+
+\newpage
+
+\section{Introduction}
+
+As stated in our overview document, Machine SUIF is a flexible,
+extensible, and easily-understood infrastructure for constructing
+compiler back ends.  We built Machine SUIF with the philosophy that
+the ``textbook'' portions, i.e. the optimization and analysis passes,
+should be coded in a way that makes them as independent of the
+compiler environment and compilation targets as possible. To achieve
+this goal, we have defined an interface layer that we refer to as the
+{\em Optimization Programming Interface} (OPI).  All of the examples
+in this cookbook adhere to this interface.
+
+This cookbook leads you through a number of complete and working
+Machine-SUIF passes.  We start with an extremely simple pass, the
+equivalent of the C ``Hello World'' program.  This example illustrates
+the structure of every Machine-SUIF pass.  We build from there adding
+a few new OPI features in every example.  By the time you have
+completed the last example, you should have enough knowledge to
+understand one of the ``real'' analysis or optimization passes
+distributed with Machine SUIF.  If you are looking for one of our
+simpler ``real'' passes to investigate next, we encourage you to read
+through the [[peep]] pass.  It serves as an good example of how
+to use our control-flow-graph library and our bit-vector dataflow
+classes.
+
+If you think that you have a ``cookbook'' example pass that
+illustrates a particularly tricky concept, please send it to us.
+We'll be happy to include it in this cookbook for the benefit of
+others.

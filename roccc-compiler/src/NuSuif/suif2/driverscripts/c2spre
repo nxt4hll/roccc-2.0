@@ -1,0 +1,165 @@
+#!/bin/sh -f
+
+ncibin=@NCIHOME@/bin
+ncisolib=@NCIHOME@/solib
+if [ x$LD_LIBRARY_PATH  = x"" ]
+    then LD_LIBRARY_PATH=$ncisolib
+else
+    LD_LIBRARY_PATH=$ncisolib:$LD_LIBRARY_PATH
+fi
+
+usage() {
+   echo "Usage: $0 [-o outputfile] [-keep] [-v]"
+   echo "    [-pipeline pass] [-require module]"
+   echo "    [-Ddefine] [-Uundefs] [-Iinclude] [-arch ARCH] file.c"
+   echo "  Create a suif file from the input c file."
+   echo "  Uses a native C preprocessor, the edg frontend"
+   echo "  the edgsuif converter, and some dismantlers to"
+   echo "  build a the edgsuif converter, and some dismantlers to"
+   echo "  create a suif file (with only SUIF and BASIC nodes) "
+   echo "  from the input c file."
+   echo "  When -require is used, the named modules will be loaded"
+   echo "  before dismantling"
+   echo "  When -pipeline is used, the named pass will be executed"
+   echo "  before other dismantlers."
+   echo "  The architecture will be read from the $ARCH variable"
+   echo "  or the command line -arch flag, or the output of 'uname'"
+   exit 1;
+}
+
+keep=0
+
+prog=program
+outputfile=""
+pipeline=""
+require=""
+default_ext=.suif
+
+defines=""
+
+tmpfile=$$.drv
+verbose=0
+
+while [ ! -z $1 ];
+  do case x"$1" in 
+    x-D*)  defines="$args $1"
+      shift ;;
+    x-U*)  defines="$args $1"
+      shift ;;
+    x-I*)  defines="$args $1"
+      shift ;;
+    x-o)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      outputfile=$1
+      shift ;;
+    x-pipeline)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      pipeline_pass=$1
+      shift ;;
+    x-require)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      require="require $1"
+      shift ;;
+    x-v)  verbose=1
+      shift ;;
+    x-f)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      tmpfile=$1
+      shift ;;
+    x-p)  shift
+      if [ -z $1 ] 
+          then usage; fi
+      prog=$1
+      shift;;
+    x-keep) keep=1
+      shift;;
+    x-*) 
+      echo "Bad option $1"; 
+      usage;;
+    *) break;;
+  esac
+done
+
+if [ -z $1 ] 
+    then usage; fi
+if [ $# -ne 1 ]
+    then echo "Error: Too many files in the input line"
+    usage
+fi
+if  [ x${ARCH} = x"" ]
+    then ARCH=`uname`
+    export ARCH
+fi
+
+# In general, pull the DEFFLAGS out of the gcc -E -v DEFINES
+# PGFLAGS are usually the same
+# INCL comes mostly from the gcc -v include list
+if  [ ${ARCH} = "Linux" ]
+# LINUX
+    then DEFFLAGS='-D__ELF__ -Dunix -Di386 -D__i386__ -Dlinux -D__unix__ -D__linux__ -D__unix -D__i386 -D__linux'
+    PGFLAGS='-D__PGI -D__NO_MATH_INLINES -w --c --ieee 1  -q'
+    INCL='-I/usr/i386-redhat-linux/include -I/usr/lib/gcc-lib/i386-redhat-linux/egcs-2.91.66/include -I/usr/include'
+
+elif [ ${ARCH} = "OSF1" ]
+# ALPHA OSF1
+    then DEFFLAGS='-Dunix -D__osf__ -D_LONGLONG -DSYSTYPE_BSD -D_SYSTYPE_BSD -D__unix__ -D__osf__ -D_LONGLONG -D__SYSTYPE_BSD__ -D_SYSTYPE_BSD -D__unix -D__SYSTYPE_BSD -D__LANGUAGE_C__ -D__LANGUAGE_C -DLANGUAGE_C -D__alpha -D__alpha__ -D__alpha_ev5__'
+    PGFLAGS='-D__PGI -D__extension__= -D__signed__=signed -D__inline__= -D__NO_MATH_INLINES --c -q'
+    INCL='-I/usr/local/include -I/usr/local/ultra/alphaev5-dec-osf4.0d/include -I/usr/local/ultra/lib/gcc-lib/alphaev5-dec-osf4.0d/egcs-2.91.66/include -I/usr/include'
+
+elif [ ${ARCH} = "SunOS" ]
+#SUN solaris
+    then DEFFLAGS='-Dsparc -Dsun -Dunix -D__svr4__ -D__SVR4 -D__sparc__ -D__sun__ -D__unix__ -D__svr4__ -D__SVR4 -D__sparc -D__sun -D__unix -D__GCC_NEW_VARARGS__'
+    PGFLAGS='-D__PGI -D__NO_MATH_INLINES -w --c --ieee 1  -q'
+    INCL='-I/usr/local/include -I/usr/pubsw/include -I/usr/pubsw/lib/gcc-lib/sparc-sun-solaris2.6/2.8.1/include -I/usr/include'
+
+else echo "Unknown ARCH $ARCH"
+# UNKNOWN
+    exit 2
+fi
+
+
+
+base=`basename $1 .c`
+if [ `basename $1` != $base.c ]
+    then echo "Error: Input file '$1' does not have the .c suffix"
+    usage
+fi
+
+base=`basename $1 .c`
+
+if [ x$outputfile = x"" ]
+    then outputfile="$base"$default_ext
+fi
+
+rm -f $outputfile ${base}.cil ${base}.spre
+
+
+if [ $verbose = 1 ]
+    then echo $ncibin/pgcpp1 ${defines} ${DEFFLAGS} ${PGFLAGS} ${INCL} -o ${base}.cil $1
+fi
+$ncibin/pgcpp1 ${defines} ${DEFFLAGS} ${PGFLAGS} ${INCL} -o ${base}.cil $1
+if [ $? != 0 ]
+   then echo "FAILED: pgcpp1 ${defines} ${DEFFLAGS} ${PGFLAGS} ${INCL} -o ${base}.cil $1"
+   exit 1
+fi
+
+if [ $verbose = 1 ]
+    then echo $ncibin/suifint ${base}.cil ${base}.spre
+fi
+$ncibin/suifint ${base}.cil ${base}.spre
+if [ $? != 0 ]
+   then echo "FAILED: suifint ${base}.cil ${base}.spre"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then if [ $verbose = 1 ]
+    then echo rm -f $base.cil
+  fi
+  rm -f $base.cil
+fi
+
+

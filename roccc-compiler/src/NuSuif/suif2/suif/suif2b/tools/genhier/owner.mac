@@ -1,0 +1,27 @@
+#
+#  Help to generate a hierarchy from a hoof file
+#
+
+<file owner.out>
+
+<def dump part>
+    <part.type_specification.text> <part.identifier> ;
+<enddef>
+
+  <foreach module in modules>
+   <foreach class_dec in module.module_spec.declarations.declaration.construct_declaration>
+	<class_dec.identifier> <class_dec.parent.text> { </>
+	        <foreach part in class_dec.construct_parts.construct_part.regular_field_declaration>
+			<dump part></>
+		<endfor>
+	}
+	</>
+  <endfor>
+
+ <endfor>
+
+
+
+
+
+

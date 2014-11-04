@@ -1,0 +1,286 @@
+BASICNODES = 1
+SUIFNODES = 1
+
+
+option ProjectOptions = report("disable", "CPPC1104") // expression evaluates to a constant
+{
+   option
+     link( exportAll ),
+     gen(import,yes),
+     gen(unreferenced,yes),
+     link(linkwithsharedlib),
+//   define(hash_map,"map"),
+//   define(suif_map,"map"),
+   define(_MODULE_, "\"\"" ),
+     define(MONTANA),
+     define(WIN32_LEAN_AND_MEAN),
+     define(WIN32_DLL_INTERFACE),
+//     define(USE_STL),
+     define( SUIF_MODULE, "\"suifkernel\"" ),
+//     define(DEBUG),
+     link( padding,no ),
+   //  gen(eh,no),
+//   gen(profile,yes),
+//   link(debug,yes),
+    incl( searchPath, ".;./iokernel;./suifkernel;./suifpasses;./driver;./testpasses;./basicnodes;./suifnodes;./../basetypes;./suifprinter;./samples/createnode;./../transforms;./..;./testsuifnodes;../../../include;../../../../basesuif/suif1" ),
+     gen(unreferenced,no) {
+     target "suifdriver.exe" {
+//       source type(obj) "cpppan40.obj"
+     option macros(global,yes) {
+       source type(cpp) "new", "standard_modules.cpp"
+       source type(cpp) "assert.h"
+
+       source type(cpp) "hash_table.h"
+       source type(cpp) "formatted.h"
+       source type(cpp) "lstring.h"
+       source type(cpp) "MString.h"
+       source type(cpp) "simple_stack.h"
+       source type(cpp) "suif_vector.h"
+       source type(cpp) "suif_list.h"
+       source type(cpp) "suif_hash_map.h"
+       source type(cpp) "suif_map.h"
+       source type(cpp) "sparse_vector.h"
+
+
+       source type(cpp) "iokernel/iokernel_forwarders.h"
+       source type(cpp) "suifkernel/forwarders.h"
+       source type(cpp) "iokernel/iokernel_messages.h"
+       source type(cpp) "suifkernel/suif_env.h"
+       source type(cpp) "suifkernel/suifkernel_messages.h"
+       source type(cpp) "iokernel/object.h"
+       source type(cpp) "suifkernel/suif_object.h"
+       source type(cpp) "iokernel/meta_class.h"
+       source type(cpp) "iokernel/aggregate_meta_class.h"
+       source type(cpp) "iokernel/pointer_meta_class.h"
+       source type(cpp) "iokernel/integer_meta_class.h"
+       source type(cpp) "iokernel/string_meta_class.h"
+       source type(cpp) "iokernel/object_stream.h"
+//       source type(cpp) "iokernel/input_stream.h"
+//       source type(cpp) "iokernel/output_stream.h"
+       source type(cpp) "iokernel/object_factory.h"
+       source type(cpp) "suifkernel/real_object_factory.h"
+       source type(cpp) "iokernel/binary_streams.h"
+       source type(cpp) "iokernel/clone_stream.h"
+       source type(cpp) "suifpasses/standard_modules.h"
+       source type(cpp) "suifpasses/passes.h"
+       source type(cpp) "suifpasses/dispatcher.h"
+       source type(cpp) "suifpasses/drivers.h"
+       source type(cpp) "suifpasses/suifpasses.h"
+       source type(cpp) "test_modules.h"
+       source type(cpp) "list_meta_class.h"
+       source type(cpp) "print_subsystem.h"
+       source type(cpp) "dll_subsystem.h"
+       source type(cpp) "module_subsystem.h"
+       source type(cpp) "synchronizer.h"
+       source type(cpp) "visitor_map.h"
+       source type(cpp) "io_subsystem_default_impl.h"
+       source type(cpp) "io_subsystem.h"
+       source type(cpp) "object_stream.h"
+       source type(cpp) "test_object_factory.h"
+       source type(cpp) "test_objects.h"
+       source type(cpp) "union_meta_class.h"
+       source type(cpp) "suif_clone_stream.h"
+       source type(cpp) "metaclass_visitor.h"
+       }
+
+    target "common.dll" {
+       source "lstring.cpp"
+       source "mstring.cpp"
+       source "suif_map.cpp"
+       source "hash_table.cpp"
+       source "suif_hash_map.cpp"
+       source "sparse_vector.cpp"
+       source "formatted.cpp"
+       source "i_integer.cpp"
+    }
+
+    source "walker.h"
+    target "iokernel.dll" {
+       source type(cpp) "object.cpp"
+
+       source type(cpp) "meta_class.cpp"
+       source type(cpp) "aggregate_meta_class.cpp"
+
+       source type(cpp) "object_stream.cpp"
+       source type(cpp) "clone_stream.cpp"
+       source type(cpp) "binary_streams.cpp"
+
+       source type(cpp) "object_factory.cpp"
+
+       source type(cpp) "synchronizer.cpp"
+       source "string_meta_class.cpp"
+       source "integer_meta_class.cpp"
+       source "pointer_meta_class.cpp"
+       source "lstring_meta_class.cpp"
+       source "list_meta_class.cpp"
+       source "i_integer_meta_class.cpp"
+       source "virtual_iterator.cpp"
+       source "object_wrapper.cpp"
+       source "meta_class_iter.cpp"
+       source "helper.cpp"
+       source "stl_meta_class.cpp"
+       source "union_meta_class.cpp"
+       source "iokernel_messages.cpp"
+       source "walker.cpp"
+       source "visitor_map.cpp"
+    }
+
+   source type(cpp) "suifkernel_forwarders.h"
+   source type(cpp) "utilities.h"
+   source type(cpp) "walking_maps_subsystem.h"
+   source type(cpp) "walking_maps.h"
+   source type(cpp) "group_walker.h"
+
+    target "suifkernel.dll" {
+      source "iokernel.lib"  // temporary hack otherwise link error
+      source type(cpp) "char_source.cpp"
+      source type(cpp) "suif_object.cpp"
+      source type(cpp) "suif_env.cpp"
+      source type(cpp) "real_object_factory.cpp"
+      source type(cpp) "io_subsystem.cpp"
+      source type(cpp) "io_subsystem_default_impl.cpp"
+      source type(cpp) "module_subsystem.cpp"
+      source type(cpp) "dll_subsystem.cpp"
+      source type(cpp) "subsystem.cpp"
+      source type(cpp) "print_subsystem.cpp"
+      source type(cpp) "error_subsystem.cpp"
+      source type(cpp) "module.cpp"
+      source type(cpp) "token_stream.cpp"
+      source type(cpp) "command_line_parsing.cpp"
+      source type(cpp) "utilities.cpp"
+      source type(cpp) "suif_clone_stream.cpp"
+      source type(cpp) "iter.cpp"
+      source type(cpp) "suifkernel_messages.cpp"
+      source type(cpp) "walking_maps_subsystem.cpp"
+      source type(cpp) "walking_maps.cpp"
+      source type(cpp) "suif_walker.cpp"
+      source type(cpp) "group_walker.cpp"
+    }
+
+
+   if defined(BASICNODES) {
+     option macros(global,yes) {
+         source type(cpp) "basic_forwarders.h"
+         source type(cpp) "basic.h"
+         source type(cpp) "basic_factory.h"
+         source type(cpp) "basic_constants.h"
+     }
+     target "basicnodes.dll" {
+       source type(cpp) "basic.cpp"
+//source type(cpp) "basic_cloning.cpp"
+       source type(cpp) "basic_constants.cpp"
+     }
+   }
+
+   if defined(SUIFNODES) {
+      option macros(global,yes) {
+         source type(cpp) "suif_forwarders.h"
+         source type(cpp) "suif.h"
+         source type(cpp) "suif_factory.h"
+       }
+
+
+     target "suifnodes.dll" {
+        source type(cpp) "suif.cpp"
+        //source type(cpp) "suif_cloning.cpp"
+     }
+   }
+
+
+     source type(cpp) "typebuilder/type_builder.h"
+     target "typebuilder.dll" {
+        source type(cpp) "typebuilder/type_builder.cpp"
+      }
+
+     target "testpasses.dll" {
+       source type(cpp) "test_modules.cpp"
+       source type(cpp) "test_object_factory.cpp"
+       source type(cpp) "test_objects.cpp"
+     }
+
+     target "suifpasses.dll" {
+       source type(cpp) "passes.cpp"
+       source type(cpp) "dispatcher.cpp"
+       source type(cpp) "drivers.cpp"
+       source type(cpp) "suifpasses.cpp"
+     }
+
+//     source type(cpp) "test_suifcloning.h"
+     target "testsuifnodes.dll" {
+//         source type(cpp) "testsuifnodes.cpp"
+//       source type(cpp) "test_suifcloning.cpp"
+     }
+//     target "driver.exe" {
+       source type(cpp) "suifdriver.cpp"
+//     }
+
+       target "createnode.dll" {
+          source type(cpp) "init.h"
+          source type(cpp) "create_suif_complex_input.h"
+          source type(cpp) "init.cpp"
+          source type(cpp) "create_suif_complex_input.cpp"
+
+       }
+
+       target "cloning.dll" {
+         source type(cpp) "cloning/cloner.cpp"
+       }
+
+       source type(cpp) "usefulpasses/time_module.h"
+       target "usefulpasses.dll" {
+         source type(cpp) "usefulpasses/usefulpasses.cpp"
+         source type(cpp) "usefulpasses/time_module.cpp"
+         source type(cpp) "usefulpasses/constant_folder.cpp"
+       }
+//       source type(cpp) "transforms/dismantle.h"
+       source type(cpp) "transforms/expression_dismantlers.h"
+//       source type(cpp) "transforms/make_empty_file_set_symbol_table.h"
+       source type(cpp) "transforms/procedure_walker_utilities.h"
+       source type(cpp) "transforms/statement_dismantlers.h"
+       source type(cpp) "transforms/symbol_walkers.h"
+       source type(cpp) "transforms/transforms.h"
+       source type(cpp) "transforms/unowned.h"
+       target "transforms.dll" {
+//         source type(cpp) "transforms/dismantle.cpp"
+         source type(cpp) "transforms/expression_dismantlers.cpp"
+//         source type(cpp) "transforms/make_empty_file_set_symbol_table.cpp"
+         source type(cpp) "transforms/procedure_walker_utilities.cpp"
+         source type(cpp) "transforms/statement_dismantlers.cpp"
+         source type(cpp) "transforms/symbol_walkers.cpp"
+         source type(cpp) "transforms/transforms.cpp"
+         source type(cpp) "transforms/unowned.cpp"
+      }
+
+      source type(cpp) "utils/cloning_utils.h"
+      source type(cpp) "utils/expression_utils.h"
+      source type(cpp) "utils/navigation.h"
+      source type(cpp) "utils/symbol_utils.h"
+      source type(cpp) "utils/type_utils.h"
+      source type(cpp) "utils/source_op_utils.h"
+      source type(cpp) "utils/value_block_utils.h"
+
+      target "utils.dll" {
+        source type(cpp) "utils/cloning_utils.cpp"
+        source type(cpp) "utils/expression_utils.cpp"
+        source type(cpp) "utils/navigation.cpp"
+        source type(cpp) "utils/symbol_utils.cpp"
+        source type(cpp) "utils/type_utils.cpp"
+        source type(cpp) "utils/source_op_utils.cpp"
+        source type(cpp) "utils/value_block_utils.cpp"
+      }
+
+       target "suifprinter.dll" {
+         source type(cpp) "SuifPrinter.h"
+         source type(cpp) "SuifPrinter.cpp"
+       }
+
+       target "convertsuif1to2.dll" {
+        source type(cpp) "../suifversion1support/convertsuif1to2b/convertsuif1to2b.cpp"
+        source type(cpp) "../suifversion1support/convertsuif1to2b/prog_ver.cpp"
+        source type(cpp) "../suifversion1support/convertsuif1to2b/printing_utils.cpp"
+        source type(cpp) "../suifversion1support/convertsuif1to2b/info-block-utilities.cpp"
+        //source type(cpp) "../suifversion1support/convertsuif1to2b/standard_main.cpp"
+       }
+  }
+}
+}

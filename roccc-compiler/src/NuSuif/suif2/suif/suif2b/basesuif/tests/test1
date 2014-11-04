@@ -1,0 +1,3 @@
+import testpasses
+testBuild 2
+save ysuif.out

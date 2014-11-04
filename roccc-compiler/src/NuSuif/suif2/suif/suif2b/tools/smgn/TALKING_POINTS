@@ -1,0 +1,67 @@
+TALKING POINTS.
+
+Changes:
+
+i) There is now only one hoof file, called pygx.hoof.
+
+ii) The qualified type heirarchy has been replaced by just qualified type. Nothing requires a
+qualified type - type is always used.
+
+iii) I introduced a SizedType from which all types with size information derive.
+
+iv)  I made a StatementList a kind of Statement. This used to be a major hassle (that it
+was not). I am not entirely happy with the result - there was some confusion between ControlFlowObjects
+and ScopedObjects and it is not clear that the type derivation tree is correct in this area.
+
+
+Previous comments.
+==================
+
+
+1 /There is currently a bug with the create routines that they do not include parameters for
+parent fields. This happens in the case of symbols. It was while fixing this that I broke 
+things.
+
+2 /The add routines are currenty awkwardly named. I think we should change the names to
+the form addNameOfList. instead of add_nameOfList.
+
+3/ I have added support for lists as follows:
+
+
+	int get_<name of list>_count();
+	<list_element type> get_<name of list>_element(int i);
+
+	list_iterator<list_element_type> get_<name_of_list>_iterator();
+
+  However, STL iterators are brain-dead since they need continued access to the object (to do thing.end())
+which is silly. We need our own iterator class which encapsulates the iterators for STL (if we
+continue using STL)
+
+I have the simple_stack template which we could use for lists (or which we could hack on to remove perceived
+difficultis. Please take a look at this and comment. (see the common directory)
+
+
+4/ I have used the existing headers to get the first 1500 lines of on of the modules of the edg->C
+compiler converted. This took me most of yesterday. The work is tedious but not difficult. I
+have a tool which helps somewhat. 
+
+The EDG->C code used a gasket called "Princess" so as to avoid the hugely long compile 
+times associated with using the old SUIF interfaces. This has been removed. The new
+interfaces do not impose large compile time overheads. Because of this, conversion of
+other code will be different in time taken to the edg->C code. 
+
+5/ I plan to have my team look at conversion of other code starting almost immediately. We need 
+to get the directory and build structure set up first.
+
+
+6/ Notice that SuifObjectFactory now inherits from PygObjectFactory. The EDG->C compiler
+passed around a general context object which now inherits from SuifObjectFactory so that
+objects can be created easily. 
+
+
+7/ I have added is_ and to_ methods to the object factories. 
+
+8/ The "paired with" clauses have been replaced by "implements <name>". The given name is 
+used in the add routines. You can only add groups of items (one for each list). The same
+will be true of the methods mentioned in 3 - there wil be one per set of implements lists.
+

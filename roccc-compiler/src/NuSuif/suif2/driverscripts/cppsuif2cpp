@@ -1,0 +1,114 @@
+#!/bin/sh -f
+
+ncibin=@NCIHOME@/bin
+ncisolib=@NCIHOME@/solib
+if [ x$LD_LIBRARY_PATH = x ]
+    then LD_LIBRARY_PATH=$ncisolib
+else
+    LD_LIBRARY_PATH=$ncisolib:$LD_LIBRARY_PATH
+fi
+
+echo "This pass is incomplete and the results are buggy."
+echo "Please see KNOWN_PROBLEMS"
+
+
+usage() {
+   echo "Usage: $0 [-o outputfile] [-keep] [-v] file.suif"
+   echo "  Generate a C++ file "
+   exit 1;
+}
+
+keep=0
+
+prog=program
+outputfile=""
+default_ext=.out.cpp
+
+defines=""
+
+tmpfile=$$.drv
+verbose=0
+target_lib=
+
+while [ ! -z $1 ];
+  do case x"$1" in 
+    x-o)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      outputfile=$1
+      shift ;;
+    x-v)  verbose=1
+      shift ;;
+    x-f)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      tmpfile=$1
+      shift ;;
+    x-arch)  shift
+      if [ -z $1 ] 
+          then usage; fi
+      ARCH=$1
+      shift;;
+    x-target_lib)  shift
+      if [ -z $1 ] 
+          then usage; fi
+      target_lib=$1
+      shift;;
+    x-keep) keep=1
+      shift;;
+    x-*) 
+      echo "Bad option $1"; 
+      usage;;
+    *) break;;
+  esac
+done
+
+if [ -z $1 ] 
+    then usage; fi
+if [ $# -ne 1 ]
+    then echo "Error: Too many files in the input line"
+    usage
+fi
+if  [ x${ARCH} = x"" ]
+    then ARCH=`uname`
+    export ARCH
+fi
+
+inputfile=$1
+
+if [ x$outputfile = x"" ]
+    then base=`echo $inputfile | sed 's+^.*/++' | sed 's+^\(.*\)\..*+\1+'`
+    base2=`echo $inputfile | sed 's+^.*/++'`
+
+    if [ x$base2 = x$base ]
+	then echo "Error: Input file basename '$base2' has no does not have an extension"
+	usage
+    fi
+    outputfile="$base"$default_ext
+fi
+rm -f $outputfile
+
+cat <<EOF > $tmpfile
+require basicnodes suifnodes cfenodes osuifnodes osuifextensionnodes cpp_osuifnodes
+require s2c
+load ${inputfile}
+require transforms; compact_multi_way_branch_statements
+require cpp_transforms; rename_colliding_symbols_for_cpp
+s2c -D Generating_CPP=1  -D ARCH=${ARCH} ${outputfile}
+EOF
+
+if [ $verbose = 1 ]
+    then echo $ncibin/suifdriver -f $tmpfile
+fi
+$ncibin/suifdriver -f $tmpfile 2>&1
+if [ $? != 0 ]
+   then echo "FAILED: $ncibin/suifdriver -f $tmpfile"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then if [ $verbose = 1 ]
+    then echo rm -f $tmpfile
+  fi
+  rm -f $tmpfile
+fi
+

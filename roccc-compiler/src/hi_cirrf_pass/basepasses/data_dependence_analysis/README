@@ -1,0 +1,14 @@
+
+Array Data Dependence Computation
+==================================
+
+Assumptions
+------------
+1. All indices are linear expressions of loop index variables.
+2. Non-linear indices are not tested and for them existence of dependence is assumed.
+3. All array indices are separable and in one of ZIV (Zero Index Variable) or SIV(Single Index Variable) forms.
+4. Loop bounds and array coefficients are all known and computable at compile time. 
+5. Array index expressions do not contain symbolic expressions. 
+
+
+

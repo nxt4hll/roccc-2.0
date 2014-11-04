@@ -1,0 +1,72 @@
+\section{Ex4 -- Operand Mapping}
+
+The code in Example 3 walked an instruction's operands looking for a
+register operand that matched the one for our reserved register.  An
+astute reader might have noticed a problem with the output of
+[[do_ex3]]: it did not identify occurrences of the reserved register
+in address expressions.  This is because address expressions are
+considered operands, and an address-expression operand is never equal
+to a register operand.  To find all occurrences of our reserved
+register in an instruction, we must search not only the instruction's
+operands but also the suboperands of all encountered address
+expressions.  We will accomplish this feat with the use of the OPI
+function [[map_opnds]] and the OPI class [[OpndFilter]].
+
+In particular, this example starts with the code from Example 3 and
+makes a just few small modifications to class [[Ex3]] and its
+implementations.  We begin by listing the loop that walks over
+the [[InstrList]].
+
+<<[[Ex4]] walk of [[InstrList]]>>=
+@
+
+This loop is nearly identical to the
+[[<<[[Ex3]] walk of [[InstrList]]>>]].
+The one important difference is that we have
+replaced the two code snippets
+[[<<inspect source operands>>]] and
+[[<<inspect destination operands>>]] with a
+call to [[map_opnds]].  Also, the insertion
+of our load and store instructions is now
+protected by Boolean values set in [[map_opnds]].
+Notice that the code to [[<<insert load of reserved register>>]]
+and [[<<insert spill of reserved register>>]] is the same as
+that which we used in [[Ex3]].
+
+The work to inspect the inputs and outputs of an instruction is done
+by [[filter]].  This object is an instance of
+[[<<class [[MyOpndFilter]]>>]],
+which is a derived class of [[OpndFilter]].  The
+class defines the two flags we need: one indicating that the reserved
+register was seen as an input to this instruction and the other
+indicating that the register was an instruction output.  Instances
+of this class are also initialized with a value indicating the
+register operand to match against.
+
+<<class [[MyOpndFilter]]>>=
+@
+
+The OPI function [[map_opnds]] invokes the method
+[[<<[[MyOpndFilter::operator()]]>>]] on each operand and suboperand in
+the instruction.  It indicates whether the operand is an input or an
+output via the formal parameter [[in_or_out]].
+
+<<[[MyOpndFilter::operator()]]>>=
+@
+
+The method returns an [[Opnd]] so that you can walk over an
+instruction's operands and conditionally replace some of them.
+Whatever you return replaces the current input operand [[opnd]] in the
+instruction.  For this example, we simply return what we were passed
+since we don't want to change any of the instruction's operands.
+
+Finally, you should be aware that address-expression operands can
+appear in either the source or destination operand list.  An
+address-expression operand in the destination list represents a memory
+location where the instruction is going to write a result.  The
+suboperands of an address-expression operand are always considered
+instruction inputs.  It would be incorrect to use the function
+[[map_dst_opnds]] and consider an occurrence of the reserved register
+in the destination operand list as unconditionally requiring the
+insertion of a store operation.
+

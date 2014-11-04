@@ -1,0 +1,12 @@
+diff -ru nci.orig/suif/suif2b/extratypes/bit_vector/bit_vector.cpp nci/suif/suif2b/extratypes/bit_vector/bit_vector.cpp
+--- nci.orig/suif/suif2b/extratypes/bit_vector/bit_vector.cpp	Thu Oct  7 20:33:20 1999
++++ nci/suif/suif2b/extratypes/bit_vector/bit_vector.cpp	Mon Jul 15 16:24:50 2002
+@@ -308,7 +308,7 @@
+         _block = other._block;
+         add_reference(_block);
+ 	_has_count = other._has_count;
+-	_count = other._has_count;
++	_count = other._count;
+       }
+   }
+ 

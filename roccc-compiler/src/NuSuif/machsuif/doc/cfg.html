@@ -1,0 +1,1471 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>The Machine-SUIF Control Flow Graph Library</title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+
+           <!-- Omit \clearpage for new source file-->
+<p>
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>The Machine-SUIF Control Flow Graph Library</a></h1>
+<address><em>Release version 2.02.07.15</em> <br><br>Glenn Holloway and Michael D. Smith <br>{holloway,smith}@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<p>
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+The Machine-SUIF CFG library provides an abstraction of control flow
+graphs with nodes containing lists of machine instructions.  Such a CFG
+can be used to replace the linear instruction-list representation of the
+body of a procedure being compiled.  The library supports translation of
+the linear representation to and from CFG form, transformation of a CFG
+by adding, reconnecting, and removing nodes, and fine-grained control
+over individual program instructions within CFG nodes.  It allows
+precise control of program layout, to ensure that re-linearization leaves
+instructions in the desired order.
+<p>
+The CFG library is lean by design.  We have factored tools for
+control-flow and data-flow analysis into separate libraries, based on
+this one.  Users can pick the functionality they need, and they can
+build other CFG-based tools without incurring overhead for features they
+don't need.
+<p>
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">Goals for the CFG Library</a></li>
+<li><a href="#toc5">Philosophy</a></li>
+<li><a href="#toc6">Class Cfg</a></li>
+  <ul compact>
+  <li><a href="#toc7">CFG construction</a></li>
+  <li><a href="#toc8">CFG inspection</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc9">Nicknames</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc10">Graph simplification</a></li>
+  <li><a href="#toc11">Graph printing</a></li>
+  <li><a href="#toc12">Header file graph.h</a></li>
+  </ul>
+<li><a href="#toc13">Class CfgNode</a></li>
+  <ul compact>
+  <li><a href="#toc14">Node Creation</a></li>
+  <li><a href="#toc15">Node Contents</a></li>
+  <li><a href="#toc16">Graph Node Identification</a></li>
+  <li><a href="#toc17">Control-Flow Relations</a></li>
+  <li><a href="#toc18">Finding Node Neighbors</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc19">Making new neighbors.</a></li>
+      <li><a href="#toc20">Creating exceptional and impossible edges.</a></li>
+      <li><a href="#toc21">Testing the control-transfer instruction.</a></li>
+      <li><a href="#toc22">Adjusting the control-transfer instruction.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc23">Layout relations</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc24">Checking and changing layout constraints.</a></li>
+      <li><a href="#toc25">Effects of layout constraints on code.</a></li>
+      <li><a href="#toc26">Bounding a node's computation.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc27">Header file for module node.h</a></li>
+  </ul>
+<li><a href="#toc28">Utilities</a></li>
+  <ul compact>
+  <li><a href="#toc29">Enumeration</a></li>
+    <ul compact>
+    <li><a href="#toc30">Depth-first walk</a></li>
+    <li><a href="#toc31">Reverse postorder sequence</a></li>
+    </ul>
+  <li><a href="#toc32">Node Identification</a></li>
+  <li><a href="#toc33">Visualization</a></li>
+  <li><a href="#toc34">Node-Sequence Utilities</a></li>
+  <li><a href="#toc35">Header file for module util.h</a></li>
+  </ul>
+<li><a href="#toc36">Library initialization</a></li>
+<li><a href="#toc37">Header file for the CFG library</a></li>
+<li><a href="#toc38">Hoof Specification of CFG Classes</a></li>
+  <ul compact>
+  <li><a href="#toc39">Class Cfg</a></li>
+  <li><a href="#toc40">Class CfgNode</a></li>
+  <li><a href="#toc41">Overall hoof specification for module cfg</a></li>
+  </ul>
+<li><a href="#toc42">Copyright</a></li>
+<li><a href="#toc43">Summary</a></li>
+<li><a href="#toc44">Acknowledgments</a></li>
+<li><a href="#toc45">References</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+This document discusses the Machine-SUIF control flow graph (CFG)
+library.  It discusses design goals, the interface to the library,
+implementation decisions, current status, and planned updates.
+<p>
+The Machine-SUIF CFG library presents an abstraction of control flow
+graphs built on the basic <code>instr_list</code> structure of the Machine-SUIF
+system.  It allows you to build CFGs and to transform
+them by rearranging and reconnecting nodes.  Machine SUIF provides
+companion libraries based on this one that support control-flow and
+data-flow analysis.
+<p>
+The CFG library consists of files in the <code>cfg</code> subdirectory of the
+<em>machsuif</em> distribution package.  This document describes its design
+and use. It assumes that the reader is familiar with the SUIF and
+Machine-SUIF systems and has read the <code>machine</code> library documentation.
+<p>
+The following section discusses the development and research goals that
+drove the design of our CFG library.  Section&nbsp;<a href="#secPhilosophy">[-&gt;]</a>
+describes our view of how the library will be used.
+Sections&nbsp;<a href="#sec-class-cfg">[-&gt;]</a> through&nbsp;<a href="#sec-utilities">[-&gt;]</a> describe the
+programming interface provided by the CFG library, and they provide some
+notes on its implementation.
+<p>
+
+
+<h2><a name=toc4>Goals for the CFG Library</a></h2>
+<a name="secGoals"><b>[*]</b></a>
+<p>
+This section lists our goals for the CFG library.  
+<p>
+<ul>
+
+<li>Analysis. 
+Many compiler analysis passes assume a CFG as a basic data structure.
+Supporting them amounts to supplying a CFG abstract data type, including
+methods to traverse and examine the CFG and its nodes.  Such methods
+include enumerating all CFG nodes and edges, enumerating and traversing
+links to and from a node, and iterating over the instructions that make
+up a node.  These basic abstractions are necessary for analyses that use
+data or control flow (e.g. live variable analysis, reaching definitions,
+dead code identification, and natural loop detection).
+<p>
+<li>Transformation. 
+We wanted to build a CFG library that would support not just
+construction and analysis of CFGs but also transformations of the CFG
+that change the underlying program.  Many compiler optimizations are
+essentially CFG manipulations, rearranging and/or duplicating the basic
+blocks of the program, but leaving the internals of the basic blocks the
+same.  Examples of such optimizations include loop peeling, loop
+unrolling, and static correlated branch prediction <b>[cite&nbsp;<a href="#NWcite-bibscbp">bibscbp</a>]</b>.  To
+support such tasks, the data structures of the CFG library need to be
+linked to the underlying compiler IR, so that changing graph connections
+or duplicating CFG nodes results in corresponding changes to the program
+being compiled.
+<p>
+<li>Ordering. 
+One possible limitation of the CFG approach is that CFG nodes can
+have many possible orderings, but actual program code must occupy
+numbered locations in program memory.  On many modern microprocessors,
+the ordering of CFG blocks in memory can drastically affect
+performance due to negative branch and cache effects.  Optimizations
+such as code layout <b>[cite&nbsp;<a href="#NWcite-biblayout">biblayout</a>]</b> and branch alignment
+<b>[cite&nbsp;<a href="#NWcite-bibalign">bibalign</a>]</b> reorder the basic blocks of a program to minimize
+these effects.  While these optimizations do not change the graph
+structure of the program, their effect on performance makes them
+useful to support in the CFG library.  So in addition to supporting
+graph representations and transformations of programs, we also
+wanted the CFG library to allow users to specify the layout order
+of CFG nodes.
+<p>
+<li>Scheduling. 
+Beyond CFG transformations and reorderings, optimizations such as
+partial redundancy elimination (PRE) and global instruction scheduling
+move instructions between basic blocks in the program.  The CFG library
+should allow programs to insert instructions into nodes, to move
+instructions around, and to add new nodes to the program and CFG.
+Primitives that support such transformations are provided, but advanced
+instruction schedulers are expected not to violate library conventions.
+<p>
+</ul>
+
+The next section gives an overview of how we expect the library
+to be used.  
+<p>
+
+
+<h2><a name=toc5>Philosophy</a></h2>
+<a name="secPhilosophy"><b>[*]</b></a>
+<p>
+One of the things that makes the control-flow graph such a useful
+compile-time abstraction is that it abstracts away from sequential code.
+It enables graph-based transformations and allows them to be expressed
+without reference to a linear code layout.  By parceling a procedure's
+instruction list into basic blocks, we make it efficient to reorder the
+blocks without having to splice their instructions into a new linear
+order.
+<p>
+The question arises whether to manage the control instructions within a
+CFG so that at all times they correctly reflect <em>some</em> linear order.
+Take the code for a simple <code>if ... then ... else ...</code>  statement.
+Suppose the code generator has produced a conditional branch instruction
+to the <code>else</code> statement, and has place the <code>then</code> statement after
+the <code>if</code> test.  The <code>then</code> code ends with a <code>jump</code> around the
+<code>else</code> statement to the join point.  Breaking basic blocks after
+control instructions will put a <code>jump</code> at the end of the node for the
+<code>then</code> statement, and none at the end of that for the <code>else</code>
+statement, which just falls through.  If a transformation now inverts
+the sense of the conditional branch and adjusts CFG flow edges
+accordingly in the CFG, what should be done to the instruction lists in
+the <code>then</code> and <code>else</code> nodes?  The natural re-linearization algorithm
+would remove the <code>jump</code> from the end of the <code>then</code> node and insert
+one at the end of the <code>else</code> node.  Should such <code>jump</code> adjustments
+be made every time the CFG changes?
+<p>
+For many kinds of optimization, this isn't important, either
+because they change no control flow at all, or because they are not
+concerned with the precise schedule of instructions.  For these, it's
+fine to leave the selection of a final layout and the adjustment of
+<code>jump</code> instructions to the library method that re-linearizes the flow
+graph.
+<p>
+For other optimizations, like instruction scheduling and code placement,
+it's essential to know exactly what instructions will appear where, and
+in fact, to be able to control such decisions precisely.
+<p>
+The Machine-SUIF CFG library allows you to control the layout
+relationship between any pair of nodes, but it also allows you to leave
+the layout of part or all of a CFG unspecified.  At the time two
+nodes become constrained to be adjacent in memory order, the library may
+remove or insert a trailing <code>jump</code> instruction to achieve consistency
+with this constraint.  But in the absence of layout constraints, it
+doesn't insert or remove <code>jump</code>s as the graph is transformed.
+<p>
+To implement this policy efficiently, the library must have quick access
+to the control-transfer instruction (CTI), if any, in each node.  It
+relies on there being at most one CTI, and it keeps a record of its
+position.  As a client, you're free to modify any of the instructions
+in a block, but when you change the CTI, you're expected to call a
+library method to reflect the change.
+ <b>[</b>The library doesn't assume that CTI instruction,
+will be the last in the node; that would make it
+difficult, for example, to support scheduling for
+delayed-branch architectures by placing instructions after the
+control instruction of a block.  The library doesn't provide full
+support for such architectures;  e.g., when building a CFG, it
+always breaks basic blocks at control transfer instructions.
+Completing the support for target code
+with delay slots following branch instructions would require
+subclassing to perform the necessary construction-time
+<a name="NWD2">adjustments.</a><b>]</b> 
+Common operations on nodes, such as replacing one of its control
+successors, update the CTI directly, without requiring the programmer to
+make changes at both the graph level and the instruction level.
+<p>
+We have tried to keep the CFG library, and particularly its class
+interfaces, lean.  Though Machine SUIF provides flow analysis libraries
+based on our CFG abstraction, users may want to write their own.  We've
+tried to make it easy to do so.
+<p><h2><a name=toc6>Class <code>Cfg</code></a></h2>
+<a name="sec-class-cfg"><b>[*]</b></a>
+<p>
+The two main classes used in the CFG library are <code>Cfg</code> and
+<code>CfgNode</code>.  A <code>Cfg</code> represents an entire control flow graph for a
+procedure.  The nodes within a <code>Cfg</code> have class <code>CfgNode</code>.  The
+functions operating on class <code>Cfg</code> handle the graph overall: graph
+expansion and simplification, graph validation and printing, and the
+enumeration of nodes and edges.  Those operating on <code>CfgNode</code> are about
+<a name="NWD3">managing a node's relations with its control and layout neighbors and</a>
+out keeping its code consistent with those relations.
+<p>
+
+<h3><a name=toc7>CFG construction</a></h3>
+<p>
+To create a CFG or to normalize the form of an existing CFG, use the
+following functions:
+<p>
+<pre><a name="NW2i61PH-UXR6V-1" href="#NWD3"><dfn>&lt;<code>Cfg</code> creation and normalization&gt;=</dfn></a> <b>(<a href="#NWD9">U-&gt;</a>)</b>
+Cfg* new_cfg(InstrList*, bool keep_layout    = false,
+                         bool break_at_call  = false,
+                         bool break_at_instr = false);
+void canonicalize(Cfg*,  bool keep_layout    = false,
+                         bool break_at_call  = false,
+                         bool break_at_instr = false);
+void remove_layout_info(Cfg*);
+void fix_layout(Cfg*);
+</pre><p>
+
+Creation function <code>new_cfg</code> parses a linear list of instructions into
+basic blocks.  There are options for determining precisely what constitutes
+a basic block and whether the original linear layout of the instructions
+should be reflected by initial layout constraints.  Given an existing CFG,
+you may want to ensure that it has the same form as if built from scratch
+with a given option set.  The <code>canonicalize</code> function serves this
+purpose.
+<p>
+Each of the flags <code>keep_layout</code>, <code>break_at_call</code>, and
+<code>break_at_instr</code> is optional.  When <code>keep_layout</code> is <code>true</code>, the
+CFG gets node-layout constraints reflecting the program's initial linear
+layout.  When <code>break_at_call</code> is <code>true</code>, each procedure-call
+instruction is treated as a CTI, so that it terminates the CFG node that
+contains it.  <code>break_at_instr</code> means that each node of the graph
+contains only one instruction.
+<p>
+The <code>remove_layout_info</code> function clears all layout constraints in a
+given graph.
+<p>
+The <code>fix_layout</code> function, on the other hand, imposes layout constraints
+wherever they don't already exist.  In some cases, it inserts additional
+insert unconditional branch instructions.  That happens when a potential
+<a name="NWD4">fall-through edge in the CFG cannot actually be realized by fall-through</a>
+because of a conflicting layout constraint.  Likewise, <code>fix_layout</code> may
+eliminate an unconditional branch if it turns out to be equivalent to
+fall-through in the newly-imposed layout.
+<p>
+
+
+<h3><a name=toc8>CFG inspection</a></h3>
+<p>
+<pre><a name="NW2i61PH-4df9qW-1" href="#NWD4"><dfn>&lt;<code>Cfg</code> inspectors&gt;=</dfn></a> <b>(<a href="#NWD9">U-&gt;</a>)</b> <b>[D<a href="#NWD6">-&gt;</a>]</b>
+CfgNode* get_node(Cfg*, int pos);
+CfgNode* get_node(Cfg*, CfgNodeHandle);
+CfgNode* node_at(Cfg*, LabelSym*);
+
+int nodes_size(Cfg*);
+CfgNodeHandle nodes_start(Cfg*);
+CfgNodeHandle nodes_last(Cfg*);
+CfgNodeHandle nodes_end(Cfg*);
+
+CfgNode* get_entry_node(Cfg*);
+CfgNode* get_exit_node(Cfg*);
+
+void set_entry_node(Cfg*, CfgNode*);
+void set_exit_node(Cfg*, CfgNode*);
+</pre><p>
+
+Their capsule summaries:
+<p>
+<blockquote>
+<code>get_node(cfg, pos)</code> returns the node at <code>pos</code> in <code>cfg</code>'s
+<a name="NWD5">node list, where </a><code>pos</code> is a position in the list (either a
+zero-based integer or a handle). <br><code>get_node(cfg, label)</code>
+returns the node of <code>cfg</code> at <code>label</code>. <br>
+<code>nodes_size(cfg)</code> returns the number of nodes in <code>cfg</code>. <br><code>nodes_start(cfg)</code> returns a handle on the first element of <code>cfg</code>. <br><code>nodes_last(cfg)</code> returns a handle on the last element of <code>cfg</code>. <br><code>nodes_end(cfg)</code> returns the sentinel handle for <code>cfg</code>. <br>
+<code>get_entry_node(cfg)</code> returns <code>cfg</code>'s entry node. <br><code>get_exit_node(cfg)</code> returns <code>cfg</code>'s exit node. <br><code>set_entry_node(cfg, entry)</code> sets <code>cfg</code>'s entry node to <code>entry</code>. <br><code>set_exit_node(cfg, exit)</code> sets <code>cfg</code>'s exit node to <code>exit</code>.
+</blockquote>
+<p>
+Type <code>CfgNodeHandle</code> is an abbreviation for an STL iterator.
+<p>
+<pre><a name="NW2i61PH-2RHnTl-1" href="#NWD5"><dfn>&lt;<code>CfgNodeHandle</code> definition&gt;=</dfn></a> <b>(<a href="#NWD9">U-&gt;</a>)</b>
+typedef list&lt;CfgNode*&gt;::iterator CfgNodeHandle;
+</pre><p>
+
+<h5><a name=toc9><a name="NWD6">Nicknames</a></a></h5>
+The <code>nodes_</code> functions are so named because the sequence of node pointers
+in a <code>Cfg</code> is called <code>nodes</code>.  These functions are frequently used;
+since a <code>Cfg</code> instance contains only one such sequence, we can provide
+shorter names for these handle-related functions without ambiguity.
+<p>
+<pre><a name="NW2i61PH-4df9qW-2" href="#NWD4"><dfn>&lt;<code>Cfg</code> inspectors&gt;+=</dfn></a> <b>(<a href="#NWD9">U-&gt;</a>)</b> <b>[<a href="#NWD4">&lt;-</a>D]</b>
+
+inline int
+size(Cfg *cfg)
+{
+    return nodes_size(cfg);
+}
+
+inline CfgNodeHandle
+start(Cfg *cfg)
+{
+    return nodes_start(cfg);
+}
+
+inline CfgNodeHandle
+end(Cfg *cfg)
+{
+    return nodes_end(cfg);
+}
+</pre><p>
+
+
+<h3><a name=toc10><a name="NWD7">Graph simplification</a></a></h3>
+<p>
+The following functions perform graph simplifications.  Each returns
+<code>true</code> if it succeeds in changing the graph.  Since one kind of
+simplification can create the opportunity for others, you may want to
+repeat these transformations until no progress is made by any
+of them.
+<p>
+<pre><a name="NW2i61PH-4AoIfy-1" href="#NWD7"><dfn>&lt;<code>Cfg</code> simplification&gt;=</dfn></a> <b>(<a href="#NWD9">U-&gt;</a>)</b>
+bool remove_unreachable_nodes(Cfg*);
+bool merge_node_sequences(Cfg*);
+bool optimize_jumps(Cfg*);
+</pre><p>
+
+The function <code>remove_unreachable_nodes(cfg)</code> removes nodes
+unreachable from the entry of <code>cfg</code>; it renumbers the CFG and thus may
+invalidate node numbers that you may have saved.  The function
+<code>merge_node_sequences(cfg)</code> merges sequences of control-equivalent
+<a name="NWD8">nodes in </a><code>cfg</code>, while <code>optimize_jumps(cfg)</code> eliminates jumps to
+jumps in <code>cfg</code>.
+<p>
+
+<h3><a name=toc11>Graph printing</a></h3>
+<p>
+When debugging code that uses a CFG, it is often useful
+to be able to print an ASCII representation of the graph.
+<p>
+<pre><a name="NW2i61PH-28smhe-1" href="#NWD8"><dfn>&lt;<code>Cfg</code> printing&gt;=</dfn></a> <b>(<a href="#NWD9">U-&gt;</a>)</b>
+void fprint(FILE*, Cfg*);
+void fprint(FILE*, Cfg*, bool follow_layout, bool show_code);
+</pre><p>
+
+The optional flag <code>follow_layout</code> causes the order of the printed nodes
+<a name="NWD9">to follow the layout constraints of any nodes that have such constraints.</a>
+The optional flag <code>show_code</code> causes the instructions in each node to be
+printed.  Both flags default to <code>false</code>.
+<p>
+
+<h3><a name=toc12>Header file <code>graph.h</code></a></h3>
+<p>
+Module <code>graph</code> has the following header file.
+<p>
+<pre><a name="NW2i61PH-3Kzjdo-1" href="#NWD9"><dfn>&lt;cfg/graph.h&gt;=</dfn></a>
+/* file &quot;cfg/graph.h&quot; -- Control Flow Graph */
+
+<a name="NW2i61PH-3Kzjdo-1-u1" href="#NWDe"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef CFG_GRAPH_H
+#define CFG_GRAPH_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;cfg/graph.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+#include &lt;cfg/cfg_ir.h&gt;
+
+<a name="NW2i61PH-3Kzjdo-1-u2" href="#NWD5"><i>&lt;<code>CfgNodeHandle</code> definition&gt;</i></a>
+
+<a name="NW2i61PH-3Kzjdo-1-u3" href="#NWD3"><i>&lt;<code>Cfg</code> creation and normalization&gt;</i></a>
+
+<a name="NW2i61PH-3Kzjdo-1-u4" href="#NWD4"><i>&lt;<code>Cfg</code> inspectors&gt;</i></a>
+
+<a name="NW2i61PH-3Kzjdo-1-u5" href="#NWD7"><i>&lt;<code>Cfg</code> simplification&gt;</i></a>
+
+<a name="NW2i61PH-3Kzjdo-1-u6" href="#NWD8"><i>&lt;<code>Cfg</code> printing&gt;</i></a>
+
+#endif /* CFG_GRAPH_H */
+</pre><p>
+<h2><a name=toc13>Class <code>CfgNode</code></a></h2>
+<p>
+<a name="NWDA">The class </a><code>CfgNode</code> is the data structure used for the individual
+nodes in the CFG.
+<p>
+<h3><a name=toc14>Node Creation</a></h3>
+<p>
+New CFG nodes are created with respect to a particular CFG and are
+immediately included in the graph's roster of nodes, even though they
+may have no connection to other nodes.
+<p>
+<pre><a name="NW47Y6yp-Wd6Xw-1" href="#NWDA"><dfn>&lt;<code>CfgNode</code> creation&gt;=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b>
+CfgNode* new_empty_node(Cfg*);
+CfgNode* insert_empty_node(Cfg*, CfgNode *tail, CfgNode *head);
+CfgNode* insert_empty_node(Cfg*, CfgNode *tail, int succ_pos);
+CfgNode* clone_node(Cfg*, CfgNode*);
+</pre><p>
+
+The function <code>new_empty_node(cfg)</code> returns a new empty and isolated
+node of <code>cfg</code>.  The function <code>insert_empty_node(cfg, tail, head)</code>
+inserts a new node along edge (<code>tail</code>, <code>head</code>), while
+<code>insert_empty_node(cfg, tail, succ_pos)</code> inserts a new node between
+<code>tail</code> and successor
+number <code>succ_pos</code>.  Note that the sequence of successors of a node
+is an ordered multiset: there may be several edges from node <code>tail</code>
+to some node <code>head</code>.  The second form of <code>insert_empty_node</code>
+allows you to say exactly which edge to split with a new node.
+Finally, <code>clone_node(cfg, node)</code> replicates <code>node</code> in <code>cfg</code>,
+<a name="NWDB">leaving it disconnected.</a>
+<p>
+
+<h3><a name=toc15>Node Contents</a></h3>
+<p>
+The main content of a CFG node is a list of instructions.  You can scan and
+edit this list using the same function calls that you'd use for the
+contents of an <code>InstrList</code>:
+<p>
+<pre><a name="NW47Y6yp-3EVJu0-1" href="#NWDB"><dfn>&lt;<code>CfgNode</code> bodily functions&gt;=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b>
+int instrs_size(CfgNode*);
+InstrHandle instrs_start(CfgNode*);
+InstrHandle instrs_last(CfgNode*);
+InstrHandle instrs_end(CfgNode*);
+InstrHandle prepend(CfgNode*, Instr*);
+InstrHandle append(CfgNode*, Instr*);
+void replace(CfgNode*, InstrHandle, Instr*);
+InstrHandle insert_before(CfgNode*, InstrHandle, Instr*);
+InstrHandle insert_after(CfgNode*, InstrHandle, Instr*);
+Instr* remove(CfgNode*, InstrHandle);
+</pre><p>
+
+where
+<p>
+<blockquote>
+<code>instrs_size(node)</code> returns the number of elements in <code>node</code>. <br><code>instrs_begin(node)</code> returns a handle on the first element of <code>node</code>. <br><code>instrs_end(node)</code> returns the sentinel handle for <code>node</code>. <br><code>prepend(node, instr)</code> inserts <code>instr</code> at the beginning of <code>node</code>. <br><code>append(node, instr)</code> inserts <code>instr</code> at the end of <code>node</code>. <br><code>replace(node, handle, instr)</code> replaces the element at <code>handle</code> in
+<code><a name="NWDC">node</a></code> by <code>instr</code>. <br><code>insert_before(node, handle, instr)</code> inserts <code>instr</code> before <code>handle</code> in
+<code>node</code>. <br><code>insert_after(node, handle, instr)</code> inserts <code>instr</code> after <code>handle</code> in
+<code>node</code>. <br><code>remove(node, handle)</code> removes and returns the instruction at
+<code>handle</code> in <code>node</code>.
+</blockquote>
+<p>
+As with <code>InstrList</code>, the <code>instr_</code> functions have nicknames because the
+are so frequently used.
+<p>
+<pre><a name="NW47Y6yp-11h1kR-1" href="#NWDC"><dfn>&lt;<code>CfgNode</code> function nicknames&gt;=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b>
+inline int
+size(CfgNode *node)
+{
+    return instrs_size(node);
+}
+
+inline InstrHandle
+start(CfgNode *node)
+{
+    return instrs_start(node);
+}
+
+inline InstrHandle
+last(CfgNode *node)
+{
+    return instrs_last(node);
+}
+
+inline InstrHandle
+end(CfgNode *node)
+{
+    return instrs_end(node);
+}
+</pre><p>
+
+
+
+<h3><a name=toc16><a name="NWDD">Graph Node Identification</a></a></h3>
+<p>
+These OPI functions help identify a given CFG node, by giving a
+code-label symbol representing the start of the code within it or by
+printing an ASCII representation of it for debugging.
+<p>
+<pre><a name="NW47Y6yp-2NnqV0-1" href="#NWDD"><dfn>&lt;<code>CfgNode</code> identification&gt;=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b>
+Cfg* get_parent(CfgNode*);
+int get_number(CfgNode*);
+LabelSym* get_label(CfgNode*);
+void fprint(FILE*, CfgNode*, bool show_code = false,
+            bool show_addrs = false, bool no_header = false);
+</pre><p>
+
+Function <code>get_parent(node)</code> returns the CFG that owns <code>node</code>.  Function
+<code>get_number(node)</code> returns a non-negative integer identifier that is less
+than <code>nodes_size(get_parent(node))</code>.  The function <code>get_label(node)</code>
+returns the label of <code>node</code>'s leading label instruction, inserting a new
+label instruction if none was present.  The <code>fprint</code> function is used to
+support printing of the overall CFG.  It prints a one-line node header
+containing the
+node number and the nature of its control-termination instruction, if any,
+and then its lists of successor and predecessor numbers.  If the Boolean
+argument <code>show_code</code> is true, then it prints the node's instructions as
+well.  If <code>show_addrs</code> is true as well, each instruction is preceded by
+its hexadecimal address.  Finally, if the <code>no_header</code> flag argument is
+true, <code>fprint</code> omits the header line, presumably to allow code to be
+listed by itself.
+<p>
+
+<h3><a name=toc17>Control-Flow Relations</a></h3>
+<p>
+When a CFG is created from a list of instructions, its edges reflect the
+control paths implied by the control-flow instructions of that list.  We
+call these <em>normal</em> edges.  The CFG library also supports the creation
+of two other kinds of edges: <em>exceptional</em> and <em>impossible</em>.
+<p>
+The assumption usually made when the CFG creator encounters a procedure
+call instruction is that it returns exactly once for each time the call is
+executed.  In many languages, it is possible to write procedures that may
+not return in the normal way, or that may return more than once for each
+call.  To reflect such exceptional control paths, we provide a special kind
+of successor relation, used to describe flow of control from a call site
+directly to the exit node, or from the entry node to the point immediately
+after a call.  We call such flow <em>exceptional</em>, since it is not the
+usual thing, and since it is often associated with the raising of an
+exception.  We provide functions for creating and recognizing exceptional
+edges in a CFG.
+<p>
+Though unusual, exceptional edges are at least possible control paths.
+On the other hand, there are important analysis techniques that insert
+completely <em>impossible</em> edges in the CFG <b>[cite&nbsp;<a href="#NWcite-bibmorgan">bibmorgan</a>]</b>.  They may
+require that every node lies on a path to the exit node, for example.
+To handle an infinite loop, they insert an impossible edge from one of
+the loop nodes to the exit.  We also provide functions to create and
+recognize impossible edges.
+<p>
+When the CFG is constructed, impossible edges are included to be sure
+that every node is reachable from the entry, and every node has a path
+to the exit.  However, no exceptional edges appear in the CFG when it is
+first constructed.  To add them, you call <code>set_exceptional_succ</code>
+<a name="NWDE">explicitly, as described below.</a>
+<p>
+
+<h3><a name=toc18>Finding Node Neighbors</a></h3>
+<p>
+Each <code>CfgNode</code> keeps a list of predecessors and a list of successors
+reachable by any kind of edge.  You access these lists through the
+following functions.
+<p>
+<pre><a name="NW47Y6yp-1Uy8Tj-1" href="#NWDE"><dfn>&lt;<code>CfgNode</code> control-neighbor functions&gt;=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b> <b>[D<a href="#NWDF">-&gt;</a>]</b>
+int succs_size(CfgNode*);
+CfgNodeHandle succs_start(CfgNode*);
+CfgNodeHandle succs_end(CfgNode*);
+
+int preds_size(CfgNode*);
+CfgNodeHandle preds_start(CfgNode*);
+CfgNodeHandle preds_end(CfgNode*);
+
+CfgNode *fall_succ(CfgNode*);
+CfgNode *taken_succ(CfgNode*);
+</pre><p>
+
+<blockquote>
+<code>succs_size(node)</code> and <code>preds_size(node)</code> return the number of
+<code>nodes</code>'s successor and predecessor nodes, respectively. <br><code>succs_start(node)</code> and <code>preds_start(node)</code> return a handle on
+<code>nodes</code>'s first successor and predecessor, respectively. <br><code>succs_end(node)</code> and <code>preds_end(node)</code> return the sentinel handle for
+<code>nodes</code>'s successor and predecessor sequences, respectively. <br><code>fall_succ(node)</code> and <code>taken_succ(node)</code> return <code>node</code>'s first and
+second successors, respectively.
+</blockquote>
+<p>
+The sequence of predecessors represents an unordered set,
+while the sequence of successors
+corresponds to the target(s) of the node's terminating instruction.
+The predecessor list is unordered because we could not imagine a useful
+ordering to implement; it is a set (and not a multiset) because having a
+set seems a simpler abstraction.  The successors sequence is ordered;
+positions 0 and 1 in the list have special meaning depending on the kind
+of control instruction that terminates the node.  The same target can
+appear multiple times in the successors list, so that different cases of
+a multiway branch can jump to the same label.  The number of successors
+of a <code>CfgNode</code> depends on the control instruction that ends the node:
+<p>
+<ul>
+<li>Unconditional jumps and fall-through nodes (nodes that have
+no terminating control instruction) have just one successor,
+which is always successor number 0.
+<li>Call instructions also have just one successor, the node to
+which the call will return.
+<li>Conditional branches have two successors.  The fall-through
+path is always successor number 0, while the taken path is
+successor number 1.
+<li>Multiway branches have as many branches as there are slots
+in the branch dispatch table.  Changing the <i>j</i>th successor
+(counting from 0) of a multiway branch modifies the <i>j</i>th
+dispatch table entry.  (There is no ``default'' target label.)
+</ul>
+<p>
+All exceptional and impossible successors occur after the normal
+successors.
+<p>
+The functions returning a <code>CfgNodeHandle</code> permit
+<a name="NWDF">individual nodes to be visited in the usual manner.</a>
+The <code>fall_succ</code> and <code>taken_succ</code> functions are convenient ways to
+access successors 0 and 1, respectively.
+<p>
+
+<h5><a name=toc19>Making new neighbors.</a></h5>
+<p>
+You set the normal successors of a node using one of the following.
+<p>
+<pre><a name="NW47Y6yp-1Uy8Tj-2" href="#NWDE"><dfn>&lt;<code>CfgNode</code> control-neighbor functions&gt;+=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b> <b>[<a href="#NWDE">&lt;-</a>D<a href="#NWDG">-&gt;</a>]</b>
+CfgNode* get_pred(CfgNode*, int pos);
+CfgNode* get_succ(CfgNode*, int pos);
+void set_succ(CfgNode*, int pos, CfgNode *succ);
+void set_fall_succ(CfgNode*, CfgNode *succ);
+void set_taken_succ(CfgNode*, CfgNode *succ);
+</pre><p>
+
+The function <code>get_pred</code> returns the <code>n</code>-th predecessor of the node
+to which it's applied (recall that the predecessors are not ordered).
+<code>get_succ</code> returns the node corresponding to the <code>n</code>-th successor
+edge, and different values of <code>n</code> may yield the same successor node.
+<p>
+Calling <code>set_succ</code> makes <code>succ</code> the new <code>n</code>-th
+successor of <code>node</code>.  It disconnects the former <code>n</code>-th successor (if
+any), and updates the predecessor lists of the old and new successors.  If
+necessary, it also modifies <code>node</code>'s CTI, which should be consistent with
+the existing successor sequence, to reflect the change.  For example, if
+<code>node</code> ends with a conditional branch, then <pre>
+    set_succ(node, 1, succ);
+</pre>
+unlinks any previous ``taken'' successor, sets it to <code>succ</code>, and
+replaces the target symbol of <code>node</code>'s branch instruction with the
+first label of node <code>succ</code>.
+<p>
+Functions <code>set_fall_succ</code> and <code>set_taken_succ</code> are provided for
+mnemonic value; they are equivalent to calling <code>set_succ</code> with second
+argument <code>0</code> and <code>1</code>, respectively.
+<p>
+<a name="NWDG">Note that making node </a><i>e</i> a successor of the entry node has the effect
+of making <i>e</i> an entry point of the procedure.
+<p>
+<h5><a name=toc20>Creating exceptional and impossible edges.</a></h5>
+<p>
+For exceptional and impossible edges, there are special ways of setting a
+successor node.
+<p>
+<pre><a name="NW47Y6yp-1Uy8Tj-3" href="#NWDE"><dfn>&lt;<code>CfgNode</code> control-neighbor functions&gt;+=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b> <b>[<a href="#NWDF">&lt;-</a>D<a href="#NWDH">-&gt;</a>]</b>
+void set_exceptional_succ(CfgNode*, int n, CfgNode *succ);
+void set_impossible_succ(CfgNode*, int n, CfgNode *succ);
+</pre><p>
+
+<a name="NWDH">If necessary, each of the above functions extends the successor sequence</a>
+of the node to accommodate at least <code>n</code>+1 elements.  An edge created
+by <code>set_exceptional_succ</code> (<code>set_impossible_succ</code>) is marked as
+exceptional (impossible).  Detecting whether a particular numbered
+successor represents a normal, exceptional, or impossible edge is
+handled by the following predicates.
+<p>
+<pre><a name="NW47Y6yp-1Uy8Tj-4" href="#NWDE"><dfn>&lt;<code>CfgNode</code> control-neighbor functions&gt;+=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b> <b>[<a href="#NWDG">&lt;-</a>D<a href="#NWDI">-&gt;</a>]</b>
+bool is_normal_succ(CfgNode*, CfgNode *succ);
+bool is_normal_succ(CfgNode*, int pos);
+bool is_exceptional_succ(CfgNode*, CfgNode *succ);
+bool is_exceptional_succ(CfgNode*, int pos);
+bool is_possible_succ(CfgNode*, CfgNode *succ);
+bool is_possible_succ(CfgNode*, int pos);
+bool is_impossible_succ(CfgNode*, CfgNode *succ);
+bool is_impossible_succ(CfgNode*, int pos);
+bool is_abnormal_succ(CfgNode*, CfgNode *succ);
+bool is_abnormal_succ(CfgNode*, int pos);
+</pre><p>
+
+<a name="NWDI">The versions of the above predicates that take an integer </a><code>pos</code> as their
+second argument test whether the <code>pos</code>-th successor edge is of the
+indicated kind.  A ``possible'' successor is one that is either normal or
+exceptional, but not impossible.  An ``abnormal'' one is either exceptional
+or impossible.
+<p>
+To eliminate an abnormal edge of either kind, use one of the following
+functions.
+<p>
+<pre><a name="NW47Y6yp-1Uy8Tj-5" href="#NWDE"><dfn>&lt;<code>CfgNode</code> control-neighbor functions&gt;+=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b> <b>[<a href="#NWDH">&lt;-</a>D]</b>
+void remove_abnormal_succ(CfgNode*, CfgNode *succ);
+void remove_abnormal_succ(CfgNode*, int pos);
+</pre><p>
+
+
+
+<h5><a name=toc21><a name="NWDJ">Testing the control-transfer instruction.</a></a></h5>
+<p>
+It's often necessary to test whether a node is terminated by a CTI, and
+if so, what kind.
+<p>
+<pre><a name="NW47Y6yp-3mvyxk-1" href="#NWDJ"><dfn>&lt;<code>CfgNode</code> control-instruction functions&gt;=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b> <b>[D<a href="#NWDK">-&gt;</a>]</b>
+bool ends_in_cti(CfgNode*);     // has CTI
+bool ends_in_ubr(CfgNode*);     // has CTI satisfying is_ubr()
+bool ends_in_cbr(CfgNode*);     // has CTI satisfying is_cbr()
+bool ends_in_mbr(CfgNode*);     // has CTI satisfying is_mbr()
+bool ends_in_call(CfgNode*);    // has CTI satisfying is_call()
+bool ends_in_return(CfgNode*);  // has CTI satisfying is_return()
+</pre><p>
+
+<h5><a name=toc22><a name="NWDK">Adjusting the control-transfer instruction.</a></a></h5>
+<p>
+To this point, we have not described any way of changing the number of
+successors of a node.  The <code>set_succ</code> function diverts an existing
+edge, and it updates the CTI accordingly.  But sometimes, there's no
+substitute for altering the control instruction yourself, and then
+asking the library to adjust edges accordingly.  Here are the relevant
+functions.
+<p>
+<pre><a name="NW47Y6yp-3mvyxk-2" href="#NWDJ"><dfn>&lt;<code>CfgNode</code> control-instruction functions&gt;+=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b> <b>[<a href="#NWDJ">&lt;-</a>D]</b>
+Instr* get_cti(CfgNode*);
+InstrHandle get_cti_handle(CfgNode*);
+
+void invert_branch(CfgNode*);
+
+void reflect_cti(CfgNode*, Instr *cti, CfgNode *implicit_succ = NULL);
+</pre><p>
+
+If the node has a control-transfer instruction, then it is returned by
+<code>get_cti</code>.  Function <code>get_cti_handle</code> is similar, but returns a handle
+on the CTI's position in the instruction list, or a sentinel handle is
+there is no CTI.
+<p>
+Function <code>invert_branch</code> changes the polarity of a branch by changing
+its opcode to the opposite opcode (e.g. changing <code>beq</code> to <code>bne</code>).
+If the branch has a <code>branch_edge_weights</code> annotation, giving the edge
+frequencies of the node's two out-edges, then <code>invert_branch</code> swaps
+these as well.
+<p>
+Note that there is no corresponding <code>set_cti</code> function.  To change the
+CTI, you must change the instruction list directly and then call
+<code>reflect_cti</code>.  This function records the new CTI, which must already
+have been put into the node and changes the node's flow successors to
+reflect the new control instruction.  Obviously, if that instruction can
+fall through, the function needs to know what to use as its implicit
+successor.  In that case, pass it a second argument giving the implicit
+successor node.
+<p>
+<code>reflect_cti</code> preserves the exceptional and impossible successors of the
+node that it operates on, but it completely replaces the normal
+successors..  If its second argument is <code>NULL</code>, rather than a CTI
+instruction, it clears the node's CTI association and makes
+<code>implicit_succ</code> (its third argument) the node's only normal successor.
+<p>
+
+
+<h3><a name=toc23>Layout relations</a></h3>
+<a name="sec-node-layout"><b>[*]</b></a>
+<p>
+The CFG library supports basic block placement and layout by allowing
+the user to specify an ordering (partial or total) of the nodes in a
+CFG and its associated procedure.  The ordering is specified by a
+doubly-linked list that runs through the <code>CfgNode</code>s of the graph.
+Null pointers in this linked list indicate ``don't care'' orderings,
+while connected components (this document calls them ``clumps'') of
+<a name="NWDL">the list will be laid out in order.  This gives you complete</a>
+flexibility between specifying no order at all (all layout links null)
+to a total order on nodes.
+<p>
+<h5><a name=toc24>Checking and changing layout constraints.</a></h5>
+<p>
+To read and modify layout information, the library provides the
+following functions.
+<p>
+<pre><a name="NW47Y6yp-2uTJON-1" href="#NWDL"><dfn>&lt;<code>CfgNode</code> layout functions&gt;=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b>
+CfgNode *get_layout_pred(CfgNode*);
+CfgNode *get_layout_succ(CfgNode*);
+
+void clear_layout_succ(CfgNode*);
+bool set_layout_succ(CfgNode*, CfgNode *succ);
+bool set_layout_succ(CfgNode*, LabelSym *succ_label);
+</pre><p>
+
+A nodes's layout predecessor is returned by <code>get_layout_pred</code>; its
+layout successor, by <code>get_layout_succ</code>.
+<p>
+All of the functions that change a layout constraint between two nodes are
+invoked on the first of the two in layout order.  To remove a layout
+constraint, use <code>clear_layout_succ</code>.  To establish a layout
+constraint, use <code>set_layout_succ</code>, supplying the new layout successor
+as its argument.  (For convenience, you can supply a label of the
+successor node instead.)
+<p>
+The <code>set_layout_succ</code> function is careful about branch polarity and
+explicit jumps, inverting branches and inserting unconditional jumps
+when necessary.  When it needs to invert a branch, this function calls
+<code>invert_branch</code> and then returns <code>true</code>.
+<p>
+
+<h5><a name=toc25>Effects of layout constraints on code.</a></h5>
+<p>
+When a <code>Cfg</code> is constructed, no instructions are added or removed,
+whether or not layout constraints are specified.  Thus a procedure can
+be transformed into CFG form and back to instruction-list form with no
+changes, whether or not the layout-retention option is selected.
+<p>
+When no layout links have been specified, the library treats the
+CFG as a general graph.  You are free to transform it without having
+to ensure that there is a linearization of its current instructions
+that is in valid executable order.
+<p>
+On the other hand, the library insists that nodes with layout
+successors be valid standard basic blocks.  This makes
+<code>set_layout_succ</code> picky about the conditions under which it allows a
+link to be set.
+<p>
+<ul>
+<li>It is always legal to set the layout successor of a fall-through
+node or a node ending in an unconditional branch.  If the
+layout successor is also the control-flow successor, then an
+unneeded unconditional branch instruction will be removed.  If
+not, a goto will be created to be the terminating control
+instruction in the node (i.e. it will be returned by
+<code>get_cti</code>).  These constraints ensure that any necessary
+explicit goto's become visible for timing analysis and
+instruction scheduling.
+<li>It is legal to set the layout successor of a conditional
+branch node only if the layout successor is either the
+fall-through successor or the taken successor of the node.
+The CFG library sets the branch polarity so that the layout
+successor becomes the fall-through successor of the node.  If
+you actually want the layout successor of a conditional
+branch node not to be a control-flow successor, then you are
+responsible for creating a new unconditional branch node below
+the conditional branch.  This can be done easily using the
+<code>split_critical_edge</code> function.
+<li>It is legal to set the layout successor of a node ending
+in a call instruction only if the layout successor is also
+the control flow successor.
+<li>It is always legal to set the layout successor of a multiway
+branch node.
+<li>It is never legal to set a layout successor if adding that
+link to the layout list would create a layout cycle.  Moreover,
+it is never legal to change the fall-through successor of a node
+after its layout successor has been set.  (The library will
+allow you to set the fall-through successor to the same
+value, though).
+<p>
+</ul>
+
+<h5><a name=toc26><a name="NWDM">Bounding a node's computation.</a></a></h5>
+<p>
+It is sometimes useful to find the first ``real'' instruction in a node,
+i.e., the first one other than a label or some other kind of marker.
+It's occasionally useful to identify the last non-control-transfer
+instruction in a node.  The following functions identify such ``boundary''
+instructions within a node.
+<p>
+<pre><a name="NW47Y6yp-1p2udY-1" href="#NWDM"><dfn>&lt;<code>CfgNode</code> boundary functions&gt;=</dfn></a> <b>(<a href="#NWDN">U-&gt;</a>)</b>
+Instr *first_non_label(CfgNode*);
+Instr *first_active_instr(CfgNode*);
+Instr *last_non_cti(CfgNode*);
+</pre><p>
+
+Function <code>first_non_label</code> returns the first instruction in a node
+that isn't a label.  <code>first_active_instr</code> is similar, but skips
+pseudo-ops and null instructions in addition to labels.  Function
+<code>last_non_cti</code> returns the last instruction before the terminating
+control instruction in the node.  Each of these boundary-instruction
+<a name="NWDN">functions returns the null pointer if there is no qualifying instruction.</a>
+<p>
+
+
+<h3><a name=toc27>Header file for module <code>node.h</code></a></h3>
+<p>
+The <code>CfgNode</code> class and support data structures are defined in the
+module <code>node</code>, which has the following header file:
+<p>
+<pre><a name="NW47Y6yp-1VzSgH-1" href="#NWDN"><dfn>&lt;cfg/node.h&gt;=</dfn></a>
+/* file &quot;cfg/node.h&quot; -- Control Flow Graph Nodes */
+
+<a name="NW47Y6yp-1VzSgH-1-u1" href="#NWDe"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef CFG_NODE_H
+#define CFG_NODE_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;cfg/node.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+#include &lt;cfg/cfg_ir.h&gt;
+#include &lt;cfg/graph.h&gt;
+
+<a name="NW47Y6yp-1VzSgH-1-u2" href="#NWDA"><i>&lt;<code>CfgNode</code> creation&gt;</i></a>
+
+<a name="NW47Y6yp-1VzSgH-1-u3" href="#NWDD"><i>&lt;<code>CfgNode</code> identification&gt;</i></a>
+
+<a name="NW47Y6yp-1VzSgH-1-u4" href="#NWDB"><i>&lt;<code>CfgNode</code> bodily functions&gt;</i></a>
+
+<a name="NW47Y6yp-1VzSgH-1-u5" href="#NWDC"><i>&lt;<code>CfgNode</code> function nicknames&gt;</i></a>
+
+<a name="NW47Y6yp-1VzSgH-1-u6" href="#NWDE"><i>&lt;<code>CfgNode</code> control-neighbor functions&gt;</i></a>
+
+<a name="NW47Y6yp-1VzSgH-1-u7" href="#NWDJ"><i>&lt;<code>CfgNode</code> control-instruction functions&gt;</i></a>
+
+<a name="NW47Y6yp-1VzSgH-1-u8" href="#NWDL"><i>&lt;<code>CfgNode</code> layout functions&gt;</i></a>
+
+<a name="NW47Y6yp-1VzSgH-1-u9" href="#NWDM"><i>&lt;<code>CfgNode</code> boundary functions&gt;</i></a>
+
+#endif /* CFG_NODE_H */
+</pre><p>
+<h2><a name=toc28>Utilities</a></h2>
+<a name="sec-utilities"><b>[*]</b></a>
+<p>
+This section lists a number of helper functions that don't fall into
+the traditional class hierarchies.  These helper functions live in the
+<code>util.h</code> header file.
+<p>
+
+<h3><a name=toc29>Enumeration</a></h3>
+<a name="sec-enumeration-utilities"><b>[*]</b></a>
+<p>
+<h4><a name=toc30>Depth-first walk</a></h4>
+<p>
+<a name="NWDO">The following utility walks a subgraph of the CFG in depth-first order,</a>
+performing a given action after all successors of a node have already
+been visited.  It can walk either the forward or reverse graph.  Its
+arguments are: the node at which to start; the graph orientation
+(<code>true</code> for forward); the set of nodes already visited; the node
+action to be performed; and an optional flag that causes impossible edges
+to be ignored.
+<p>
+<pre><a name="NW4MGyWr-2yjziL-1" href="#NWDO"><dfn>&lt;node enumeration utilities&gt;=</dfn></a> <b>(<a href="#NWDW">U-&gt;</a>)</b>
+extern void
+    depth_first_walk(CfgNode *start, bool forward, NatSet *visited,
+                     DepthFirstWalkAction&amp;, bool not_impossible = false);
+</pre><p>
+
+<a name="NWDP">The action applied to each node in the walk is expressed using a</a>
+subclass of the following little class:
+<p>
+<pre><a name="NW4MGyWr-4SQQHg-1" href="#NWDP"><dfn>&lt;class <code>DepthFirstWalkAction</code>&gt;=</dfn></a> <b>(<a href="#NWDW">U-&gt;</a>)</b>
+class DepthFirstWalkAction {
+  public:
+    virtual ~DepthFirstWalkAction() { }
+    virtual void operator()(CfgNode*) { }
+};
+</pre><p>
+
+This class can be used as it is, if no action is needed at each node.
+Otherwise you specialize it to perform whatever task is needed.  The
+<a name="NWDQ">utility in the next section is implemented using a </a><code>DepthFirstWalkAction</code>
+that accumulates a list of nodes in reverse postorder.
+<p>
+
+<h4><a name=toc31>Reverse postorder sequence</a></h4>
+<p>
+The following class presents the nodes of a CFG in reverse
+postorder <b>[cite&nbsp;<a href="#NWcite-bibmorgan">bibmorgan</a>]</b>.
+<p>
+<pre><a name="NW4MGyWr-4X6b5o-1" href="#NWDQ"><dfn>&lt;class <code>CfgNodeListRpo</code>&gt;=</dfn></a> <b>(<a href="#NWDW">U-&gt;</a>)</b>
+class CfgNodeListRpo
+{
+  public:
+    CfgNodeListRpo(Cfg *graph, bool forward = true);
+    virtual ~CfgNodeListRpo();
+
+    int size();
+    CfgNodeHandle start();
+    CfgNodeHandle end();
+
+    void prepend(CfgNode*);
+    void append(CfgNode*);
+    void replace(CfgNodeHandle, CfgNode*);
+    void insert_before(CfgNodeHandle, CfgNode*);
+    void insert_after(CfgNodeHandle, CfgNode*);
+    CfgNode* remove(CfgNodeHandle);
+
+<a name="NW4MGyWr-4X6b5o-1-u1" href="#NWDR"><i>&lt;<code>CfgNodeListRpo</code> protected part&gt;</i></a>
+};
+</pre><p>
+
+The interface of this class is exactly that of any other sequence in
+Machine SUIF.  Its constructor takes a CFG and an optional boolean
+indicator of graph orientation.  The constructor computes the node
+sequence; you can inspect and even modify the sequence using the usual
+set of sequence manipulation actions.  By default, or when its second
+argument is <code>true</code>, the constructor operates on the normal forward
+graph; a <code>false</code> second argument causes it to use the reverse graph
+instead.
+<p>
+Typically, you bind a reverse-postorder it to a local variable and use
+the handle abstraction to scan it.  The sequence is automatically
+reclaimed when the scope of the local variable ends.  For example:
+<p>
+<pre>
+    {
+        CfgNodeListRpo rpo(the_cfg);
+        <a name="NWDR">for (CfgNodeHandle h = rpo.start(); h != rpo.end(); ++h) {</a>
+            ...                 // use *h to access current node
+        }
+    }                           // list rpo is reclaimed here
+</pre>
+
+The implementation of class <code>CfgNodeListRpo</code> uses a C++ list of node
+pointers:
+<p>
+<pre><a name="NW4MGyWr-2f7zp8-1" href="#NWDR"><dfn>&lt;<code>CfgNodeListRpo</code> protected part&gt;=</dfn></a> <b>(<a href="#NWDQ">&lt;-U</a>)</b>
+  protected:
+    list&lt;CfgNode*&gt; nodes;
+</pre><p>
+
+
+
+<h3><a name=toc32><a name="NWDS">Node Identification</a></a></h3>
+<p>
+The <code>cfg_node</code> annotation connects a label symbol back to the
+corresponding CFG node.  The following helper function uses that note to
+return the node for a given label.
+<p>
+<pre><a name="NW4MGyWr-4FsYPA-1" href="#NWDS"><dfn>&lt;function <code>label_cfg_node</code>&gt;=</dfn></a> <b>(<a href="#NWDW">U-&gt;</a>)</b>
+CfgNode *label_cfg_node(Sym *);
+</pre><p>
+
+<a name="NWDT">To reach the CFG node containing a given instruction, apply this function:</a>
+<p>
+<pre><a name="NW4MGyWr-2xvi8G-1" href="#NWDT"><dfn>&lt;function <code>get_parent_node</code>&gt;=</dfn></a> <b>(<a href="#NWDW">U-&gt;</a>)</b>
+CfgNode* get_parent_node(Instr*);
+</pre><p>
+
+It returns the containing node, if there is one, or else <code>NULL</code>.
+<p>
+
+<h3><a name=toc33><a name="NWDU">Visualization</a></a></h3>
+<p>
+The <code>generate_vcg</code> function will write a graph description in a format
+suitable for the VCG (Visualization for Compiler Graphs) tool to read
+and display graphically.  The <code>FILE *</code> argument should be an open file
+descriptor to which to write.  See the documentation for the VCG tool
+for more information about the VCG file format.
+<p>
+<pre><a name="NW4MGyWr-5Nxoc-1" href="#NWDU"><dfn>&lt;visualization support&gt;=</dfn></a> <b>(<a href="#NWDW">U-&gt;</a>)</b>
+extern void generate_vcg(FILE *, Cfg *);        // Dump vcg format file
+</pre><p>
+
+
+<h3><a name=toc34><a name="NWDV">Node-Sequence Utilities</a></a></h3>
+<p>
+Sometimes it is useful to inquire if a node <code>pred</code> precedes another
+node in the CFG; <code>has_pred</code> provides this functionality.
+<p>
+<pre><a name="NW4MGyWr-2qwyv8-1" href="#NWDV"><dfn>&lt;node-sequence utilities&gt;=</dfn></a> <b>(<a href="#NWDW">U-&gt;</a>)</b>
+extern bool has_pred(CfgNode *node, CfgNode *pred);
+</pre><p>
+
+
+<h3><a name=toc35><a name="NWDW">Header file for module </a><code>util.h</code></a></h3>
+<p>
+We declare module <code>util</code> with the following header file.
+<p>
+<pre><a name="NW4MGyWr-xSHP-1" href="#NWDW"><dfn>&lt;cfg/util.h&gt;=</dfn></a>
+/* file &quot;cfg/util.h&quot; -- Control Flow Graph Utilities */
+
+<a name="NW4MGyWr-xSHP-1-u1" href="#NWDe"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef CFG_UTIL_H
+#define CFG_UTIL_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;cfg/util.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+#include &lt;cfg/cfg_ir.h&gt;
+#include &lt;cfg/graph.h&gt;
+
+<a name="NW4MGyWr-xSHP-1-u2" href="#NWDP"><i>&lt;class <code>DepthFirstWalkAction</code>&gt;</i></a>
+
+<a name="NW4MGyWr-xSHP-1-u3" href="#NWDO"><i>&lt;node enumeration utilities&gt;</i></a>
+
+<a name="NW4MGyWr-xSHP-1-u4" href="#NWDQ"><i>&lt;class <code>CfgNodeListRpo</code>&gt;</i></a>
+
+extern IdString k_cfg_node;
+
+<a name="NW4MGyWr-xSHP-1-u5" href="#NWDS"><i>&lt;function <code>label_cfg_node</code>&gt;</i></a>
+
+<a name="NW4MGyWr-xSHP-1-u6" href="#NWDT"><i>&lt;function <code>get_parent_node</code>&gt;</i></a>
+
+<a name="NW4MGyWr-xSHP-1-u7" href="#NWDU"><i>&lt;visualization support&gt;</i></a>
+
+<a name="NW4MGyWr-xSHP-1-u8" href="#NWDV"><i>&lt;node-sequence utilities&gt;</i></a>
+
+#endif /* CFG_UTIL_H */
+</pre><p>
+<h2><a name=toc36><a name="NWDX">Library initialization</a></a></h2>
+<p>
+Before you can start using the facilities of the <code>cfg</code> library,
+the library must initialize some parts of itself.  In SUIF, this is
+performed by defining an <code>init_</code><em>libname</em> routine.
+<p>
+<pre><a name="NW1wzDzq-xSjhY-1" href="#NWDX"><dfn>&lt;cfg library initialization&gt;=</dfn></a> <b>(<a href="#NWDZ">U-&gt;</a>)</b>
+extern &quot;C&quot; void init_cfg(SuifEnv* suif_env);
+</pre><p>
+
+<a name="NWDY">The following string keys the annotation that connects a label to the</a>
+corresponding CFG node.
+<p>
+<pre><a name="NW1wzDzq-3jEJbL-1" href="#NWDY"><dfn>&lt;cfg string constants&gt;=</dfn></a> <b>(<a href="#NWDZ">U-&gt;</a>)</b>
+extern IdString k_cfg_node;
+</pre><p>
+
+<a name="NWDZ">The </a><code>cfg</code> library initialization header has the following layout:
+<p>
+<pre><a name="NW1wzDzq-2jw1tN-1" href="#NWDZ"><dfn>&lt;cfg/init.h&gt;=</dfn></a>
+/* file &quot;cfg/init.h&quot; */
+
+<a name="NW1wzDzq-2jw1tN-1-u1" href="#NWDe"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef CFG_INIT_H
+#define CFG_INIT_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;cfg/init.h&quot;
+#endif
+
+<a name="NW1wzDzq-2jw1tN-1-u2" href="#NWDX"><i>&lt;cfg library initialization&gt;</i></a>
+
+<a name="NW1wzDzq-2jw1tN-1-u3" href="#NWDY"><i>&lt;cfg string constants&gt;</i></a>
+
+#endif /* CFG_INIT_H */
+</pre><p>
+<h2><a name=toc37><a name="NWDa">Header file for the CFG library</a></a></h2>
+<p>
+The following is the header file is for use by other libraries and
+passes that depend on the CFG library.  It is never included in any
+implementation file within the <code>machsuif/cfg</code> directory.
+<p>
+<pre><a name="NW12GQSU-2ZIwg9-1" href="#NWDa"><dfn>&lt;cfg/cfg.h&gt;=</dfn></a>
+/* file &quot;cfg/cfg.h&quot; */
+
+<a name="NW12GQSU-2ZIwg9-1-u1" href="#NWDe"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef CFG_CFG_H
+#define CFG_CFG_H
+
+#include &lt;machine/copyright.h&gt;
+
+#include &lt;cfg/cfg_ir.h&gt;
+#include &lt;cfg/cfg_ir_factory.h&gt;
+#include &lt;cfg/graph.h&gt;
+#include &lt;cfg/node.h&gt;
+#include &lt;cfg/util.h&gt;
+#include &lt;cfg/init.h&gt;
+
+#endif /* CFG_CFG_H */
+</pre><p>
+<h2><a name=toc38><a name="NWDb">Hoof Specification of CFG Classes</a></a></h2>
+<p>
+This section contains the Hoof code that defines our <code>Cfg</code> and <code>CfgNode</code>
+IR objects in SUIF.  We refer you to the SUIF documentation if you want to
+learn more about Hoof and these definitions.
+<p>
+<h3><a name=toc39>Class <code>Cfg</code></a></h3>
+<p>
+<pre><a name="NW36infO-3cK3P3-1" href="#NWDb"><dfn>&lt;class <code>Cfg</code>&gt;=</dfn></a> <b>(<a href="#NWDd">U-&gt;</a>)</b>
+concrete Cfg : AnyBody {
+    list&lt;CfgNode* owner&gt; nodes;
+    CfgNode* reference entry_node;
+    CfgNode* reference exit_node;
+
+    list&lt;LabelSym* reference&gt; noted_labels;
+
+    bool keep_layout;
+    bool break_at_call;
+    bool break_at_instr;
+
+    CPP_DECLARE
+      public:
+        list&lt;CfgNode*&gt;&amp; nodes() { return _nodes; }
+        InstrList* to_instr_list();
+        list&lt;LabelSym*&gt;&amp; noted_labels() { return _noted_labels; }
+    CPP_DECLARE
+    CPP_BODY
+        extern InstrList* cfg_to_instr_list(Cfg*);
+        InstrList*
+        Cfg::to_instr_list()
+        {
+            return cfg_to_instr_list(this);
+        }
+    CPP_BODY
+};
+</pre><p>
+
+<h3><a name=toc40><a name="NWDc">Class </a><code>CfgNode</code></a></h3>
+<p>
+<pre><a name="NW36infO-1xnNPU-1" href="#NWDc"><dfn>&lt;class <code>CfgNode</code>&gt;=</dfn></a> <b>(<a href="#NWDd">U-&gt;</a>)</b>
+concrete CfgNode : ScopedObject {
+    int number;
+    Instr* reference cti;
+    list&lt;Instr* owner&gt; instrs;
+    list&lt;CfgNode* reference&gt; preds;
+    list&lt;CfgNode* reference&gt; succs;
+    CfgNode* reference layout_pred;
+    CfgNode* reference layout_succ;
+    IInteger exc_succs; 
+    IInteger imp_succs;
+
+    CPP_DECLARE
+      public:
+        list&lt;Instr*&gt;&amp; instrs() { return _instrs; }
+        list&lt;CfgNode*&gt;&amp; succs() { return _succs; }
+        list&lt;CfgNode*&gt;&amp; preds() { return _preds; }
+
+        IInteger&amp; exc_succs() { return _exc_succs; }
+        IInteger&amp; imp_succs() { return _imp_succs; }
+    CPP_DECLARE
+};
+</pre><p>
+
+
+
+
+<h3><a name=toc41><a name="NWDd">Overall hoof specification for module </a><code>cfg</code></a></h3>
+<p>
+The combined hoof grammar for the <code>cfg</code> module has the following layout.
+<p>
+<pre><a name="NW36infO-3EBckR-1" href="#NWDd"><dfn>&lt;cfg/cfg_ir.hoof&gt;=</dfn></a>
+# file &quot;cfg_ir.hoof&quot;
+#
+#    Copyright (c) 2000 The President and Fellows of Harvard College
+#
+#    All rights reserved.
+#
+#    This software is provided under the terms described in
+#    the &quot;machine/copyright.h&quot; include file.
+
+
+#include &quot;machine/machine_ir.hoof&quot;
+
+module cfg_ir {
+
+    include &lt;bit_vector/bit_vector.h&gt;;
+    include &lt;machine/machine.h&gt;;
+
+    import basicnodes;
+    import machine;
+
+<a name="NW36infO-3EBckR-1-u1" href="#NWDb"><i>&lt;class <code>Cfg</code>&gt;</i></a>
+
+<a name="NW36infO-3EBckR-1-u2" href="#NWDc"><i>&lt;class <code>CfgNode</code>&gt;</i></a>
+}
+</pre><p>
+<h2><a name=toc42><a name="NWDe">Copyright</a></a></h2>
+All of the code is protected by the following copyright notice.
+<p>
+<pre><a name="NW4NUaGr-23xQrt-1" href="#NWDe"><dfn>&lt;Machine-SUIF copyright&gt;=</dfn></a> <b>(<a href="#NWD9">&lt;-U</a> <a href="#NWDN">&lt;-U</a> <a href="#NWDW">&lt;-U</a> <a href="#NWDZ">&lt;-U</a> <a href="#NWDa">&lt;-U</a>)</b>
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard College
+
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the &quot;machine/copyright.h&quot; include file.
+*/
+</pre><p>
+
+
+<!-- \section{Summary and Availability}-->
+<h2><a name=toc43>Summary</a></h2>
+<a name="secSummary"><b>[*]</b></a>
+<p>
+We have developed a CFG library that supports not only analysis of
+programs, but also CFG-level transformations, code layout, and
+fine-grained code motion.  At Harvard, we have
+used this machine library to build compiler passes including dead code
+elimination, loop peeling and unrolling, static correlated branch
+prediction, code layout, register allocation, and a number of
+instruction schedulers.
+<p>
+
+<h2><a name=toc44>Acknowledgments</a></h2>
+<p>
+This document is heavily based on the CFG library in Machine SUIF
+version 1.1.2 that was done by Cliff Young.  Cliff traced the roots of
+this library all the way back to a CFG library that was written by Mike
+Smith (one of the co-authors of the current document).  A version of
+this original library was modified by Bob Wilson at Stanford.  Tony
+DeWitt brought the library to Harvard and helped Cliff to adapt the data
+structure constructors to the Machine-SUIF version 1.1.2 library.  Gang
+Chen wrote the loop analysis code, and Mike built the unified data-flow
+analysis routines.  Other members of the HUBE research group at Harvard
+contributed useful suggestions to the design.  Tim Callahan of Synopsis,
+Inc. and Berkeley helped to uncover and fix several bugs.
+<p>
+This work is supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).
+We also gratefully acknowledge the generous support of this research
+by Advanced Micro Devices, Compaq, Digital Equipment, Hewlett-Packard,
+International Business Machines, Intel, and Microsoft.
+<p>
+
+<h2><a name=toc45>References</a></h2>
+<p>
+<a name="NWcite-bibalign"><b>[1]</b></a>  Cliff Young, David S. Johnson, David R. Karger, and
+Michael D. Smith. <em>Near-optimal Intraprocedural Branch
+Alignment</em>. Proc. ACM SIGPLAN 1997 Conference on Programming Language
+Design and Implementation, pp. 183-193, June 1997.
+<p>
+<a name="NWcite-biblayout"><b>[2]</b></a>  Nikolas Gloy, Trevor Blackwell, Michael D. Smith,
+and Brad Calder.  <em>Procedure Placement
+using Temporal Ordering Information</em>. Proc. 30th Annual IEEE/ACM
+Intl. Symp. on Microarchitecture, pp. 303-313, December 1997.
+<p>
+<a name="NWcite-bibmorgan"><b>[3]</b></a>  Robert Morgan.  <em>Building an Optimizing
+Compiler.</em>  Digital Press, 1998.
+<p>
+<a name="NWcite-bibscbp"><b><a name="NWDf">[4]</a></b></a>  Cliff Young and Michael D. Smith. ``Improving the
+Accuracy of Static Branch Prediction Using Branch Correlation''.
+<em>Proc. 6th Intl. Conf. on Architectural Support for Programming
+Languages and Operating Systems</em>, pp.  232-241, October 1994.
+<p>
+
+
+<!-- Make \end{document} a chunk by itself to allow cross-reference info-->
+<!-- to be dumped in before it (noweave -delay).-->
+
+
+
+
+<ul>
+<li><a href="#NWD3"><i>&lt;<code>Cfg</code> creation and normalization&gt;</i></a>: <a href="#NWD3">D1</a>, <a href="#NWD9">U2</a>
+<li><a href="#NWD4"><i>&lt;<code>Cfg</code> inspectors&gt;</i></a>: <a href="#NWD4">D1</a>, <a href="#NWD6">D2</a>, <a href="#NWD9">U3</a>
+<li><a href="#NWD8"><i>&lt;<code>Cfg</code> printing&gt;</i></a>: <a href="#NWD8">D1</a>, <a href="#NWD9">U2</a>
+<li><a href="#NWD7"><i>&lt;<code>Cfg</code> simplification&gt;</i></a>: <a href="#NWD7">D1</a>, <a href="#NWD9">U2</a>
+<li><a href="#NWDB"><i>&lt;<code>CfgNode</code> bodily functions&gt;</i></a>: <a href="#NWDB">D1</a>, <a href="#NWDN">U2</a>
+<li><a href="#NWDM"><i>&lt;<code>CfgNode</code> boundary functions&gt;</i></a>: <a href="#NWDM">D1</a>, <a href="#NWDN">U2</a>
+<li><a href="#NWDJ"><i>&lt;<code>CfgNode</code> control-instruction functions&gt;</i></a>: <a href="#NWDJ">D1</a>, <a href="#NWDK">D2</a>, <a href="#NWDN">U3</a>
+<li><a href="#NWDE"><i>&lt;<code>CfgNode</code> control-neighbor functions&gt;</i></a>: <a href="#NWDE">D1</a>, <a href="#NWDF">D2</a>, <a href="#NWDG">D3</a>, <a href="#NWDH">D4</a>, <a href="#NWDI">D5</a>, <a href="#NWDN">U6</a>
+<li><a href="#NWDA"><i>&lt;<code>CfgNode</code> creation&gt;</i></a>: <a href="#NWDA">D1</a>, <a href="#NWDN">U2</a>
+<li><a href="#NWDC"><i>&lt;<code>CfgNode</code> function nicknames&gt;</i></a>: <a href="#NWDC">D1</a>, <a href="#NWDN">U2</a>
+<li><a href="#NWDD"><i>&lt;<code>CfgNode</code> identification&gt;</i></a>: <a href="#NWDD">D1</a>, <a href="#NWDN">U2</a>
+<li><a href="#NWDL"><i>&lt;<code>CfgNode</code> layout functions&gt;</i></a>: <a href="#NWDL">D1</a>, <a href="#NWDN">U2</a>
+<li><a href="#NWD5"><i>&lt;<code>CfgNodeHandle</code> definition&gt;</i></a>: <a href="#NWD5">D1</a>, <a href="#NWD9">U2</a>
+<li><a href="#NWDR"><i>&lt;<code>CfgNodeListRpo</code> protected part&gt;</i></a>: <a href="#NWDQ">U1</a>, <a href="#NWDR">D2</a>
+<li><a href="#NWDX"><i>&lt;cfg library initialization&gt;</i></a>: <a href="#NWDX">D1</a>, <a href="#NWDZ">U2</a>
+<li><a href="#NWDY"><i>&lt;cfg string constants&gt;</i></a>: <a href="#NWDY">D1</a>, <a href="#NWDZ">U2</a>
+<li><a href="#NWDa"><i>&lt;cfg/cfg.h&gt;</i></a>: <a href="#NWDa">D1</a>
+<li><a href="#NWDd"><i>&lt;cfg/cfg_ir.hoof&gt;</i></a>: <a href="#NWDd">D1</a>
+<li><a href="#NWD9"><i>&lt;cfg/graph.h&gt;</i></a>: <a href="#NWD9">D1</a>
+<li><a href="#NWDZ"><i>&lt;cfg/init.h&gt;</i></a>: <a href="#NWDZ">D1</a>
+<li><a href="#NWDN"><i>&lt;cfg/node.h&gt;</i></a>: <a href="#NWDN">D1</a>
+<li><a href="#NWDW"><i>&lt;cfg/util.h&gt;</i></a>: <a href="#NWDW">D1</a>
+<li><a href="#NWDb"><i>&lt;class <code>Cfg</code>&gt;</i></a>: <a href="#NWDb">D1</a>, <a href="#NWDd">U2</a>
+<li><a href="#NWDc"><i>&lt;class <code>CfgNode</code>&gt;</i></a>: <a href="#NWDc">D1</a>, <a href="#NWDd">U2</a>
+<li><a href="#NWDQ"><i>&lt;class <code>CfgNodeListRpo</code>&gt;</i></a>: <a href="#NWDQ">D1</a>, <a href="#NWDW">U2</a>
+<li><a href="#NWDP"><i>&lt;class <code>DepthFirstWalkAction</code>&gt;</i></a>: <a href="#NWDP">D1</a>, <a href="#NWDW">U2</a>
+<li><a href="#NWDT"><i>&lt;function <code>get_parent_node</code>&gt;</i></a>: <a href="#NWDT">D1</a>, <a href="#NWDW">U2</a>
+<li><a href="#NWDS"><i>&lt;function <code>label_cfg_node</code>&gt;</i></a>: <a href="#NWDS">D1</a>, <a href="#NWDW">U2</a>
+<li><a href="#NWDe"><i>&lt;Machine-SUIF copyright&gt;</i></a>: <a href="#NWD9">U1</a>, <a href="#NWDN">U2</a>, <a href="#NWDW">U3</a>, <a href="#NWDZ">U4</a>, <a href="#NWDa">U5</a>, <a href="#NWDe">D6</a>
+<li><a href="#NWDO"><i>&lt;node enumeration utilities&gt;</i></a>: <a href="#NWDO">D1</a>, <a href="#NWDW">U2</a>
+<li><a href="#NWDV"><i>&lt;node-sequence utilities&gt;</i></a>: <a href="#NWDV">D1</a>, <a href="#NWDW">U2</a>
+<li><a href="#NWDU"><i>&lt;visualization support&gt;</i></a>: <a href="#NWDU">D1</a>, <a href="#NWDW">U2</a>
+</ul>
+</body></html>
+

@@ -1,0 +1,4 @@
+For the purposes of ROCCC, we do not need these passes.  They are useful for generating backends, but we don't
+want to deal with supporting useless passes. If you need these passes, move them up to the parent directory
+and uncomment their reference in the makefile.  Some changes might need to be made to the source code to make 
+lists works (see machine/substrate.h for typedef List std::list). 

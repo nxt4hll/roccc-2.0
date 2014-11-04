@@ -1,0 +1,87 @@
+\section{Structure of a Machine-SUIF Pass}
+\label{app-suif-pass}
+
+This appendix describes how we map the methods of a Machine-SUIF pass
+to those of an OPI pass.  In Machine SUIF, each SUIF pass wraps a
+single OPI pass.  The only real complication in the mapping of the
+SUIF pass methods onto the OPI pass methods results from the need to
+initialize the substrate's state, as described below.
+
+Machine SUIF creates an optimization pass by deriving a class from
+SUIF's [[PipelinablePass]] class.  The public methods of interest
+are [[do_file_set_block]], [[do_file_block]],
+[[do_procedure_definition]], and [[finalize]].  We will use the
+implementations of these methods from [[peep/suif_pass.cpp]] as our
+running example.
+
+As illustrated in [[peep/suif_pass.h]], the class [[PeepSuifPass]]
+embeds an instance of the class [[Peep]] within itself, and then the
+implementation of the public methods of interest in [[PeepSuifPass]]
+simply invoke the [[initialize]], [[do_opt_unit]], and [[finalize]]
+methods of the embedded [[Peep]] object.  The simplest of these
+connections occurs in [[finalize]], as shown below, where we just
+invoke [[peep.finalize]].  The contents of the other [[PeepSuifPass]]
+methods are described below.
+
+<<[[finalize]]>>=
+@
+
+\paragraph{File set handler.}
+
+A \emph{file set} is an object that represents the whole input of a
+compilation.  Its C++ type is [[FileSetBlock*]].  The file-set handler
+[[do_file_set_block]] takes an object of this type and performs any
+once-only initialization that the SUIF pass requires.
+
+<<[[do_file_set_block]]>>=
+@
+
+In addition, our implementation of [[do_file_set_block]] invokes
+[[set_opi_predefined_types]].  This creates a cache of
+machine-independent types such as [[type_v0]] and [[type_s32]]
+\cite{bibmachine} and attaches it to the file-set object.
+
+
+\paragraph{File handler.}
+
+Each file in a file set has an associated [[FileBlock*]] object.  The
+file handler [[do_file_block]] takes this object and performs any
+needed per-file processing.  
+
+Under Machine SUIF, facts about the compilation target are dynamically
+bound to functions and data structures in the OPI.  OPI functions and
+data structures that rely on the specifics of the underlying substrate
+are bound statically when the Machine-SUIF libraries are compiled.
+
+Binding of the OPI to a particular target requires the construction of
+a Machine-SUIF [[Context]] object.  This object is created in
+[[do_file_block]] by the call [[focus(FileBlock*)]].  The contents of
+the [[target_lib]] annotation attached to the [[FileBlock]] determines
+the specific [[Context]] object created.
+
+<<[[do_file_block]]>>=
+@
+
+The call [[focus(FileBlock*)]] also informs the OPI that the
+optimization focus now resides in the indicated [[FileBlock]].  The
+call [[peep.initialize()]] allows the OPI pass to perform its setup;
+remember that this initialization call may invoke target-specific
+functions and thus must occur after [[focus]].
+
+
+\paragraph{Procedure handler.}
+
+Machine SUIF performs optimizations at the granularity of procedures
+by invoking [[do_procedure_definition]].  In SUIF, a procedure is
+given the object type [[ProcedureDefinition]].  As stated in
+Section~\ref{sec-opi-pass}, [[OptUnit]] is a synonym for
+[[ProcedureDefinition]].
+
+<<[[do_procedure_definition]]>>=
+@
+
+The body of this method simply informs the OPI that the optimization
+focus is now moving to [[pd]], a [[ProcedureDefinition*]], and then
+invokes the optimizer on that [[ProcedureDefinition]].  When the
+optimizer is done, we invoke the Machine-SUIF function [[defocus]] to
+move the optimization focus back to the [[FileBlock]].

@@ -1,0 +1,18 @@
+#SCRIPTS =	do_lower do_print do_printsuif
+BINSCRIPTS =	do_lower do_print do_printsuif
+
+INSTALLED_SCRIPTS = $(addprefix $(BINDIR)/,$(SCRIPTS))
+
+
+include $(MACHSUIFHOME)/Makefile.common
+
+
+all buildpackage: $(INSTALLED_SCRIPTS)
+
+$(INSTALLED_SCRIPTS): $(BINDIR)/%: %
+	rm -f $@;	cp $< $@
+
+clean: uninstall-scripts
+
+uninstall-scripts:
+	rm -f $(INSTALLED_SCRIPTS)

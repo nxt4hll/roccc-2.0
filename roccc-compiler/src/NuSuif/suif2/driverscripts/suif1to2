@@ -1,0 +1,119 @@
+#!/bin/sh -f
+
+ncibin=@NCIHOME@/bin
+ncisolib=@NCIHOME@/solib
+if [ x$LD_LIBRARY_PATH = x ]
+    then LD_LIBRARY_PATH=$ncisolib
+else
+    LD_LIBRARY_PATH=$ncisolib:$LD_LIBRARY_PATH
+fi
+
+usage() {
+   echo "Usage: $0 [-o outputfile] [-keep] [-v]"
+   echo "    file.spd"
+   echo "  convert a suif1 file to suif2"
+   echo "  if the outputfile is not specified"
+   echo "  file.suif will be used"
+   exit 1;
+}
+
+keep=0
+
+outputfile=""
+default_ext=.suif
+
+tmpfile=$$.drv
+verbose=0
+
+while [ ! -z $1 ];
+  do case x"$1" in
+    x-f)  shift
+      if [ -z $1 ]
+         then usage; fi
+      tmpfile=$1
+      shift ;;
+    x-o)  shift
+      if [ -z $1 ] 
+          then usage; fi
+      outputfile=$1
+      shift;;
+    x-keep) keep=1
+      shift;;
+    x-v) verbose=1
+      shift;;
+    x-*) 
+      echo "Bad option $1"; 
+      usage;;
+    *) break;;
+  esac
+done
+
+if [ -z $1 ] 
+    then usage; fi
+if [ $# -ne 1 ]
+    then echo "Error: Too many files in the input line"
+    usage
+fi
+
+inputfile=$1
+if [ x$outputfile = x"" ]
+    then base=`echo $inputfile | sed 's+^.*/++' | sed 's+^\(.*\)\..*+\1+'`
+    base2=`echo $inputfile | sed 's+^.*/++'`
+
+    if [ x$base2 = x$base ]
+	then echo "Error: Input file basename '$base2' has no does not have an extension"
+	usage
+    fi
+    outputfile="$base"$default_ext
+fi
+rm -f $outputfile
+
+if [ x${SUIFHOME} = x ]
+    then echo SUIF1 environment 'SUIFHOME' MUST be set up before using this script
+fi
+if [ x${MACHINE} = x ]
+    then echo SUIF1 environment 'MACHINE' MUST be set up before using this script
+    exit 1
+fi
+
+sln=${base}.sln
+if [ $verbose -eq 1 ]
+  then echo ${SUIFHOME}/${MACHINE}/bin/loop_norm $inputfile $sln
+fi
+${SUIFHOME}/${MACHINE}/bin/loop_norm $inputfile $sln
+if [ $? != 0 ]
+   then echo "failed ${SUIFHOME}/${MACHINE}/bin/loop_norm $inputfile $sln"
+   exit 1
+fi
+
+cat <<EOF > $tmpfile
+import convertsuif1to2
+import transforms
+
+convertsuif1to2 $sln
+import transforms
+import usefulpasses
+build_repeat_value_blocks
+build_field_access_expressions
+avoid_label_collisions
+avoid_external_collisions
+insert_struct_final_padding
+dismantle_field_access_expressions
+recycle_trash
+save $outputfile
+EOF
+
+if [ $verbose -eq 1 ]
+    then echo $ncibin/suifdriver -f $tmpfile
+fi
+$ncibin/suifdriver -f $tmpfile 1>&2
+if [ $? != 0 ]
+   then echo "FAILED: $ncibin/suifdriver -f $tmpfile" 
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then if [ $verbose -eq 1 ]
+	  then echo rm -f $sln $tmpfile
+       fi
+  rm -f $sln $tmpfile
+fi

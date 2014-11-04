@@ -1,0 +1,2149 @@
+\documentclass{article}\usepackage{noweb}
+\noweboptions{smallcode}
+
+% Give the l2h (LaTeX to HTML) filter some hints
+%
+% l2h ignore nwcodepenalty =
+% l2h ignore raggedbottom
+% l2h envblock openissue blockquote
+
+% Adjust dimensions before setting \pagestyle: it looks at
+% some of them
+%
+\textwidth 16.0cm
+\textheight 22.0cm
+\oddsidemargin 0.1in
+\evensidemargin 0.1in
+\topmargin -0.2in
+\parindent 0.0in
+\parskip 1.5ex
+\sloppy
+\raggedbottom
+
+\pagestyle{noweb}
+
+% Replace some noweb.sty definitions to improve page breaks
+%
+\makeatletter
+
+\def\nw@laterfilename#1{%
+  \endgroup\markboth{#1}{#1}}		% Omit \clearpage for new source file
+
+\nwcodepenalty=9999			% Was =\@highpenalty (>9999 disallows
+					% ... _any_ break in code)
+\def\nwbegincode#1{%
+  \begingroup
+    \topsep \nwcodetopsep
+    \@beginparpenalty \nwcodepenalty	% Use \nwcodepenalty ...
+    \@endparpenalty -\nwcodepenalty	% ... instead of \@highpenalty
+    \@begincode}
+\def\nwendcode{%
+  \endtrivlist \endgroup \goodbreak}	% Use \goodbreak ...
+\let\nwdocspar=\goodbreak		% ... instead of \filbreak
+
+\makeatother
+
+\title{A User's Guide to the \\
+Optimization Programming Interface}
+\author{{\em Release version 2.02.07.15} \\
+	\\
+	Glenn Holloway and Michael D. Smith\\
+	\{holloway,smith\}@eecs.harvard.edu \\
+	Division of Engineering and Applied Sciences \\
+	Harvard University}
+
+\begin{document}
+\maketitle
+
+\vspace*{0.5in}
+
+\begin{abstract}
+
+The optimization programming interface (OPI) is a programming
+interface for use in writing portable analyses and optimizations that
+work on code represented at or near the machine level.  It provides
+you with a standardized view of the data structures in the
+intermediate representation (IR) and of the functions used to create,
+inspect, and manipulate these data structures.  Since optimizations
+expressed using the OPI do not directly reference constructs of any
+particular compiler substrate or embed constants from any specific
+target machine, you can write ``textbook-like'' code that can be used and
+reused, even though the compiler substrate changes or is extended.  In
+this document, we take an in-depth look at the OPI from the
+perspective of someone who wants to use it to write optimizations.
+
+\end{abstract}
+
+\newpage
+\tableofcontents
+
+% Start a new chunk to cause noweb to put source filename in heading
+%
+@
+
+\newpage
+
+
+\section{Introduction}
+
+The optimization programming interface (OPI) declares functions and
+data structures for use in code optimization.  It allows you to
+express optimization algorithms in a way that isolates their
+machine-dependent aspects, so that the same algorithms can be used in
+compiling for different target machines.  It also hides the support
+system (i.e., the substrate) that provides symbol tables, data-type
+descriptors, storage management, and so on, so that the same
+algorithms used in a static compilation setting can be used for
+run-time optimization as well.
+
+This guide introduces the major data structures of the OPI and the
+functions that create, inspect, and manipulate those data structures.
+It is not an exhaustive reference manual.  The OPI is meant to be
+extended by users, and the definitive description of its details
+is contained in the individual library documents distributed with
+your system.  Each system comes with a mechanism for automatically
+constructing an \emph{OPI Catalog}, which cross-references
+OPI functions in the code with their descriptions in the library
+documents.
+
+The OPI is aimed at machine-level optimizations, so its principal data
+structures and functions are for building and manipulating an
+\emph{intermediate representation} (IR) of machine instructions.  The
+OPI also declares containers (lists and graphs) that organize
+instructions for efficient code transformation, and annotations that
+enable an open-ended set of properties to be attached to code.  Finally,
+the OPI declares structures for representing target-machine
+characteristics (like register architecture and instruction latencies),
+so that algorithms can express machine dependences in a portable way.
+
+The OPI is not a complete compilation infrastructure.  It is designed to
+be implemented on a substrate that takes care of things like
+intermediate-file I/O and pipelining of compiler passes.  Its role is to
+segregate algorithms from the details of the substrate on which they
+happen to be running and the machine that they happen to be targeting.
+In our own research, we use the OPI to share optimizations between
+Machine SUIF, an infrastructure that supports development of back ends
+for use with the SUIF system, and Deco, a system for run-time code
+optimization.
+
+Efficiency and extensibility were important goals in the design of the
+OPI.  The interface is expressed in C++, but it often avoids using
+features of the language that are are hard to implement efficiently.
+For example, it relies heavily on plain old functions.  This avoids
+the run-time overhead associated with virtual-method dispatch, and it
+allows easy extension through the addition of new functions.  The
+Machine SUIF overview document~\cite{biboverview} provides a more
+complete listing of our goals.
+
+In this document, we take a top-down tour through the OPI.  The next
+section describes the interface and structure of an optimization pass
+written to conform to the OPI.  (Appendix~\ref{app-suif-pass}
+illustrates how this substrate-independent pass is integrated into a
+Machine-SUIF pass.)  Section~\ref{sec-datatypes} then reviews and
+describes the connections between the main OPI data types.
+Section~\ref{sec-conventions} summarizes the naming and other
+conventions employed in the OPI.  These conventions are consistently
+followed in our code, and they should make it easier to program using
+the OPI.  Section~\ref{sec-building-ir} provides more details and
+examples of the most-commonly used portions of the OPI.  After reading
+this section, you should be ready to read {\em The Machine-SUIF
+Cookbook}~\cite{bibcookbook} and write your own optimization passes.
+
+
+\section{Structure of an OPI Pass}
+\label{sec-opi-pass}
+
+In compiler jargon, a \emph{pass} is a transformation applied to a segment
+of the program being compiled.  Many algorithms written using the OPI are
+intended for use as passes.
+
+The OPI doesn't say everything there is to know about the sequencing
+of passes.  This really depends on the optimization \emph{setting}:
+traditional static compilation involves more pass-sequencing
+infrastructure and a different kind of optimization region than
+run-time optimization.  An OPI pass finds the common ground in this
+design space.  An OPI pass simply focuses on the work that needs to be
+done to optimize a single code region, which might be a procedure, or a
+trace that is known to be heavily used, or some other fragment of the
+program being compiled.  Appendix~\ref{app-suif-pass} illustrates
+how this simple interface is invoked in a traditional static
+compilation environment where processing occurs at the level of the
+file set, individual files, and individual procedures.
+
+\paragraph{Substrate-independent interface.}
+
+We build each substrate-independent optimization pass as a stand-alone
+class, as illustrated by the class [[Peep]] in [[peep/peep.h]].  This
+class contains three public methods (repeated below) that define the
+OPI pass interface.\footnote{Though the OPI does not legislate the
+naming of these methods, the vast majority of our passes adhere to
+this simple interface.}
+
+\begin{verbatim}
+    class Peep {
+      public:
+        Peep() { }
+
+	void initialize();
+	void do_opt_unit(OptUnit*);
+	void finalize();
+
+	// ...
+    };
+\end{verbatim}
+
+The data type [[OptUnit]] represents the unit of optimization for the
+current setting.  In Machine SUIF, [[OptUnit]] is a synonym for
+[[ProcedureDefinition]]; in an on-line optimizer, [[OptUnit]] may be a
+something as simple as a trace of instructions.
+
+The method [[do_opt_unit]] performs the actual peephole transformation
+on the optimization unit, while [[initialize]] and [[finalize]] allow
+you to write code that runs before or after calls to [[do_opt_unit]].
+In [[Peep]], we use these latter two methods to clear and print out
+statistics about the peephole operations performed.
+
+\paragraph{Binding the OPI}
+
+The OPI hides the specific details of the target machine and the
+underlying substrate behind its standardized interface.  Obviously,
+you must connect an implementation to each OPI function and data
+structure that you use.  How this binding is done is an issue outside
+the OPI definition.  Appendix~\ref{app-suif-pass} shows how this
+binding occurs in our implementation of the OPI under Machine SUIF.
+
+
+\section{Overview of Data Types in the OPI}
+\label{sec-datatypes}
+
+The OPI provides data types for representing machine code and for
+capturing information specific to the target machine.  In this section
+we sketch the big picture; Section~\ref{sec-building-ir} provides more
+details and examples.
+
+\subsection{Reference or Value Semantics}
+\label{sec-ref-value}
+
+Before we describe the IR data types , we need to discuss a design
+issue that affects how you use the OPI.  The OPI is expressed in C++,
+and it uses an object-oriented style to achieve extensibility.  That
+implies that pointers figure heavily in its implementation, either
+explicitly or implicitly, since polymorphism in C++ relies on pointers
+or references.  Furthermore, the use of pointers to objects often
+matches our mental model of compilation data structures.  We draw
+trees and graphs with arrows, and it is natural to realize those
+arrows as pointers to node objects in the implementation.
+Moreover, pointers are inexpensive to pass around, whereas IR
+objects may be quite large, especially in a static system designed for
+easy experimentation with compiler algorithms.
+
+The OPI therefore makes considerable use of pointers, and rather than
+hide that fact, we make the pointer types explicit.  For example, the
+data types for instruction and CFG node are [[Instr*]] and [[CfgNode*]],
+not [[Instr]] and [[CfgNode]].  This leaves no question that reference
+semantics are in effect.
+
+On the other hand, the OPI is meant to allow direct reuse of
+algorithms in settings where optimization-time efficiency is paramount.
+For example, there is a growing interest in the use of on-line
+optimization techniques, which re-optimize a program while it is
+running.  This is the research focus of many projects, including our
+Deco project at Harvard University.  In these projects, one trades
+flexibility in the infrastructure for efficiency during optimization.
+Some IR components are best implemented without pointers in such a
+setting, because they are easy to represent as lightweight values.
+Anticipating the need to change the implementation of these IR
+components, we have given them non-pointer types in the OPI.
+
+An important example of this kind is the instruction operand, whose
+type is [[Opnd]] (not [[Opnd*]]).  In Machine SUIF, the need for easy
+extensibility has led to an operand representation based on a (hidden)
+pointer to a bulky object.  This is appropriate for research in static
+compilation, but for reusing OPI-based algorithms in dynamic
+optimization on a specific target platform, we need to be able to give
+[[Opnd]] a lean implementation.  The number of different kinds of
+operands is typically small in on-line optimization (Deco implements
+only a handful of the operand kinds found in Machine SUIF), and their
+contents are not large, so an operand can often take less space than a
+pointer.  It makes little sense to traffic in pointers for these
+simple components.
+
+This leaves us with a dilemma.  We could simply require all
+implementations of the OPI to enforce value semantics for instances of
+[[Opnd]].  Thus, given two variables [[x]] and [[y]] whose type is
+[[Opnd]], an assignment [[x = y]] would leave [[x]] completely
+independent of [[y]], so that changes to the fields of one would not
+affect the other.  That would satisfy the requirements of on-line
+optimization, but at a sizable cost for other OPI implementations,
+such as Machine SUIF, where large objects would frequently be copied
+to prevent proscribed sharing.
+
+For this reason, the OPI leaves open the question of whether instances
+of non-pointer IR data types such as [[Opnd]] behave like references
+or like independent values.  An implementation is free to use
+reference semantics, and in fact, Machine SUIF does so.  For
+algorithms that aren't meant to be reusable in an on-line setting,
+that's all you need to know.  For maximum portability of your
+OPI-based programs, however, you should explicitly copy operands to
+prevent accidental mutation.  (See the description of [[clone]] in
+Section~\ref{sec-opnd-ops}.)  In practice, this is seldom needed,
+since the most frequently-used kinds of operands are immutable.
+
+Compiler infrastructures written in C++ using IR components with
+non-pointer data types have traditionally been difficult to extend
+without rewriting code in the base system.\footnote{This was the
+problem with the implementation of operands in SUIF version 1.}  To
+make extending and programming with non-pointer data types as easy as
+possible while not compromising our ability to share optimizations and
+use them in a run-time-sensitive environment, we adhere to the
+following approach.
+
+We define a base class for each class of IR component (e.g., [[Opnd]]
+for operands and [[Note]] for annotations).  This base class is the
+only type that appears in the OPI function prototypes.  If you want to
+extend the system with a new variant of a base class, you do so using
+object-oriented techniques (i.e., you derive a new subclass of the
+base class).  We postpone further discussion of this issue until
+Section~\ref{sec-operands} where we can use [[Opnd]] and its
+extensions as a specific example.
+
+
+\subsection{Representing Machine Code}
+\label{sec-representing-code}
+
+Starting at the atomic level, there are constants, symbols (e.g.,
+source-variable symbols), and types (e.g., representations of source data
+types like ``array of type $T$'').  Next there are data types for
+machine instructions and their operands, and for grouping instructions into
+optimization units.  Finally, there are annotation types that enable you to
+attach properties to the program representation.
+
+
+\paragraph{Constant values, symbols, and types.}
+
+The OPI provides types that are useful for representing source
+literals and other constant values in a manner that is independent of
+the host machine's peculiarities.  Type [[Integer]] represents
+integers of arbitrary length.  Type [[IdString]] is a text-string
+type that's used both for string and floating-point literals; this
+type includes efficient operators for comparison, concatenation, etc.
+
+Symbols from the source program (the identifiers of variables, constants,
+and code labels), and analogous symbols generated during compilation, have
+type [[Sym*]] or one of its refinements [[VarSym*]], [[ProcSym*]], and
+[[LabelSym*]].  You can think of a symbol as a pointer to a symbol-table
+entry.  You can test equality of symbols by simple pointer comparison, and
+you can fetch the attributes of a symbol (such as the scope or the initial
+value of a variable) efficiently through the pointer.
+
+Source types have the OPI type [[TypeId]].  Types play a limited role
+in OPI optimizations, and hence we have found it useful to think of
+source types as having value semantics.  In general, they serve mainly
+to specify the size and alignment properties of values.
+
+
+\paragraph{Instructions and operands.}
+
+Every instruction in the IR has type [[Instr*]].  Although each
+instance represents a machine instruction, there's nothing in the data
+structure itself that identifies the machine in question.
+Machine-specific interpretation of an instruction is always done via
+OPI functions.
+
+Each instruction has an integer opcode component, and in general, it
+has operand components as well.  The type of an operand is [[Opnd]].
+You access and modify the components of an instruction using
+functions, not methods.
+
+The OPI classifies instructions into several broad categories.  This
+machine-independent breakdown distinguishes pseudo-instructions from
+real instructions, for example, and it also identifies
+control-transfer instructions (CTI) as special.  You cannot however
+distinguish one kind of instruction from another by its
+substrate-specific data type.  Instead, you must use the value of its
+fields (e.g., its opcode value) or the result of an OPI predicate
+function (e.g., [[is_cti]] or [[reads_memory]]).  The set of predicate
+functions, as we explain later, is easy to extend.
+
+The OPI also defines several common kinds of operands.  Every operand
+in the IR has the base class [[Opnd]] or some subclass of [[Opnd]].
+The OPI includes predicate functions to distinguish one kind of
+operand from another.  For example, to ask whether operand [[opnd]]
+represents the occurrence of a variable, you evaluate
+[[is_var(opnd)]].
+
+Once you have determined the kind of operand you have, you know what
+components of that operand you can access/change and what operations
+you must perform to access/change them.  Continuing with the [[opnd]]
+example from above, once you have determined that [[is_var(opnd)]] is
+true, then you know that the OPI function [[get_var(opnd)]] is valid.
+This particular function returns the variable-symbol component of the
+operand.  Please see Section~\ref{sec-operands} for further examples
+and a discussion of operands built using subclasses of [[Opnd]].
+
+
+\paragraph{Optimization-unit bodies.}
+
+The OPI currently provides two ways of collecting instructions to form
+a procedure body or other optimization unit: the linear list and the
+control flow graph (CFG).  (Again, you can add your own alternatives.)
+
+The linear list form has type [[InstrList*]].  It serves as a container for
+an instruction sequence.  The functions associated with this type tell you
+the length of the sequence, they allow you to iterate through the contents
+and to insert, replace, or remove instructions.
+
+The CFG form has type [[Cfg*]].  It makes the control flow of the unit body
+explicit by identifying the basic blocks (maximal straight-line instruction
+sequences) of the unit and connecting them with flow edges.  Each basic
+block (of type [[CfgNode*]]) contains at most one control-transfer
+instruction (CTI).  As an optimization writer, you can transform the
+program either by graph manipulations or by altering the instructions
+contained in basic blocks.  (The OPI provides a function that updates the
+flow edges emanating from a block to reflect the correct flow after its CTI
+has been modified.)
+
+Naturally, there are functions for translating a unit body from
+linear-list form to CFG form and \emph{vice versa}.
+
+
+\paragraph{Annotations.}
+
+The IR data types provided by the OPI are meant to cover all
+commonly-occurring representation issues.  But it is very useful to
+have a way to handle special-purpose representations and to mark
+particular IR objects without needing to extend the OPI's types.  The
+annotation mechanism provides these capabilities.  Annotations are
+persistent; they survive even if the IR is written to disk and read
+back.
+
+In the OPI, annotations have the base class [[Note]] or some subclass
+of [[Note]].  A note associates zero or more values with an IR object.
+An object can have any number of notes, and so each is labeled with a
+key.  Keys are given the type [[NoteKey]].  The values attached
+using a note can be integers, strings, or IR objects.  For instance,
+to mark an instruction with the source-code location that gave rise to
+it, we use a note whose key is [[`line']] and whose attached values
+are the file name (a string) and a line number (an integer).
+
+Not all IR data structures are ``note-able''.  The rule of thumb is that if
+the OPI's IR type is an explicit pointer type, such as [[VarSym*]] or
+[[Instr*]], then you can annotate the corresponding IR objects.  You
+can't attach a [[Note]] to an [[Opnd]] or to a [[TypeId]].  The OPI has a
+type that represents the union of all note-able object types: [[IrObject*]].
+That is, [[VarSym*]], [[Instr*]], [[Cfg*]], and so on, are all special
+cases of [[IrObject*]].  An [[IrObject*]] is also one of the types of
+values (along with [[Integer]] and [[IdString]]) that can serve as an
+attached note value.  Thus, you can connect a label symbol with the CFG
+node to which it corresponds by attaching a note to the symbol with the
+node object (whose type [[CfgNode*]] refines [[IrObject*]]) as the value.
+
+
+
+\subsection{Representing Target-Specific Information}
+
+As mentioned above, one purpose of the OPI is to make it possible to write
+optimizations that depend on information about the target machine, but that
+can be used without modification for a wide variety of target machines.  We
+call these \emph{parameterized} algorithms, in the sense that they abstract
+away machine-specific details.  To allow algorithms to refer to
+machine-specific features, the OPI provides several functions and data
+types that express the characteristics of the target system.
+
+These data structures fall into three broad categories.  First, there
+are functions that reveal simple facts about the target, or answer
+target-specific questions about elements of the IR.  Next, there are
+straightforward machine descriptors, which are records that collect
+facts about some aspect of the target hardware and/or operating
+system (OS).  Finally, there are classes whose methods encapsulate the
+machine-dependent parts of an important back-end pass, such as
+machine-code selection or assembly-code generation.
+
+\paragraph{Machine-specific functions.}
+
+Some of these express simple facts about the target.  The parameterless
+function [[type_addr]], for instance, returns a [[TypeId]] that represents
+the generic pointer in the target.  Other functions are predicates for
+making machine-dependent distinctions between IR components.  The function
+[[is_move]], for instance, is applied to an instruction to determine
+whether it represents a register-to-register move on the target.  (For some
+targets, this entails inspecting both the opcode and the operands.)  Other
+functions generate machine-specific details; for example, [[opcode_load]]
+takes a [[TypeId]] and produces the correct opcode for loading a value of
+that type into a register.
+
+\paragraph{Machine-description records.}
+
+These data structures collect related facts about the target.  For example,
+[[RegInfo]] is an OPI class for describing the register architecture of the
+target machine and the register-use conventions of the OS.  The function
+[[target_regs]] returns a [[RegInfo*]], on which the methods of
+[[RegInfo]] can be used to determine the number and population of register
+files, the number and identities of argument registers, and so on.
+
+\paragraph{Pass-specialization classes.}
+
+Certain compilation passes are more ``target specific'' than others.
+When the percentage of code in a pass that is target specific becomes
+very large, we define an OPI object whose specific purpose is to
+encapsulate the target-specific action.  Code generation is one
+example of a ``target-specific'' pass; the only target-independent code
+in our code generator is a switch statement that dispatches on a
+SUIFvm opcode and possibly an outer loop that allows us to visit each
+SUIFvm instruction in an [[InstrList]].
+
+In the case of code generation, the OPI defines a function called
+[[target_code_gen]] that returns an object of type [[CodeGen*]].  The
+methods of class [[CodeGen]] handle the machine-dependent aspects of
+translating SUIFvm code into code for the target machine.  The
+principal method is [[translate_instr]], which appends the translation
+of one instruction to a growing list of target-machine code.
+
+The OPI specifies a similar object for code ``finalization'' (stack-frame
+layout and prologue/epilogue creation) and for emitting object code.  These
+task-oriented target-characterizations are sometimes useful in situations
+other than their corresponding passes.  For example, when an optimization
+needs to create a bit of machine code to glue together existing segments,
+it is often easiest to express this as a list of SUIFvm instructions and
+then use the [[CodeGen]] object replace it by real-machine code.
+
+
+\section{OPI Conventions}
+\label{sec-conventions}
+
+Before going into more detail about using the OPI, we describe some naming
+conventions that are intended to make it easier remember the names of the
+important types and functions.
+
+\paragraph{Abbreviations.}
+
+The practice of using whole words in all identifier names has mnemonic
+value.  The trouble is that the words get concatenated as concepts get
+refined, and the convention of using whole words either gets violated or it
+leads to unwieldy terms.  E.g., while neither ``variable'' nor ``symbol''
+seems unreasonable, NestingVariableSymbol begins to get cumbersome.
+
+To keep identifiers reasonably short, the OPI abbreviates many
+commonly used terms.  Thus ``variable'' is shortened to ``var'' and
+``operand'' to ``opnd''.  To compensate for the subjective choice of
+abbreviations, we never vary our abbreviation of any term.  For example,
+``operand'' is always shortened to ``opnd'', never to ``op'', and it's
+never left unabbreviated.
+
+Appendix~\ref{sec-glossary} lists all the current OPI abbreviations.
+
+
+\paragraph{Identifier formation.}
+
+The OPI uses two kinds of identifiers: those meant to represent types,
+and all the rest.  Type identifiers are always capitalized, and token
+separations within them are marked by internal capital letters, not by
+underscores.  For instance, we use [[ScopeTable]], and not
+[[Scope_table]] or [[Scope_Table]].  The fact that all or part of a
+type identifier is an acronym that might be written with all capitals
+in ordinary exposition doesn't affect the identifier-formation rule.
+Thus, we write [[Cfg]] and [[CfgNode]], not [[CFG]] or [[CFGNode]].
+
+All other identifiers are spelled entirely in lower case, using underscores
+as token separators, as in the function name [[new_cfg_node]].
+
+
+\paragraph{Function names.}
+
+The functions that access and replace simple components of an IR object are
+prefixed with [[get_]] and [[set_]], respectively.  For example, the opcode
+component of an instruction [[instr]] is fetched with [[get_opcode(instr)]]
+and set with something like [[set_opcode(instr, MOV)]], where [[MOV]]
+might represent the [[mov]] operation in the $x$86 ISA.
+
+Many kinds of IR objects have components that are sequences.  For instance,
+[[InstrList]] and [[CfgNode]] objects both contain sequences of
+instructions; an [[Instr]] contains sequences of operands; and so on.  The
+functions with which you operate on these sequences are named in a
+consistent manner to make the names easier to remember.
+
+In general, sequence elements can be accessed using a zero-based position
+number or using a pointer-like position marker that we call a
+\emph{handle}.  Handles are similar to iterators over containers in
+standard C++ (e.g., [[list<int>::iterator]]).  With a handle you can
+iterate through the elements of a sequence, using the C++ increment
+([[++]]) and decrement ([[--]]) operators to move to the next or previous
+element.  Some of OPI functions on sequences use a handle to guide where to
+fetch, replace, insert, or remove a sequence element.  As with C++
+iterators, there is a special handle value for each sequence that
+represents the position just past the last element.  We call that
+distinguished handle the \emph{sentinel}.  Inserting an element before the
+sentinel is equivalent to appending the element to the sequence.
+
+The full space of sequence functions is illustrated below using the
+source operand sequence in class [[Instr]].  Our uniform abbreviation
+for ``source operand'' is [[src]], and you should imagine that the
+source-operand sequence of an instruction has the name [[srcs]].
+Thus, the function named [[srcs_size]] gets the size of the [[srcs]]
+collection (i.e., the number of operands in the sequence), and
+[[get_src]] returns a particular member of that collection.
+
+\begin{quote}
+[[srcs_size(instr)]] returns the number of source operands in [[instr]]. \\
+[[srcs_start(instr)]] returns a handle on the first source operand of
+    [[instr]]. \\
+[[srcs_last(instr)]] returns a handle on the last source operand of
+    [[instr]]. \\
+[[srcs_end(instr)]] returns the sentinel handle for the source-operand
+    sequence of [[instr]]. \\
+[[get_src(instr, pos)]] returns the source of [[instr]] at position
+    [[pos]] (a zero-based integer). \\
+[[get_src(instr, handle)]] returns the source of [[instr]] at [[handle]]. \\
+[[set_src(instr, pos, opnd)]] replaces the source at position [[pos]] in
+    [[instr]] by [[opnd]]. \\
+[[set_src(instr, handle, opnd)]] replaces the source at [[handle]] in
+    [[instr]] by [[opnd]]. \\
+[[prepend_src(instr, opnd)]] inserts [[opnd]] at the beginning of
+    [[instr]]'s sources. \\
+[[append_src(instr, opnd)]] inserts [[opnd]] at the end of [[instr]]'s
+    sources. \\
+[[insert_before_src(instr, handle, opnd)]] inserts [[opnd]] before [[handle]] in
+    [[instr]]'s sources. \\
+[[insert_after_src(instr, handle, opnd)]] inserts [[opnd]] after [[handle]] in
+    [[instr]]'s sources. \\
+[[remove_src(instr, handle)]] removes and returns the operand at
+    [[handle]] in [[instr]]'s sources.
+\end{quote}
+
+As described in the rest of this document, the OPI contains several
+other sequences.  Since some of these sequences cannot be directly
+manipulated, we don't necessarily supply an equivalent full set of
+functions for every sequence.  The library documents are the ultimate
+authority on which functions are available for each
+sequence.\footnote{If you find that we have not yet have implemented
+one of these functions for a mutable sequence, you can always add what
+we've missed for yourself.}
+
+The destination operands in an [[Instr]] object and the instructions
+in an [[InstrList]] object also form sequences.  Each has a
+correspondingly named set of operations, except that [[dst]] and
+[[instr]] replace [[src]].  
+
+Unlike class [[Instr]], an [[InstrList]] contains only the one
+sequence, and so it is convenient to define nicknames for its sequence
+operations.  We create nicknames by dropping the [[instrs_]] prefix
+and the [[_instr]] suffix on the sequence operations.  For example,
+you can use [[insert_before]] instead of [[insert_before_instr]] when
+modifying an [[InstrList]], and you can just use the function [[size]]
+to obtain its length.
+
+\paragraph{Argument order.}
+
+There are a couple of guidelines that can help you remember the order of
+arguments to OPI functions.  When a function's purpose is to access or
+modify a single object, that object is always the first argument.  Whenever
+functions come in pairs, such as [[get_src]] and [[set_src]], the positions
+of corresponding arguments are as similar as possible.  Thus the
+position-marking argument to [[set_src]] is the second argument, for
+consistency with [[get_src]].
+
+\paragraph{Use of explicit pointer types.}
+
+As you can see from the preceding section, many of the types defined
+by the OPI are explicit pointer types, but some equally important
+types, such as [[Opnd]], are not.  When an OPI data type seems
+destined to have reference semantics in any optimization setting, the
+OPI makes the semantics explicit.  We use the term \emph{object}
+to refer to an IR data structure implemented as a pointer to a
+heap-allocated record (although we often slur the distinction between
+the pointer itself and the record).  Thus an instruction ([[Instr*]])
+is an object (in fact, an IR object), but an operand ([[Opnd]]),
+though an important IR component, is not an object.
+
+Using explicit pointer types serves as a reminder that objects are shared
+unless explicitly copied, and that you must pay some attention to the
+storage management of objects.  We also use the prefix [[new_]] on
+the functions that produce objects, but not on those that produce
+IR components with value semantics.
+
+\paragraph{Storage management.}
+
+The OPI describes when an object is the \emph{owner} of one or more of its
+components.  For example, an instruction-list object (of type
+[[InstrList*]]) owns the instructions (type [[Instr*]]) that it contains.
+Ownership means that reclaiming an object also reclaims the ones that it
+owns.
+
+The non-pointer components of an object are always owned by it.  An
+instruction always owns its operands, for example.  Pointer components,
+however, are often shared between objects, and you need to be aware of the
+ownership rules, since if you excise an object from its owner and don't
+attach it to another object, you must [[delete]] the excised-object
+pointer.  For instance, when a dead-code elimination algorithm removes an
+unneeded instruction from a CFG node, it applies [[delete]] to the
+instruction pointer.
+
+Section~\ref{sec-building-ir} gives the rules of object ownership as it goes
+through the IR categories.
+
+\paragraph{Type resolution and casting.}
+
+Some IR object types are refinements of others.  For example, [[VarSym]]
+is a refinement of [[Sym]], which in turn refines [[IrObject]].  Suppose
+you have extracted an annotation value of type [[IrObject*]] and you want
+to verify that it is a symbol and then test whether it's a variable symbol
+or a label.  You could use the following code (where [[target]] is an
+[[IrObject*]]):
+
+\begin{verbatim}
+    claim(is_kind_of<Sym>(target));
+    if (is_a<LabelSym>(target)) {
+        LabelSym *label = (LabelSym*)target;
+	  ...
+    } else {
+        ProcSym *proc = to<ProcSym>(target);
+          ...
+    }        
+\end{verbatim}
+
+Here [[is_kind_of]], [[is_a]], and [[to]] are template functions for
+testing object types.  The expression [[is_kind_of<Sym>(target)]] is true
+provided the object bound to [[target]] is a [[Sym]] or a refinement of
+[[Sym]].  The expression [[is_a<LabelSym>(target)]] is true provided
+[[target]] is exactly a [[LabelSym*]].  As the example illustrates, once
+the type of an object has been verified, it can safely be cast to that
+type.  The expression [[to<ProcSym>(target)]] combines verification and
+casting in one expression: it verifies that [[is_kind_of<ProcSym>(target)]]
+is true and then casts [[target]] to type [[ProcSym*]].
+
+Note that the type parameter to each of these template functions omits the
+[[*]], even though the object type in question is always a pointer type.
+
+
+
+\section{Building and Manipulating the Intermediate Representation}
+\label{sec-building-ir}
+
+This section describes in more detail how to build and manipulate
+machine-code IR using the OPI.
+
+\subsection{Symbols and Scopes}
+
+The symbols of a unit being compiled, including variables and labels, are
+not owned by the code representation.  They're recorded in a scope table,
+which also owns them, so you don't have to worry about deleting a symbol if
+you eliminate the last reference to it.
+
+Scope tables aren't explicit in the OPI.  As explained below, there
+are functions that help you to create a symbol in the current scope
+and predicates that allow you to determine the scope of a symbol.
+
+\paragraph{Symbol creation.}
+
+To create a new variable in the current file, you evaluate
+[[new_unique_var(type, name)]].  The [[type]] argument sets the type
+of the variable, and [[name]] is an [[IdString]] used as the basis of
+its printed form.  To this base string, [[new_unique_var]] appends an
+integer that makes the new symbol unique within the current
+optimization scope.
+
+There is an analogous function [[new_unique_label]] for creating label
+symbols.
+
+\paragraph{Symbol properties.}
+
+To determine the declared type of a variable, apply [[get_type]] to its
+symbol.  From the resulting [[TypeId]], you can learn how much storage the
+variable needs, which register file, if any, it ought to reside in, and so
+on.
+
+To determine the scope of any kind of symbol, use one or more of
+the following:
+
+\begin{quote}
+[[is_global(sym)]] is true if [[sym]] is not local to a procedure. \\
+[[is_external(sym)]] is true if [[sym]] is visible externally. \\
+[[is_defined(sym)]] is true if [[sym]] is global and defined in the current
+     file set. \\
+[[is_private(sym)]] is true if [[sym]] is global, but not visible externally. \\
+[[is_auto(var)]] is true of a variable symbol that's local to a procedure.
+\end{quote}
+
+A symbol visible externally may have its defining declaration in the
+current file set (in which case is satisfies [[is_defined]]) or not.
+
+
+\subsection{Instructions and Instruction Lists}
+
+\paragraph{Instruction lists.}
+
+The instruction-list object (type [[InstrList*]]) is the representation of
+choice for tasks that don't need control-flow or dependence information.
+It is used for initial code generation and finalization (stack-frame
+layout), for example.  Most of the operations on instruction lists were
+mentioned above in describing the conventional sequence functions.  The one
+that remains is the creation function [[new_instr_list]], which takes no
+arguments and returns a newly-allocated, empty [[InstrList]] object.
+
+\paragraph{Instructions.}
+
+The OPI divides instructions into broad categories and provides a mnemonic
+for each:
+
+\begin{itemize}
+\item Active instructions (real machine operations)
+      \begin{itemize}
+      \item ([[alm]]) Arithmetic, logical, and memory instructions
+      \item ([[cti]]) Control-transfer instructions
+      \end{itemize}
+\item Inactive instructions
+      \begin{itemize}
+      \item ([[label]]) Label instructions
+      \item ([[dot]]) Assembler pseudo-operations\footnote{%
+	    Many assemblers use a leading period (``[[.]]'') to
+	    identify non-code directives.}
+      \end{itemize}
+\end{itemize}
+
+The [[alm]] category covers all actual instructions that don't modify the
+program counter non-trivially.  The [[cti]] category covers
+control-transfers like conditional and unconditional branches and function
+calls.  Each contains a symbol that represents the transfer target.  On
+some machines, a control-transfer instruction can perform arithmetic, so it
+might have side effects other than modifying the program counter or
+setting a return-address register.  A [[label]] ``instruction'' simply
+labels a spot in the instruction list, typically to serve as the target of
+a branch.  A [[dot]] instruction is a directive such a one that adjusts
+alignment or initializes a data cell.
+
+When creating an instruction, you pick the category that most closely
+matches your need.  The only constraints to be aware of are pretty obvious:
+an active instruction can never acquire a label, an instruction that needs
+a transfer target (i.e., a [[target]] symbol) must be created as a
+control-transfer instruction, and so on.
+
+Classifying instructions helps in naming instruction-creation functions
+(\emph{creators}, for short).  Having creators tailored to the categories
+is convenient because their argument types and numbers are appropriate for
+the kind of instruction being created.  The breakdown into categories is
+also conducive to efficient representation of instructions.
+
+Here is a sampling of the instruction creators in the OPI:
+
+\begin{verbatim}
+    Instr* new_instr_alm(int opcode);
+    Instr* new_instr_alm(int opcode, Opnd src);
+
+    Instr* new_instr_alm(Opnd dst, int opcode);
+    Instr* new_instr_alm(Opnd dst, int opcode, Opnd src);
+
+    Instr* new_instr_cti(int opcode, Sym *target);
+    Instr* new_instr_cti(int opcode, Sym *target, Opnd src);
+
+    Instr* new_instr_cti(Opnd dst, int opcode, Sym *target);
+    Instr* new_instr_cti(Opnd dst, int opcode, Sym *target, Opnd src);
+
+    Instr* new_instr_label(LabelSym* label);
+
+    Instr* new_instr_dot(int opcode);
+    Instr* new_instr_dot(int opcode, Opnd src);
+\end{verbatim}
+
+Note that the opcode argument always separates the destination from the
+sources, if any.  The only difference between two overloadings with the
+same name is that they allow different numbers of operands to be put in the
+created instruction.  Of course, the number can always be adjusted later.
+To obtain an instruction with more than one destination or more than two
+sources, you must use one of the above creators and then add operands to
+the result.
+
+As an example, consider an Alpha instruction subtracts 64 from the contents
+of the stack-pointer register [[$sp]].  We want to create this instruction
+and append it to an instruction list such as might be used in generating code.
+After the instruction list has been initialized by a declaration like
+
+\begin{verbatim}
+    InstrList* body = new_instr_list();
+\end{verbatim}
+
+you append the substract instruction as follows:
+
+\begin{verbatim}
+    append(body, new_instr_alm(reg_sp, SUBQ, reg_sp, immed_64));
+\end{verbatim}
+
+Here [[SUBQ]] is the appropriate Alpha integer-subtraction opcode,
+and we have assumed that [[reg_sp]] is a register operand representing
+[[$sp]] and [[immed_64]] is an operand for the literal constant 64.
+(You'll see how to create these in the next subsection.)
+
+The OPI also contains typed opcode generators, such as
+[[opcode_load(TypeId)]].  These generators provide parameterized
+optimizations with access to machine-specific opcodes.
+
+
+\subsection{Operands}
+\label{sec-operands}
+
+In the OPI, every instruction operand has the base type [[Opnd]].  The
+OPI typically implements several kinds of operands, though one
+implementation of the OPI does not have to implement all of the kinds
+found in another implementation.  Furthermore, you can
+extend the OPI with new kinds of operands without modifying any
+of the existing functions in the OPI.
+
+\paragraph{Atomic operands.}
+
+The OPI defines a distinguished set of these operand kinds as {\em
+atomic}.  An atomic operand is one that is immutable.  If you want to
+change a component of one of these operands, you must create new one.
+Here is a list of commonly-used atomic operands:
+
+\begin{itemize}
+\item {\em Null operands} are content free.  They are occasionally useful as
+      placeholders in instructions, but typically you will just use them in
+      coding to mean ``no operand at all''.
+\item {\em Variable-symbol operands} stand for the occurrences of variables,
+      both those originating in the source program and those generated as
+      compiler temporaries.
+\item {\em Register operands} designate registers used by
+      instructions.  They come in two flavors: real hardware registers
+      (called \emph{hard} registers) and compiler-generated
+      temporaries or pseudo-registers (called \emph{virtual}
+      registers).  A register allocation pass eliminates references to
+      variable symbols and virtual registers by replacing them with
+      hard registers and/or spilling their values to memory.
+\item {\em Immediate operands} represent constants in the instruction stream.
+\item {\em Address symbols} stand for effective address calculations
+      composed of a reference to a variable symbol's memory location,
+      i.e., the memory address of a variable.
+\end{itemize}
+
+\paragraph{Address expressions.} These are the only kind of non-atomic
+operand kind that we define today.  Address expressions are effective
+addresses formed by operating on one or more suboperands.  Address
+expressions are non-atomic because you can replace one or more of the
+suboperands of an address-expression operand.  There are several
+kinds of address expressions, and each is treated as a different kind
+of operand.  
+
+For example, an operand may refer to a memory-resident value using the
+base-plus-displacement addressing mode.  This is an example of an
+address-expression operand consisting of a register or variable-symbol
+operand (base) plus an immediate operand (fixed displacement).
+Address-expression operands have the type [[AddrExpOpnd]], which is a
+subclass of [[Opnd]].  Address-expression operands representing the
+base-plus-displacement addressing mode have the derived type
+[[BaseDispOpnd]], which is a subclass of [[AddrExpOpnd]].
+
+As you can see, address-expression operands are an extension of the
+base class [[Opnd]].  \emph{The Extender's Guide} describes this
+extension process in detail.  Here, we simply describe the common
+features of address-expression operands and discuss the functionality
+of two specific kinds.
+
+
+\subsubsection{Common operations on all operands}
+\label{sec-opnd-ops}
+
+Most of the OPI's operations on operands have to do with one kind or
+another.  Before going through the kinds individually to sketch these
+functions and class methods, we'll mention some properties associated
+with every kind of operand.  You can think of these properties as
+methods on the base class [[Opnd]]; however, we have implemented them
+in the OPI as functions.
+
+\paragraph{Operand type.}
+
+Every operand has a type, i.e., a [[TypeId]] that gives the type of the
+value represented by the operand.  Evaluate [[get_type(opnd)]] to obtain
+the type of [[opnd]].
+
+For address operands (i.e., those that satisfy the [[is_addr]]
+predicate), it is often useful to be able to determine the
+\emph{referent} type of the address operand.  The referent type is the
+type of the value obtained by dereferencing the address that the
+operand represents.  You can access this [[TypeId]] using the
+function [[get_deref_type(Opnd)]].  There is no corresponding ``set''
+function; you must build the appropriate address operand from
+scratch.
+
+
+\paragraph{Operand kind.}
+
+You often need to check the kind of an operand, e.g., to ask whether
+it stands for a variable or a register.  For each operand kind, there
+is a predicate that indicates whether an operand is of the kind in
+question.  Thus, [[is_reg(opnd)]] returns true if [[opnd]] is a
+register operand, and [[is_var(opnd)]] tests whether it's a
+variable-symbol operand.  Other kind predicates will be mentioned as
+we go through the kinds below.
+
+Sometime you need to dispatch on the operand kind.  For that, the OPI
+provides a [[get_kind]] function that returns an integer kind indicator.
+For example,
+
+\begin{verbatim}
+    switch (get_kind(opnd)) {
+      case opnd::NONE:
+        // opnd is null
+      case opnd::REG:
+        // opnd is a register operand
+      ...
+    }
+\end{verbatim}
+
+\paragraph{Operand copying.}
+
+Any operand can be copied using the function [[clone]].  As discussed
+in Section~\ref{sec-ref-value}, we sometimes [[clone]] an operand,
+as shown below, to ensure that we produce a completely independent copy.
+
+\begin{verbatim}
+    Opnd d = get_dst(mi1, 0);
+    set_src(mi2, 0, clone(d));
+\end{verbatim}
+
+This code sequence grabs the 0th destination operand out of the
+instruction [[mi1]], makes a copy of it using the function [[clone]],
+and then stores this new operand as the 0th source operand of the
+instruction [[mi2]].  For this example, the function [[clone]] is
+harmless.  If [[d]] was a mutable kind of operand (e.g., an address
+expression), we may use [[clone]] to make it very clear that we're
+modifying a copy of [[d]] for use in [[mi2]] and not trying to change 
+the original operand [[d]] in [[mi1]].
+
+
+\paragraph{Operand equality.}
+
+Two operands are equal under operator ([[==]]) only if their kind
+and type attributes are equal and they satisfy additional conditions.
+These conditions are spelled out below.  The disequality operator ([[!=]])
+just inverts the equality result.
+
+
+\paragraph{Operand hashing.}
+
+Because you sometimes need to create hash maps keyed by operands, there is
+a function [[hash]] that extracts a hash code from an operand.
+
+\paragraph{Operand printing.}
+
+For debugging purposes, function [[fprint]] prints an operand in a
+machine-independent manner.  This is not the way operands are printed in
+machine-specific assembly output, of course.  That's handled by a
+target-specific library, as described in \emph{The Extender's Guide}.
+But for debugging printout of [[opnd]], you can write, e.g.,
+[[fprint(stderr, opnd)]].
+
+
+\subsubsection{Features and examples of atomic operands}
+
+Let's touch on the properties specific to each kind of atomic operand.
+
+\subparagraph{Null operands.}
+
+A null operand has kind [[opnd::NONE]].  Its type, as returned by
+[[get_type]], is always a representation of [[void]].  Any null operand is
+equal to another one.  The parameterless function [[opnd_null]] creates a
+null operand.  The predicate [[is_null]] returns true exactly when applied
+to a null operand.
+
+\subparagraph{Variable-symbol operands.}
+
+A variable-symbol operand has kind [[opnd::VAR]].  The type that
+[[get_type]] returns for such an operand is always exactly the type of the
+underlying variable symbol.  Two variable-symbol operands are equal if and
+only if their embedded symbols are identical.  The predicate [[is_var]]
+returns true exactly when applied to a variable-symbol operand.
+
+To create a variable-symbol operand, apply [[opnd_var]] to the variable
+symbol.  To retrieve the symbol from such a operand, apply [[get_var]] to
+it.
+
+\subparagraph{Register operands.}
+
+There are two kinds of register operands: one representing hard
+(real machine) registers, and the other representing virtual
+(compiler) registers.  Their kind identifiers, respectively,
+are [[opnd::REG_HARD]] and [[opnd::REG_VIRTUAL]].  
+
+Each contains a non-negative integer register number and a value type
+([[TypeId]]).  Two register operands are equal if and only if their
+kind, register numbers, and types are pairwise equal.  The predicates
+[[is_hard_reg]] and [[is_virtual_reg]] identify hard-register operands
+and virtual-register operands, respectively.  The predicate [[is_reg]]
+returns true exactly when applied to any kind of register operand.
+
+A hard register number is non-negative, and like the opcode of an
+instruction, its meaning depends on the target machine with respect to
+which the operand is interpreted.  The [[RegInfo*]] object for the target
+tells you how to interpret its hard register numbers.  In particular, it
+maintains the correspondence between the numbers used in operands and the
+concrete encodings used by the hardware.
+
+The exact number used for a virtual register number is typically
+unimportant and is assigned automatically when you create the operand
+using [[opnd_reg(type)]], where [[type]] is the type of the value
+contained in the register.  You can create as many distinct
+virtual-register operands as you need.
+
+To create a hard-register operand, evaluate [[opnd_reg(num, type)]], where
+[[num]] is a valid (non-negative) register number for the target.  If
+you want to create a virtual-register operand with a specific register
+number [[num]], evaluate [[opnd_reg(num, type, true)]], where the last
+parameter to this function indicates that you desire a virtual register
+and not a hard register.
+
+To retrieve the register number of a register operand, apply [[get_reg]] to
+it.
+
+\subparagraph{Immediate operands.}
+
+There are two kinds of immediate operands: one holds integers and the
+other strings.  Their kind identifiers, respectively, are
+[[opnd::IMMED_INTEGER]] and [[opnd::IMMED_STRING]].  Two immediate
+operands are equal if and only if their kinds, types, and values
+(integer or string) are pairwise equal.
+
+Predicate [[is_immed]] returns true exactly when applied to an immediate
+operand.  In addition, the predicates [[is_immed_integer]] and
+[[is_immed_string]] detect integer-immediate and string-immediate
+operands, respectively.
+
+Integer immediates can represent either signed or unsigned integer
+immediate values of any magnitude.  The accompanying type gives the
+intended precision.  For floating-point immediate operands, we use strings
+describing the numeric value, again paired with a type.  We also use
+untyped immediate string operands, though they don't appear in active
+([[alm]] or [[cti]]) instructions.  They allow the pseudo-instruction
+([[dot]]) class, which sometimes requires string literals, to use the same
+operand interface as the other instruction classes.
+
+To create an integer immediate, evaluate [[opnd_immed(integer, type)]],
+where [[integer]] has an integral C type, or else type [[Integer]], and
+[[type]] is a [[TypeId]] that represents an integer type.  For example,
+[[opnd_immed(42, type_s32)]] yields an immediate operand for the signed,
+32-bit integer 42.  Creating a floating-point immediate operand is similar,
+but you pass the literal's representation as a string:
+[[opnd_immed("3.141592653589793", type_f64)]].  To create an
+untyped string-immediate operand, omit the type:
+[[opnd_immed("Hello, world.\n")]]. 
+
+When an [[opnd]] satisfies [[is_immed_string(opnd)]], you can tell whether
+it's a numeric operand or not by checking its type:
+[[is_null(get_type(opnd))]] returns [[true]] if [[opnd]] represents a
+simple string literal.  (In practice, the nature of the immediate operand
+is nearly always apparent from the context.)
+
+To retrieve the value part of an immediate [[opnd]], use
+[[get_immed_integer(opnd)]], which returns an [[Integer]], or
+[[get_immed_string(opnd)]], which returns an [[IdString]].
+
+\subparagraph{Address symbols.}
+
+An address-symbol operand has kind [[opnd::ADDR_SYM]].  Its type component
+is implicit; it's always the generic pointer type for the intended target.
+Two address-symbol operands are equal if and only if they are based on
+identical symbols.  The predicate [[is_addr_sym]] returns true exactly when
+applied to an address-symbol operand.
+
+To create one, apply [[opnd_addr_sym]] to a symbol:
+[[opnd_addr_sym(sym)]].  To retrieve the underlying symbol:
+[[get_sym(opnd)]].
+
+As an example, consider an $x$86 add-to-memory instruction that adds 42 to
+the contents of a memory-resident variable [[foo]].  Although the $x$86 family has a
+two-address ISA, the OPI representation of this instruction recognizes the
+fact that [[foo]] is both an input and an output of it.  So [[foo]]'s
+address appears as both a source and a destination.  If [[var_foo]] is the
+[[VarSym*]] representing [[foo]], the OPI code to create the add
+instruction and append it to an instruction-list called [[body]] might look
+like this:
+
+\begin{verbatim}
+    Opnd addr  = opnd_addr_sym(var_foo);
+    Opnd int42 = opnd_immed(42, type_s32);
+
+    append(body, new_instr_alm(addr, xo_, ADDR, int42));
+\end{verbatim}
+
+
+\subsubsection{Features and examples of address-expression operands}
+
+An address-expression operand represents a non-trivial
+effective-address calculation, such as the addition of a fixed
+displacement to the contents of a base register to form a storage
+address.  Since it represents a computation taking place within an
+instruction, an address expression is a bit like a
+``subinstruction''.  Many of the transformations optimizers perform
+on the operands of an instruction need to be applicable as well to the
+components of an address expression.  For example, a register
+allocator wants to replace virtual registers with hard registers.
+Since a virtual register might appear as the base register in an
+address expression, the sweep over the IR that makes the register
+substitution needs to treat the components of an address expression in
+the same way as other instruction components.  Therefore, an address
+expression, like an instruction, contains operands (in this case
+suboperands) that you can inspect and change.
+
+Given an operand [[opnd]], you can determine if it is an address
+expression by passing [[opnd]] as a parameter to the function
+[[is_addr_exp]].  The operations applicable to address expresssions
+are defined by the public methods on the class [[AddrExpOpnd]] and its
+base class [[Opnd]].  You create an address-expression operand using
+one of the class constructors.
+
+For example, you can construct an empty address-expression operand
+using [[AddrExpOpnd]], access the type of that address expression
+using the method [[get_type]], and operate on the sequence of
+suboperands using methods that are named like and act like the
+sequence operators for instructions.  In particular, [[srcs_size]]
+returns the number of suboperands and [[get_src(0)]] returns the
+first suboperand.  Since IR components of type [[Opnd]] have value
+semantics, if you get an address-expression operand [[opnd_ae]] from
+an instruction [[instr]], remember that you must replace [[opnd_ae]]
+in [[instr]] if you modify any of its suboperands using the method
+[[set_src]].
+
+All of the suboperands of an address-expression are considered to be
+sources; there are no destinations.  The effective-address calculation
+is always expressed without side effects.  (The side effects implicit
+in hardware address modes like auto-increment are represented in other
+ways.)
+
+\paragraph{Address-expression type.}
+
+Like address-symbol operands, address expressions have an implicit
+type.  That is, you don't specify a type when creating one, and
+[[get_type]] always returns the current target's generic pointer type
+when it is applied to an address operand.
+
+\paragraph{Address-expression kind.}  
+
+Because you usually know from the context how many suboperands there
+are in an address expression, you may find it more convenient to refer
+to the address expression using a more descriptive name and its
+component operands by their role rather than their numeric position.
+The OPI defines several varieties of address expression, corresponding
+to the addressing modes commonly used in hardware.  The \emph{OPI
+Extender's Guide} tells you how to add others, if you need to.  In the
+rest of this section, we describe two example specializations of
+[[AddrExpOpnd]] for base-plus-displacement ([[BaseDispOpnd]]) and
+symbol-plus-displacement ([[SymDispOpnd]]) addressing modes.  The full
+set we provide is present in the \emph{Machine Library} document.
+
+There is no operand kind that covers all varieties of address
+expression.  Each is an operand kind in its own right.  Thus the
+base-plus-displacement operands have kind [[opnd::BASE_DISP]].  Another
+variety we will mention below consists of an address symbol plus a
+fixed displacement.  Its operand-kind identifier is [[opnd::SYM_DISP]].
+In general, the kind identifiers for address expressions are formed in
+the same way, by concatenating the role names of their parts.
+
+\paragraph{Address-expression equality.}
+
+Two address expressions are equal exactly when they have the same kind
+and their components are pairwise equal.
+
+
+\paragraph{Base-plus-displacement operands.}
+
+A base-plus-displacement operand has public methods for fetching
+and replacing its base and displacement components.  To illustrate,
+let's change our example of the $x$86 add-to-memory instruction that
+adds 42 to [[foo]].  Suppose now that [[foo]] has been allocated at
+displacement -100 relative to the base of the stack frame of the
+procedure in which it is declared.  If the hard-register operand
+[[ebp]] represents the base pointer register, then the code to create
+the add instruction might be revised as follows:
+
+\begin{verbatim}
+    BaseDispOpnd addr(ebp, opnd_immed(-100, type_s32));
+    Opnd int42 = opnd_immed(42, type_s32);
+
+    append(body, new_instr_alm(addr, xo_, CLONE(addr), int42));
+\end{verbatim}
+
+The base may be either a register operand or a variable-symbol operand
+(kind [[opnd::VAR]]).  In the latter case, the variable must eventually
+be replaced by a register to make the compiled code executable.  The
+base is fetched using [[get_base]] and replaced using [[set_base]].
+The displacement part has similar functions [[get_disp]] and
+[[set_disp]].
+
+\paragraph{Symbol-plus-displacement operands.}
+
+Another common address mode combines the address of a symbol with a
+fixed displacement.  The corresponding operand kind is
+[[opnd::SYM_DISP]].  You create such an operand from an address-symbol
+[[addr_sym]] and a displacement [[disp]] using the constructor
+[[SymDispOpnd(addr_sym, disp)]].  Please note that [[addr_sym]] is of
+kind [[opnd::ADDR_SYM]], not [[opnd::VAR]].
+
+The fetch and replace functions for the address-symbol part are
+[[get_addr_sym]] and [[set_addr_sym]].  Those for the displacement
+part are again [[get_disp]] and [[set_disp]].
+
+
+
+\subsection{Control Flow Graphs}
+\label{sec-cfg}
+
+As mentioned in Section~\ref{sec-representing-code}, the OPI provides a
+flow-graph representation as an alternative to simple instruction lists.
+In this representation, the body of a compilation unit has type [[Cfg*]].
+It stands for a collection of CFG nodes (of type [[CfgNode*]]), each of
+which represents a basic block, i.e., a list of instructions that are
+executed in sequence.  There are also distinguished entry and exit nodes
+(one each) neither of which contains instructions.
+
+The edges of the CFG are expressed implicitly: a node contains a set
+representing its flow predecessors and a sequence representing its
+successors.  One of the instructions of a node (normally the last) may be a
+control-transfer instruction (CTI).  The identities and the order of its
+target labels must correspond to the successor sequence of the node.  If a
+node can ``fall through'', either because it has no CTI or because the CTI
+might not divert control flow, then it also has a fall-through successor,
+which always comes first in the successor sequence.  There can be multiple
+flow edges from one node to another, in which case, the latter appears more
+than once in the successor sequence of the former.
+
+Sometimes an optimization wants to manipulate code in graph form but still
+retain precise control over the layout of instructions when the code is
+convert to linear ([[InstrList]]) form.  Under the OPI, you can give each
+node layout constraints that require it to appear at a particular position
+in relation to other nodes when the enclosing graph is linearized.
+
+
+\subsubsection{Properties of [[Cfg]] Objects}
+\label{sec-cfg-properties}
+
+The principal component of a [[Cfg]] is its collection of nodes.  You can
+access these using sequence functions analogous to those for an
+[[InstrList]] object.  However, you can't change a CFG by operating on its
+node collection directly, so the only sequence functions defined are those
+that inspect the collection, not those that modify it.  In addition, there
+are functions [[get_entry_node]] and [[get_exit_node]] that return the
+special entry and exit nodes of a CFG.
+
+The sequence of nodes in a [[Cfg]] has the name [[nodes]], and you can
+apply the following functions to this sequence:
+
+\begin{quote}
+[[nodes_size(cfg)]] returns the number of nodes in [[cfg]]. \\
+[[nodes_start(cfg)]] returns a handle on the first node of [[cfg]]. \\
+[[nodes_last(cfg)]] returns a handle on the last node of [[cfg]]. \\
+[[nodes_end(cfg)]] returns the sentinel handle for the node
+    sequence of [[cfg]]. \\
+[[get_node(cfg, pos)]] returns the node of [[cfg]] at position
+    [[pos]], which is a zero-based integer. \\
+[[get_node(cfg, handle)]] returns the node of [[cfg]] at [[handle]].
+    (This is the same as [[*handle]].)
+\end{quote}
+
+A CFG has one special way of accessing its sequence members.  If you
+evaluate [[node_at(cfg, label)]], where [[label]] is a code label, you get
+the node that contains the corresponding label instruction (or [[NULL]], if
+[[cfg]] has no such node).
+
+
+\subsubsection{Properties of [[CfgNode]] Objects}
+\label{sec-cfg-node-properties}
+
+A [[CfgNode]] object is made up of the following components:
+
+\begin{itemize}
+\item [[parent]], the [[Cfg]] object that owns the node.
+\item [[number]], an identifying integer guaranteed to be less than the
+      number of nodes in the parent CFG.
+\item [[label]], a [[LabelSym]] that is one of the labels at the beginning
+      of the node's instructions.
+\item [[instrs]], the sequence of instructions that is the main content of
+      the node.
+\item [[cti_handle]], a handle on the [[instrs]] sequence that locates the
+      node's CTI, if any.
+\item [[preds]] and [[succs]], the sequences giving the node's control
+      predecessors and successors.
+\item [[layout_pred]] and [[layout_succ]], node pointers that if non-null,
+      dictate which node the current node must follow and/or precede when
+      laid out in linear order.
+\end{itemize}
+
+\paragraph{Checking a node's identity.}
+
+You fetch the parent CFG of [[node]] by evaluating [[get_parent(node)]].
+You fetch its [[number]] using [[get_number(node)]].  The [[label]]
+``component'' is produced by [[get_label(node)]], but it is actually taken
+from the first of [[node]]'s label instructions.  If there is no such,
+[[get_label]] adds one with a new label symbol and returns that symbol.%
+\footnote{To simply check whether a node \emph{has} a label, write
+[[size(node) > 0 && is_label(*start(node))]].}
+
+\paragraph{Manipulating the instruction sequence.}
+
+The main content of a CFG node is its instruction sequence.  You can scan
+and edit this sequence using the same function calls that you'd use for the
+contents of an [[InstrList]] object.  Simply pass a [[CfgNode]] as the
+first argument instead of the instruction list.
+
+In fact, the same nickname convention applies.  Although a [[CfgNode]]
+contains three sequences, its principal role is as a container of
+instructions, and you will need to use the [[instrs]] sequence functions a
+lot.  So you can use the same nicknames as for the corresponding functions
+of an [[InstrList]].  E.g., [[instrs_size(node)]] can be shortened to
+[[size(node)]], and so on.
+
+\paragraph{Accessing successors and predecessors.}
+
+The other sequences in a node, [[succs]] and [[preds]], aren't mutable
+using sequence functions, except that [[set_succ]] alters an element of
+[[succs]] and adjusts predecessor sets as necessary to maintain consistency
+(see Section~\ref{sec-representing-code}).  However, for scanning the
+[[succs]] and [[preds]] sequences, you use the usual sequence functions.
+For example, this snippet returns [[true]] from its enclosing function if
+node pair ([[tail]],[[head]]) is an edge in the parent CFG, and returns
+[[false]] otherwise.
+
+\begin{verbatim}
+    for (CfgNodeHandle h = succs_start(tail); h != succs_end(tail); ++h)
+        if (head == *h)
+	    return true;
+    return false;
+\end{verbatim}
+
+Because conditional branches are so common, the OPI defines convenient
+(though redundant) functions for accessing their successors:
+[[fall_succ(node)]] is equivalent to [[get_succ(node, 0)]], and
+[[taken_succ(node)]] is equivalent to [[get_succ(node, 1)]].
+
+\paragraph{Inspecting and testing the CTI.}
+
+To fetch the [[cti_handle]] of [[node]], evaluate [[get_cti_handle(node)]].
+The result, which has type [[InstrHandle]], is a handle on [[node]]'s CTI,
+if it has one; otherwise, it's the sentinel handle for the [[instrs]] of
+the node.  To simply fetch the CTI itself, use [[get_cti(node)]].  There
+are no corresponding [[set_]] functions for the CTI.  To change a node's
+CTI, you first change the instruction sequence directly and then call
+[[reflect_cti]], which is described in Section~\ref{sec-flow-relations}.
+
+Because it's often necessary to test whether a node is terminated by a CTI,
+and if so, what kind, there are node predicates for doing so.
+
+\begin{quote}
+[[ends_in_cti(node)]] returns true if [[node]] has a CTI. \\
+[[ends_in_ubr(node)]] returns true if [[node]] has a CTI satisfying
+    [[is_ubr]]. \\
+[[ends_in_cbr(node)]] returns true if [[node]] has a CTI satisfying
+    [[is_cbr]]. \\
+[[ends_in_mbr(node)]] returns true if [[node]] has a CTI satisfying
+    [[is_mbr]]. \\
+[[ends_in_call(node)]] returns true if [[node]] has a CTI satisfying
+    [[is_call]]. \\
+[[ends_in_return(node)]] returns true if [[node]] has a CTI satisfying
+    [[is_return]].
+\end{quote}
+
+
+\paragraph{Finding a node's boundary instructions.}
+
+It is sometimes useful to find the first ``real'' instruction in a node,
+i.e., the first one other than a label or some other kind of marker.
+It's occasionally useful to identify the last non-control-transfer
+instruction in a node.  The following functions identify such ``boundary''
+instructions within a node.
+
+\begin{quote}
+[[first_non_label(node)]] returns the first instruction in [[node]]
+    that isn't a label. \\
+[[first_active(node)]] returns the first instruction in [[node]] that
+    isn't a label, a pseudo-instruction, or a null-opcode instruction. \\
+[[last_non_cti(node)]] returns the last instruction of [[node]] that
+    isn't its CTI.
+\end{quote}
+
+Each of these boundary-instruction functions returns [[NULL]] if there is
+no qualifying instruction.
+
+\paragraph{Inspecting the layout constraints.}
+
+The [[layout_pred]] and [[layout_succ]] components of [[node]] are produced
+by [[get_layout_pred(node)]] and [[get_layout_succ(node)]].
+Section~\ref{sec-layout-relations} describes how to modify these
+components.
+
+
+\subsubsection{Graph Construction and Deconstruction}
+
+You create a CFG by passing an [[InstrList]] object to function
+[[new_cfg]], which parses the linear instruction list into basic blocks.
+There are optional Boolean arguments to [[new_cfg]] that control exactly what
+constitutes a basic block and whether the original linear layout of the
+instructions should be reflected through initial layout constraints.
+
+Here, in order of appearance, are the optional flags to [[new_cfg]]:
+
+\begin{itemize}
+\item If [[keep_layout]] is true, the CFG is built with layout constraints
+      that reflect its original linear order.  (You can dissolve any or all
+      of these constraints later.)
+\item If [[break_at_call]] is true, each procedure-call instruction is
+      treated as a CTI, so that it terminates the CFG node that contains
+      it.  Otherwise, a call is regarded like an ordinary instruction, in
+      the sense that a node may contain multiple calls.
+\item If [[break_at_instr]] is true, the graph is built with a separate
+      node for every non-label instruction.
+\end{itemize}
+
+Given an existing CFG, you may want to ensure that it has the same form as
+if built from scratch with a given option set.  The [[canonicalize]]
+function serves this purpose.
+
+Here's an example showing the use of [[new_cfg]] and [[canonicalize]].
+It's taken from a pass that wants to operate on each optimization unit in
+CFG form, and it wants layout constraints imposed to remember the program's
+linear order.  The optimization unit is called [[unit]].
+
+\begin{verbatim}
+    AnyBody *old_body = get_body(unit);
+    Cfg *cfg;
+    if (is_a<InstrList>(old_body)) {
+	cfg = new_cfg((InstrList*)old_body, true);	// true => keep layout
+	copy_notes(old_body, cfg);
+	set_body(unit, cfg);
+	delete old_body;
+    } else if (is_a<Cfg>(old_body)) {
+	cfg = (Cfg*)old_body;
+	canonicalize(cfg, true);			// true => keep layout
+    } else
+	claim(false, "Unexpected kind of compilation unit body");
+\end{verbatim}
+
+The snippet above completely replaces the body of [[unit]] if it is in
+linear form.  It copies any annotations from the old body to the new one in
+CFG form, and it deletes the now-unreferenced instruction list.  If the
+unit is already in CFG form, neither of these steps is necessary, but
+[[canonicalize]] is called to be sure the graph has the properties that the
+pass expects.
+
+This pass chooses to preserve layout constraints, which is typical for a
+pass that does little graph transformation.  Even in this mode, it can
+modify the layout, either using functions on specific nodes (see
+Section~\ref{sec-cfg-node-properties}) or by applying
+[[remove_layout_info]] to the whole cfg, which clears all of its layout
+constraints.
+
+To reverse the transformation and relinearize a CFG, you call
+[[to_instr_list]], which takes an [[AnyBody]] and returns an [[InstrList]].
+After doing so, you typically want to delete the graph.  Since a CFG is the
+owner of all its nodes, that deletes the nodes as well.
+
+
+
+\subsubsection{Control-Flow Relations}
+\label{sec-flow-relations}
+
+\paragraph{Normal edges.}
+
+Normally, the number of successors of a [[CfgNode]] depends on the control
+instruction that ends the node:
+
+\begin{itemize}
+\item   Unconditional-branch nodes and fall-through nodes (those that have
+        no terminating control instruction or that have a call instruction
+        as their CTI) have just one successor.        
+\item   Conditional branches have two successors.  The fall-through
+	node is always successor number 0; the taken successor, number 1.
+\item   Multiway branches have as many successors as there are entries
+	in the branch dispatch table.  Changing the $j$th successor of a
+        multiway branch modifies the $j$th dispatch table entry.  (There is
+        no ``default'' target label.)
+\end{itemize}
+
+The edges induced by these flow properties of control instructions are
+called \emph{normal} edges.
+
+\paragraph{Abnormal edges.}
+
+The OPI also supports the creation of two other kinds of edges:
+\emph{exceptional} and \emph{impossible}.  Together, we call these
+\emph{abnormal} edges.
+
+The assumption usually made when the CFG creator encounters a procedure
+call instruction is that it returns exactly once for each time the call is
+executed.  In many languages, it is possible to write procedures that may
+not return in the normal way, or that may return more than once for each
+call.  To reflect such exceptional control paths, we provide a special kind
+of successor relation, used to describe flow of control from a call site
+directly to the exit node, or from the entry node to the point immediately
+after a call.  We call such flow \emph{exceptional}, since it is not the
+usual thing, and since it is often associated with the raising of an
+exception.  We provide functions for creating and recognizing exceptional
+edges in a CFG.
+
+Though unusual, exceptional edges are at least possible control paths.
+On the other hand, there are important analysis techniques that insert
+completely \emph{impossible} edges in the CFG \cite{bibmorgan}.  They may
+require that every node lies on a path to the exit node, for example.
+To handle an infinite loop, they insert an impossible edge from one of
+the loop nodes to the exit.  We also provide functions to create and
+recognize impossible edges.
+
+When the CFG is constructed, impossible edges are included to be sure
+that every node is reachable from the entry, and every node has a path
+to the exit.  However, no exceptional edges appear in the CFG when it is
+first constructed.  To add them, you call [[set_exceptional_succ]], which
+is described below.
+
+In the [[succs]] component of a node, all exceptional and impossible
+successors occur after the normal successors. 
+
+
+\paragraph{Making new neighbors.}
+
+You set the normal successors of a node using one of the following:
+
+\begin{quote}
+[[set_succ(node, pos, succ)]]
+    substitutes [[succ]] for the node at position [[pos]] in the successor
+    sequence of [[node]]. \\
+[[set_fall_succ(node, succ)]] is the same as [[set_succ(node, 0, succ)]]. \\
+[[set_taken_succ(node, succ)]] is the same as [[set_succ(node, 1, succ)]].
+\end{quote}
+
+Thus [[set_succ(node, ]]$n$[[, succ)]] makes [[succ]] the new $n$-th
+successor of [[node]].  If necessary, each of the above functions extends
+the successor sequence of [[node]] to accommodate at least $n$+1 elements.
+It disconnects the former $n$-th successor (if any), and updates the
+predecessor lists of the old and new successors.  If necessary, it also
+modifies [[node]]'s CTI, which should be consistent with the existing
+successor sequence, to reflect the change.  For example, if [[node]] ends
+with a conditional branch, then [[set_succ(node, 1, succ)]] unlinks any
+previous ``taken'' successor, sets it to [[succ]], and replaces the target
+symbol of [[node]]'s branch instruction with the first label of node
+[[succ]].
+
+Functions [[set_fall_succ]] and [[set_taken_succ]] are provided for
+convenience.  The former sets the fall-through successor.  The latter sets
+the taken-branch successor of a conditional node.  You can also
+conveniently swap the taken and fall-through successors of a conditional
+branch node using [[invert_branch(node)]].  This inverts the sense
+[[node]]'s branch instruction by changing its opcode, with the help of the
+target-specific function [[opcode_cbr_inverse]].  At the same time, it
+exchanges [[node]]'s successors.
+
+The entry node of a CFG may have multiple successors, even though it
+contains no code, and therefore has no CTI.  This allows you to introduce
+exceptional edges from the entry to account for non-local control transfers
+into the middle of a compilation unit.
+
+
+\paragraph{Creating abnormal edges.}
+
+For exceptional and impossible edges, there are special ways of setting a
+successor node.
+
+\begin{quote}
+[[set_exceptional_succ(node, pos, succ)]]
+    is like [[set_succ(node, pos, succ)]] but it also marks the new edge as
+    exceptional. \\
+[[set_impossible_succ(node, pos, succ)]]
+    is like [[set_succ(node, pos, succ)]] but it also marks the new edge as
+    impossible.
+\end{quote}
+
+\paragraph{Testing for abnormal edges.}
+
+Detecting whether a particular numbered successor represents a normal,
+exceptional, or impossible edge is handled by the following predicates.
+For completeness, we say that a \emph{possible} edge is one that isn't
+impossible.
+
+\begin{quote}
+[[is_normal_succ(node, succ)]] returns [[true]] exactly when
+    ([[node]],[[succ]]) is a normal edge in the parent CFG. \\
+[[is_exceptional_succ(node, succ)]] returns [[true]] exactly when
+    ([[node]],[[succ]]) is an exceptional edge in the parent CFG. \\
+[[is_possible_succ(node, succ)]] returns [[true]] exactly when
+    ([[node]],[[succ]]) is a possible edge in the parent CFG. \\
+[[is_impossible_succ(node, succ)]] returns [[true]] exactly when
+    ([[node]],[[succ]]) is an impossible edge in the parent CFG.
+\end{quote}
+
+
+\paragraph{Replacing the control-transfer instruction.}
+
+To this point, we have not described any way of reducing the number of
+successors of a node.  The [[set_succ]] function diverts an existing
+edge, and it updates the CTI accordingly.  But sometimes, there's no
+substitute for replacing the control instruction entirely.
+
+As mentioned earlier, the OPI has no [[set_cti]] function.  To replace the
+CTI of a node, you first change the instruction list directly and then call
+[[reflect_cti]].  This function records the new [[cti_handle]] component
+and changes the node's flow successors to reflect the new control
+instruction.  Obviously, if that instruction can fall through, or if the
+revised node has no CTI, [[reflect_cti]] needs to know what to use as the
+fall-through successor node.  So in general, you evaluate
+[[reflect_cti(node, cti, fall_thru)]], where [[cti]] is the intended new
+CTI in [[node]]'s instruction sequence, and [[fall_thru]] is the (optional)
+fall-through successor.
+
+[[reflect_cti]] erases the previous successor links of [[node]], including
+those of exceptional and impossible successors.  If its second argument is
+[[NULL]], rather than a CTI instruction, the node's [[cti_handle]] is set
+to the sentinel value [[end(node)]], and the [[fall_thru]] node becomes its
+only successor.
+
+
+\subsubsection{Layout relations}
+\label{sec-layout-relations}
+
+The OPI supports basic block placement and layout by allowing the user to
+specify an ordering (partial or total) of the nodes in a CFG and its
+associated procedure.  The ordering is specified by a doubly-linked list
+formed by the [[layout_pred]] and [[layout_succ]] components of the graph's
+nodes.  Null pointers in this linked list indicate ``don't care''
+orderings, while connected components of the list will be laid out in order
+when the graph is linearized.  This gives you complete flexibility between
+specifying no order at all (all layout links null) and imposing a total
+layout order on the CFG.
+
+\paragraph{Changing layout constraints.}
+
+To modify layout information, the OPI provides the following functions.
+
+\begin{quote}
+[[clear_layout_succ(node)]] breaks the layout constraint between
+    [[node]] and its layout successor. \\
+[[set_layout_succ(node, succ)]] makes [[succ]] the layout successor of
+    [[node]]. \\
+[[set_layout_succ(node, succ_label)]] makes [[node_at(succ_label)]] the
+    layout successor of [[node]].
+\end{quote}
+
+Note that the first argument to each of the above functions is the
+predecessor member of the layout constraint being made or broken.  The
+[[layout_pred]] component of the layout successor is always adjusted
+implicitly.
+
+To remove a layout constraint, use [[clear_layout_succ]].  To establish a
+layout constraint, use [[set_layout_succ]], indicating the new layout
+successor (either directly or through one of its labels) as its second
+argument.
+
+
+\paragraph{Effects of layout constraints on code.}
+
+When a CFG is constructed, no instructions are added or removed,
+whether or not layout constraints are specified.  Thus a procedure can
+be transformed into CFG form and back to instruction-list form with no
+changes, whether or not the layout-retention option is selected.
+
+When no layout links have been specified, the CFG is treated as a general
+graph.  You are free to transform it without having to ensure that there is
+a linearization of its current instructions that is in valid executable
+order.
+
+On the other hand, nodes with layout successors be valid standard basic
+blocks.  This makes [[set_layout_succ]] picky about the conditions under
+which it allows a link to be set.
+
+\begin{itemize}
+\item   It is always legal to set the layout successor of a fall-through
+	node or a node ending in an unconditional branch.  If the
+	layout successor is also the control-flow successor, then an
+	unneeded unconditional branch instruction will be removed.  If
+	not, a goto will be created to be the terminating control
+	instruction in the node (i.e. it will be returned by
+	[[get_cti]]).  These constraints ensure that any necessary
+	explicit goto's become visible for timing analysis and
+	instruction scheduling.
+
+\item   It is legal to set the layout successor of a conditional branch node
+	only if the layout successor is either the fall-through successor
+	or the taken successor of the node.  [[set_layout_succ]] inverts
+	the branch polarity, if necessary, so that the layout successor
+	becomes the fall-through successor of the node.  It returns a
+	Boolean result, which is true exactly when this flip has been made.
+
+	If you actually want the layout successor of a conditional branch
+	node not to be a control-flow successor, then you are responsible
+	for creating a new unconditional branch node below the conditional
+	branch.  This is easily done using the [[insert_empty_node]]
+	function.
+\item	It is legal to set the layout successor of a node ending
+	in a call instruction only if the layout successor is also
+	the control flow successor.
+\item	It is always legal to set the layout successor of a multiway
+	branch node.
+\item	It is never legal to set a layout successor if adding that
+	link to the layout list would create a layout cycle.  Moreover,
+	it is never legal to change the fall-through successor of a node
+	after its layout successor has been set.  (You're allowed to set
+	the fall-through successor to the same value, though.)
+\end{itemize}
+
+
+\subsubsection{Adding New Nodes}
+
+New CFG nodes are created with respect to a particular CFG and are
+immediately included in the graph's roster of nodes, even though they
+may have no connection to other nodes.
+
+\begin{quote}
+[[new_empty_node(cfg)]]
+	returns a new empty and isolated node of [[cfg]]. \\
+[[insert_empty_node(cfg, tail, head)]]
+	inserts a new node along edge ([[tail]],[[head]]). \\
+[[insert_empty_node(cfg, tail, succ_pos)]]
+	inserts a new node between [[tail]] and successor number
+	[[succ_pos]]. \\
+[[clone_node(cfg, node)]]
+	replicates [[node]] in [[cfg]], leaving it disconnected.
+\end{quote}
+
+Recall that the sequence of successors of a node is an ordered multiset:
+there may be several edges from node [[tail]] to some node [[head]].  The
+second form of [[insert_empty_node]] allows you to say exactly which edge
+to split with a new node.
+
+
+\subsubsection{Graph Simplification}
+
+The following functions perform graph simplification.  Each returns
+[[true]] if it succeeds in changing the graph.  Since one kind of
+simplification can create opportunities for others, you may want to
+repeat these transformations until no progress is made by any of them.
+
+\begin{quote}
+[[remove_unreachable_nodes(cfg)]]
+	removes nodes unreachable from [[cfg]]'s entry. \\
+[[merge_node_sequences(cfg)]]
+	merges sequences of control-equivalent nodes. \\
+[[optimize_jumps(cfg)]]
+	eliminates jumps to jumps.
+\end{quote}
+
+You should know that [[remove_unreachable_nodes]] renumbers the CFG,
+so it could invalidate node numbers that you may have saved.
+
+
+\subsubsection{Reverse-Postorder Node Enumeration}
+
+Class [[CfgNodeListRpo]] gives you a way to enumerate the nodes of a CFG in
+reverse postorder \cite{bibmorgan}.  Construct an instance of this class,
+passing a [[Cfg]] object and an optional flag indicating whether to view
+the graph in the normal forward direction or in reverse.  The methods of
+[[CfgNodeListRpo]] for scanning the nodes are the same as the corresponding
+sequence functions.  For instance, here's a snippet that prints the nodes
+of [[cfg]] in reverse postorder:
+
+\begin{verbatim}
+    CfgNodeListRpo rpo(cfg);
+    for (CfgNodeHandle h = rpo.start(); h != rpo.end(); ++h)
+	fprint(stdout, *h); 
+\end{verbatim}
+
+
+\subsubsection{Graph Printing}
+
+\paragraph{Printing the whole graph.}
+
+When debugging code that uses a CFG, it is often useful to print an ASCII
+representation of the graph.  To do so, evaluate
+[[fprint(file, cfg, show_layout, show_code)]].
+Here [[file]] is a [[FILE*]], and the last two
+arguments are optional flags: [[show_layout]] causes the printout to
+indicate the layout predecessor and successor of any node that
+has such constraints and [[show_code]] causes the instructions in each node
+to be printed.  Both flags default to [[false]].
+
+\paragraph{Printing one node.}
+
+To print the line for a single node, evaluate
+[[fprint(file, node, show_code)]].
+This prints a line containing [[node]]'s number, the nature of its CTI,
+if any, and the lists of its successor and predecessor numbers.  If the
+optional Boolean argument [[show_code]] is true, it prints the node's
+instructions as well.
+
+
+\subsection{Annotations}
+
+An annotation is an association between an [[IrObject]], a key, and a
+(potentially empty) sequence of values.  The base class of all
+annotations is [[Note]].  Like the IR component [[Opnd]], the OPI
+provides a couple of atomic annotations, uses classes to support the
+definition of new annotations, and includes several example
+specializations.
+
+\subsubsection{Keys}
+
+Annotation keys have the opaque type [[NoteKey]], where the actual
+implementation of these IR objects may vary from one implementation of
+the OPI to another.  In general, you can think of a key as a character
+string like [["line"]]; Machine SUIF in fact implements a [[NoteKey]]
+as an [[IdString]].  By convention, we name our [[NoteKey]] variables by
+prepending a [[k_]] to the front of the character string describing
+the key.  Thus, [[k_line]] is the [[NoteKey]] variable for the key
+[["line"]].  We use this particular key for the annotations that
+associate line number information with an instruction.
+
+\subsubsection{Association Functions}
+
+The following is a listing of the functions that check and manipulate
+the [[Note]] sequence associated with an [[IrObject]].
+
+\begin{quote}
+[[has_notes(object)]]
+    returns [[true]] if [[object]] has any annotations. \\
+[[has_note(object, key)]]
+    returns [[true]] if [[object]] has a [[Note]] under [[key]]. \\
+[[get_note(object, key)]]
+    returns the [[Note]] attached to [[object]] under [[key]]. \\
+[[take_note(object, key)]]
+    removes and returns the [[Note]] attached
+    to [[object]] under [[key]]. \\
+[[set_note(object, key, note)]]
+    attaches [[note]] to object under [[key]]. \\
+[[copy_notes(object1, object2)]]
+    makes copies of all the notes attached to [[object1]]
+    and attaches them to [[object2]].
+\end{quote}
+
+As you can see from the functions above, we use a key as the index
+into the [[Note]] sequence attached to an [[IrObject]].  You can
+attach any number of annotations to an [[IrObject]], and an
+[[IrObject]] may have one or more annotations with the same key.
+
+
+\subsubsection{Basic Annotation Kinds}
+
+The OPI contains five basic kinds of annotations: null, flag,
+singleton, list, and custom notes.  Null and flag are atomic
+annotations.  They do not have any components that you can modify, and
+they are built using creator functions.  The rest are modifiable, and
+they defined by derived classes of the base class [[Note]].  You build
+them using the appropriate class constructor, and you modify them
+using the public methods of the appropriate specialization class.
+
+Except for the null annotation, we do not provide predicate functions
+to distinguish between the different kinds of notes, as we do for
+other OPI components.\footnote{We do not have a kind enumeration for
+annotations for similar reasons.}  As illustrated above, a key is used
+to get a [[Note]] from an [[IrObject]].  The key determines the kind
+of [[Note]] returned and thus makes predicate functions unnecessary.
+When extending the OPI, you should maintain the invariant that a key
+never maps to more than one [[Note]] kind.  (It is perfectly
+acceptable to have multiple different keys return the same kind of
+[[Note]].)  In our derived [[Note]] classes, we provide a constructor
+that takes a [[Note]] so that you never have to cast the return value
+of [[get_note]] and [[take_note]].
+
+The rest of this section reviews the properties of each basic kind of
+annotation in turn.  Notice that annotation equality is the only
+operation common to all annotations.
+
+\paragraph{Null annotations.} 
+
+When [[object]] has no annotation under key [[key]], then [[get_note]]
+and [[take_note]] return the null annotation, an IR component
+representing the condition ``non-existent'' [[Note]].  Since you were
+expecting a different kind of annotation from these functions, we
+provide the [[is_null]] predicate to determine when [[get_note]] and
+[[take_note]] fail.  This is the only purpose for null annotations.
+
+Remember that [[Note]] is not a pointer type; [[NULL]] does not stand
+for the ``non-existent'' note.
+
+
+\paragraph{Flag annotations.} 
+
+These annotations are useful when the mere presence of an annotation
+with a given key carries all of the information that you want
+associated with the [[IrObject]].  You can create a flag annotation
+using the creator function [[note_flag()]].  These annotations do not
+include a value sequence.
+
+\begin{verbatim}
+    set_note(instr, k_necessary_instr, note_flag());
+\end{verbatim}
+
+In the example above, we attach a flag note with the key
+[[k_necessary_instr]] to an instruction [[instr]].  We use this code
+in our dead-code elimination pass to mark instructions as necessary.
+
+
+\paragraph{Singleton annotations.}
+
+We refer to any annotation that provides you with a single storage
+location as a {\em singleton} annotation.  The templated class
+[[OneNote<]]\emph{ValueType}[[>]] provides you with a storage location
+of type \emph{ValueType}, where \emph{ValueType} must be one of the
+following types: [[long]], [[Integer]], [[IdString]], or
+[[IrObject*]].  When you invoke the parameterless constructor for one
+of these singleton notes, you construct a singleton note with a single
+uninitialized storage location.
+
+The templated class [[OneNote<]]\emph{ValueType}[[>]] provides you with the
+following methods for inspecting and manipulating the singleton value:
+
+\begin{quote}
+[[get_value()]]
+    returns the value. \\
+[[set_value(value2)]]
+    replaces the value by [[value2]].
+\end{quote}
+
+You can change the value of a singleton note before or after attaching
+it to an [[IrObject]].
+
+
+\paragraph{List annotations.}
+
+We refer to any annotation that provides you with storage for a
+sequence of values as a {\em list} annotation.  
+
+The templated class [[ListNote<]]\emph{ValueType}[[>]] provides you with a
+homogeneous value list of one of the following types: [[long]],
+[[Integer]], [[IdString]], or [[IrObject*]].  When you invoke the
+parameterless constructor for one of these list notes, you construct
+a list note with an empty value sequence.
+
+The templated class [[ListNote<]]\emph{ValueType}[[>]] provides you
+with the following methods for inspecting and manipulating the value
+list:
+
+\begin{quote}
+[[values_size()]]
+    returns the number of values in the sequence. \\
+[[get_value(pos)]]
+    returns the value at position [[pos]]. \\
+[[set_value(pos, value2)]]
+    replaces the value at position [[pos]] by [[value2]]. \\
+[[append(value)]]
+    appends [[value]] to the end of the sequence. \\
+[[insert_before(pos, value)]]
+    inserts [[value]] before position [[pos]]. \\
+[[remove(pos)]]
+    removes the sequence item at position [[pos]].
+\end{quote}
+
+You can add, remove, or change one or more items of a list note's
+value sequence before or after attaching it to an [[IrObject]].
+
+As an example, suppose that [[instr]] is an instruction arising from
+line 1234 of the source file [[demo.c]].  The following snippet
+attaches a [[ListNote<IdString>]] under the key [[k_line]] with a value
+sequence consisting of the source file name and line number (as a
+string):
+
+\begin{verbatim}
+    ListNote<IdString> note;
+    note.append(IdString("demo.c"));
+    note.append(IdString("1234"));
+    set_note(instr, k_line, note);
+\end{verbatim}
+
+The explicit conversion of the file name and line number to
+[[IdString]] is not very pretty, and it is hard to remember if the file
+name comes before or after the line number.  Use of custom annotations
+(described next) eliminates these annoyances and makes for clearer and
+more type-safe code.
+
+
+\paragraph{Custom annotations.}
+
+For annotations that are going to survive from pass to pass or that
+are widely used within a single pass, we build custom kinds of notes
+along with custom functions for inspection and manipulation.  This
+approach can eliminate the need for explicit conversions like
+[[IdString("demo.c")]] in the example above, and it makes the code
+easier to read and more robust against sequence-order bugs and
+representation changes.
+
+Let's consider the source-location annotation example again.  We've
+built a custom [[Note]] class called [[LineNote]], and with this custom
+note, we can construct a [[LineNote]] as follows:
+
+\begin{verbatim}
+    LineNote note;
+    note.set_file(note, "demo.c");
+    note.set_line(note, 1234);
+    set_note(instr, k_line, note);
+\end{verbatim}
+
+We read back the annotation attached to [[instr]] as follows:
+
+\begin{verbatim}
+    LineNote note = get_note(instr, k_line);
+    claim(!is_null(note));
+
+    fprintf(stdout, "Instruction from file %s, line %d:\n\t",
+            note.get_file().chars(), note.get_line());
+    fprintf(stdout, instr);
+\end{verbatim}
+
+We may in the future define other constructors that make line notes
+even easier to build.  In this way, the creation and attachment of the
+above annotation could easily be reduced to a single line:
+
+\begin{verbatim}
+    set_note(instr, k_line, LineNote("demo.c", 1234));
+\end{verbatim}
+
+To learn how to create custom annotation types like [[LineNote]], see
+\emph{The Extender's Guide}.
+
+
+\section{Summary}
+
+This guide provides a rudimentary introduction to our Optimization
+Programming Interface (OPI).  We encourage the reader to consult the
+library documents that came with the system implementing the OPI for
+the full prototype definitions of the OPI functions and for more
+details on their use.  Furthermore, this guide was never meant to be
+exhaustive in its listing of the available OPI functions and data
+structures, or in its presentation of coding examples.  The {\em OPI
+Catalog} and the ``cookbook'' that came with the system were written
+to address these issues.
+
+
+\section{Acknowledgments}
+
+This work was supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).  We also gratefully
+acknowledge the generous support of this research by Advanced Micro
+Devices, Compaq, Digital Equipment, Hewlett-Packard, International
+Business Machines, Intel, and Microsoft.
+
+
+\begin{thebibliography}{99}
+
+\bibitem{eric-thesis} Eric Feigin.
+\emph{A Case for Automatic Run-Time Code Optimization}.
+Undergraduate thesis, Harvard University, April 1999.
+
+\bibitem{bibbvd} G. Holloway and A. Dimock.
+\emph{The Machine-SUIF Bit-vector Data-flow Analysis Library.}
+The Machine SUIF documentation set, Harvard University,
+1998.
+
+\bibitem{bibcookbook} G. Holloway and M. D. Smith.  {\em The Machine-SUIF
+Cookbook.}  The Machine-SUIF documentation set, Harvard University, 2000.
+
+\bibitem{bibmachine} G. Holloway and M. D. Smith.
+\emph{The SUIF Machine Library.}
+The Machine SUIF documentation set, Harvard University,
+2000.
+
+\bibitem{bibmorgan} Robert Morgan.  {\em Building an Optimizing
+Compiler.}  Digital Press, 1998.
+
+\bibitem{biboverview} M. D. Smith and G. Holloway.
+\emph{An Introduction to Machine SUIF and Its Portable Libraries
+for Analysis and Optimization.}
+The Machine SUIF documentation set, Harvard University,
+2000.
+
+\end{thebibliography}
+
+
+\appendix

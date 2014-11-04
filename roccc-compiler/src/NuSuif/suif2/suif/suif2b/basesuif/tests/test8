@@ -1,0 +1,3 @@
+import testpasses
+testBuild 1
+test-virtual

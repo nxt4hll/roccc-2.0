@@ -1,0 +1,164 @@
+This is the National Compiler Infrastructure system.
+
+To install this on your computer, do the following.
+
+1/	Untar the archive.
+
+2/	cd to the nci directory.
+
+3/	type "/bin/sh ./install"
+        You may wish to supply various environment variables used 
+        to control the build process.  For example:
+
+  	  /bin/sh ./install --with-CC=/usr/bin/gcc \
+  	  --with-CXX=/usr/bin/g++ \
+	  --with-CXXLINK=/usr/bin/g++ \
+ 	  --with-GC_LIBDIRS='-L/usr/lib -lgc' \
+	  --with-GC_INCLDIRS='-I/usr/include/gc' \
+	  --with-OMEGA_INCLDIRS='-I/usr/include/omega' \
+	  --with-DOT=/usr/bin/dot \
+	  --with-TCL_INCLDIRS='-I/usr/local/ultra/include -I/usr/openwin/include' \
+	  --with-TCL_LIBDIRS='-L/usr/openwin/lib -L/usr/X11/lib -L/usr/X11R6/lib'
+
+	install script does the following:
+
+		1/ Creates Makefile.std from Makefile.proto with the following
+		   additional variables.
+
+		   ARCH		Tries to identify the machine architecture 
+				using uname -a.
+				If you are running on a machine for which we
+				have not catered, this step will require help. 
+		   NCIHOME	This is the directory in which install is 
+				run (it must be the "nci" directory)
+
+		   MAKE		The name of your make. gmake is looked for 
+				first, then make.
+
+				Note that some makes cannot handle the make 
+				files - gnu make is required.
+
+		   AWK		Tries to find awk. gawk, then nawk then plain
+				awk are looked for.
+				Some machines (eg sun) have an "awk" and a 
+				"nawk" and the "awk" does not work.
+
+		   CXX		Tries to find the c++ compiler. Tries eg++ 
+				g++ CC cc. If your C++ compiler us called 
+				something else, edit this line of the install
+				script to look for the right name.
+
+		   CC		Similarly for the C compiler. Looks for 
+				egcc gcc and cc.
+
+		   PERL		Looks for "perl"
+
+	      2/ Tries to guess a name for COMPILER_NAME depending upon 
+		 the name of the c++ compiler and the architecture. This 
+		 value will be used to read options files.
+
+	The result of all this is a Makefile.std. Makefile.std is always 
+	read by every Makefile in every directory. It is the usual place
+	for make rules.
+
+4/	The installed make file assumes that the binaries will be built 
+	in the same directories as the sources. Eventually you will be 
+	able to redirect the binary output elsewhere but that
+	is not yet supported. When that is supported, you will be able 
+	to select a new directory for binaries at this point.
+
+5/	There are a number of option files which contain configuration 
+	options. There are four groups of these:
+
+		Makefile.options.$(ARCH)	options dependent on the 
+						architecture.
+
+		Makefile.options.$(COMPILER_NAME) options depedent on the 
+						compiler being used
+
+		Makefile.options.$(HOSTNAME)	options for a given machine 
+						(HOSTNAME must be defined)
+						There are none of these in 
+						the release.
+
+		Makefile.options.$(LOGNAME)     options for a given user.
+
+	These files do not have to be present. 
+
+	Modify these files to introduce options for a new compiler or system. 
+
+6/	Now type "make setup". This creates a bin and an solib directory 
+	immediately under the nci directory.
+
+	Note: if make has been set to gmake and if you do not have make
+	aliased to gmake, you will have to explicitly say "gmake setup".
+
+7/	Finally type "make" (or gmake - see step 6). This will make the 
+	system.
+
+8/      If you use a C shell variant (e.g., csh or tcsh), type 
+	"source nci_setup.csh".  If your shell is a Bourne-like shell 
+	(e.g., sh, ksh, or bash), type ". nci_setup.sh".
+  
+9/    	Finally, type "make test".
+
+
+	NOTE: You will need to use gcc 2.8.1 or later or egcs 1.1.1 or later.
+	gcc 2.7 will not compile this code.
+
+	Also, there are problems with -O2. Do not use this level of optimization.
+	It is not known if -O1 is successful. Nor have we tracked down why -O2
+	breaks.
+
+10/     The file "suif/suif2b/doc/index.html" contains an index to the 
+        documentation released with the system.  The web page
+        http://suif.stanford.edu/ keeps an up-to-date copy
+        of the SUIF documentation.   It is advisable to keep a link to that 
+        page to get all the latest updates. 
+        
+
+Installing other SUIF packages
+------------------------------
+
+	The package installation procedure is still mostly manual.
+
+	Source packages distributed from the SUIF web site are tarballs.
+
+	a) Untar the package.  It will install into directories in
+		nci/suif/suif2b/...
+		> cd $NCIHOME/..
+		> gzip -dc PACKAGE-version.tar.gz | tar -xvf -
+
+	b) add the directory names used in the package into the
+	   "nci/suif/suif2b/extra_suif_packages" file.
+
+	c) Some packages require extra environment variables to be set.
+	   Take a look for a nci/suif/suif2b/`PACKAGE'/README.`PACKAGE'
+	   e.g.
+	        "osuif" (using a csh shell) you will need to set
+			setenv OSUIFHOME $NCIHOME/suif/suif2b/osuif
+
+	   	"j2s" (using a csh shell) you will need to set
+			setenv J2SHOME $NCIHOME/suif/suif2b/j2s
+			To build the runtime you will need to set at least
+			setenv JAVAHOME `YOUR_JDK1_2_2_JAVAHOME_HERE'
+
+	   	"extras" (using a csh shell) you may need to point the
+			Makefile.std at some X11 directories for your machine.
+			This package currently includes the directories: 
+				"dataflow" "suifbrowser" and "tclsuif"
+
+	   	"suifversion1support"
+			You must have suif1 libraries built.
+
+	d) Build the package.  If you added the directory name
+		into the "extra_suif_packages" file, you can do a make
+		from the top level.  Otherwise do the make from the
+		package directory.
+
+		gmake
+
+Installing the PGI/EDG C frontend
+-----------------------------
+	- Build at least the basesuif package.
+	- Register and get the frontend binaries from http://nci.pgroup.com

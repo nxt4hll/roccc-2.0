@@ -1,0 +1,4 @@
+import testpasses
+import basicnodes suifnodes
+testBuild 1
+save ysuif.out

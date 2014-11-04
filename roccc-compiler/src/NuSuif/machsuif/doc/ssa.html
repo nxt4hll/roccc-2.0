@@ -1,0 +1,734 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>The Machine-SUIF Static Single Assignment Library</title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+
+           <!-- Omit \clearpage for new source file-->
+<p>
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>The Machine-SUIF Static Single Assignment Library</a></h1>
+<address><em>Release version 2.02.07.15</em> <br><br>Glenn Holloway <br>holloway@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<p>
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+
+The Machine SUIF static single-assignment library translates an
+optimization unit into or out of static single-assignment form (SSA), a
+constrained representation that supports many kinds of analysis and
+optimization.  Conversion to SSA form produces an object of class
+<code>SsaCfg</code> that holds information about the transformed code, including
+both data-flow information for use during optimization and the maps needed
+to return the code to conventional form.
+<p>
+Our implementation follows the design described by Briggs <em>et al</em>
+<b>[cite&nbsp;<a href="#NWcite-bib-rice-paper">bib-rice-paper</a>]</b> at Rice University.  Their approach is flexible,
+allowing users to control the space/speed tradeoff.  It also deals
+carefully with correctness and efficiency issues that arose in previous
+implementations.
+<p>
+This document describes how to use the SSA library, and it makes
+connections to the paper <b>[cite&nbsp;<a href="#NWcite-bib-rice-paper">bib-rice-paper</a>]</b> and the implementation
+document <b>[cite&nbsp;<a href="#NWcite-bib-rice-code">bib-rice-code</a>]</b> describing the Rice approach.
+<p>
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">Terminology</a></li>
+<li><a href="#toc5">Overview of the Library's Interface</a></li>
+<li><a href="#toc6">Excerpts from An Example Pass</a></li>
+<li><a href="#toc7">A Reference Guide to the Library's Interface</a></li>
+<li><a href="#toc8">Adapter Passes</a></li>
+<li><a href="#toc9">Summary</a></li>
+<li><a href="#toc10">Acknowledgments</a></li>
+<li><a href="#toc11">References</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+Static single-assignment form scarely needs an introduction.  In the
+relatively few years since its invention, it has become a popular
+representation for use in data-flow analysis and optimization.  It is so
+robust and useful that the entire global optimization phase of the SGI
+Pro64 compiler is carried out in SSA form.
+<p>
+The Massively Scalar Compiler Project at Rice University, headed by Keith
+Cooper, has developed many optimizations based on SSA form.  They have
+studied the issues in implementing the translation to and from SSA
+representation.  Their findings are published in a journal article
+<b>[cite&nbsp;<a href="#NWcite-bib-rice-paper">bib-rice-paper</a>]</b> and a detailed account, in ``literate programming''
+style, of their implementation <b>[cite&nbsp;<a href="#NWcite-bib-rice-code">bib-rice-code</a>]</b>.  Both of these
+documents are available online.
+<p>
+Rice's design provides flexibility by allowing users to choose speed or
+space efficiency and to control whether to optimize during transformation
+and whether to retain data-flow information.  It also addresses tricky
+correctness problems that arise when translating SSA code back to
+conventional, executable form.  In general, that translation requires
+insertion of copy instructions to retain program semantics, and the Rice
+work shows how to minimize the number of copies used.
+<p>
+The Machine SUIF SSA library is based on the Rice design.  In fact, the
+first draft of the code was written at Rice by a Todd Waterman, a student
+in Keith Cooper's group.  For consistency with Machine SUIF conventions, we
+have reshaped the code and renamed some of the concepts, but we have
+retained the basic functionality and the efficient algorithms developed at
+Rice.
+<p>
+This document describes how to use the SSA library, but it is meant neither
+as an introduction to SSA-based optimization nor as a detailed rationale
+for the Rice approach.  Any of several recent compiler textbooks can
+provide the former <b>[cite&nbsp;<a href="#NWcite-bib-appel">bib-appel</a>, <a href="#NWcite-bib-morgan">bib-morgan</a>, <a href="#NWcite-bib-muchnick">bib-muchnick</a>]</b>.  For the
+latter, read the Rice paper <b>[cite&nbsp;<a href="#NWcite-bib-rice-paper">bib-rice-paper</a>]</b> and the Rice code
+description <b>[cite&nbsp;<a href="#NWcite-bib-rice-code">bib-rice-code</a>]</b>.
+ <b>[</b>We need to mention both of Rice's documents frequently. For
+brevity, we'll refer to the published paper <b>[cite&nbsp;<a href="#NWcite-bib-rice-paper">bib-rice-paper</a>]</b> as the
+``Rice paper'' and to the implementation document <b>[cite&nbsp;<a href="#NWcite-bib-rice-code">bib-rice-code</a>]</b> as
+the ``Rice code''.<b>]</b> 
+In the sections that follow, we point out connections between our
+implementation and theirs, and we also identify things that we've done
+differently.
+<p>
+Section&nbsp;<a href="#sec-terminology">[-&gt;]</a> establishes a vocabulary.
+Section&nbsp;<a href="#sec-overview">[-&gt;]</a> is an introduction to the library's interface.
+Section&nbsp;<a href="#sec-example-pass">[-&gt;]</a> uses excerpts from a dead-code elimination
+pass to show how the interface is used.
+Section&nbsp;<a href="#sec-reference-guide">[-&gt;]</a> is a reference guide to the interface.
+Section&nbsp;<a href="#sec-summary">[-&gt;]</a> gives a brief summary.
+<p>
+
+<h2><a name=toc4>Terminology</a></h2>
+<a name="sec-terminology"><b>[*]</b></a>
+<p>
+We begin by establishing a vocabulary.  Where possible, we use the same
+terminology used by Rice, which in turn reflects the SSA literatire for
+the most part.  In some cases, however, we found conflicts with Machine
+SUIF conventions or customary usage too confusing, so we have made some
+changes.
+<p>
+We're careful in our use of the related terms <em>name</em>,
+<em>location</em>, and <em>value</em>.  In non-SSA code, a name represents
+the contents of a storage location, but for any particular use of the
+name, we usually can't say which definition filled the location and thus
+gave the name its value.  In SSA code, a name represents the value
+generated at a single definition point.
+ <b>[</b>Rice uses the term ``resource'' instead of ``location''.  Where
+we say `value', they often say ``definition'' or ``def''.<b>]</b> 
+<p>
+We say that an ``old name'', one that occurs in non-SSA code, stands
+for a location, while a ``new name'', one in SSA code, stands for a
+value.  In Machine SUIF, both kinds of names are represented as
+operands, i.e., they have type <code>Opnd</code>.  The old names can be
+variable-symbol operands or register operands; these are the items SSA
+conversion pays attention to.  The new names inserted by conversion to
+SSA form are always virtual registers, distinct from any that were in
+the original code.
+<p>
+In Rice's implementation, operands, and therefore names, in the sense
+above, are represented as integers.  That's very handy for looking up
+operand attributes in tables.  Our names are operands, but we provide a
+map from these names to small-integer ``identifiers'', or ``ID''s.
+<p>
+A singular feature of SSA form is the <em><i><b>phi</b></i>-function</em>, the fictitious
+statement that defines a new SSA value by multiplexing different values of
+the same original variable, each corresponding to a different incoming
+control edge.  The Rice paper, like most other literature, calls these
+``<i><b>phi</b></i>-functions'', but the Rice code uses <em><i><b>phi</b></i>-node</em>,
+ <b>[</b>Maybe ``node'' refers to an element of the internal representation
+of the program, or maybe it just means ``list element'', since a basic
+block may in general have a list of <i><b>phi</b></i>-functions.  This latter use of
+``node'' occurs repeatedly in the Rice code.<b>]</b> 
+and we keep that term.  We use the word <em>sources</em> to describe the
+inputs of a <i><b>phi</b></i>-node, since these ``argument'' values are analogous to
+the source operands of an instruction.
+ <b>[</b>The Rice code uses ``parameter'', abbreviated <code>parm</code>.<b>]</b> 
+One or more of the sources of a <i><b>phi</b></i>-node may be <em>null</em>.  That means
+that the underlying location has no definition along the incoming edge that
+corresponds to the source.  A <i><b>phi</b></i>-node whose sources are all the same,
+ignoring nulls, is called a <em>useless</em> <i><b>phi</b></i>-node.
+ <b>[</b>The Rice code defines <em>useless</em> more aggressively, but notes
+that this may not be a good idea.  We found cases in which the Rice
+definition caused to many <i><b>phi</b></i>-nodes to be eliminated.<b>]</b> 
+Useless <i><b>phi</b></i>-nodes may optionally be eliminated during conversion to
+SSA form.
+<p>
+Each use of a name is called an <em>occurrence</em> of that name.  In SSA
+form, the sources of a <i><b>phi</b></i>-node are occurrences just like those in
+instructions.   A definition point may be either an instruction or a
+<i><b>phi</b></i>-node.  We use the term <em>operation</em> to cover both kinds of
+defining construct.  An instance of class <code>Operation</code> is the handle of
+either an instruction or a <i><b>phi</b></i>-node.
+<p>
+The Rice paper describes three approaches to inserting <i><b>phi</b></i>-nodes, which
+vary in the time and space required to implement them.  The <em>minimal</em>
+approach is so named because it requires less time, but it may insert lots
+of dead <i><b>phi</b></i>-nodes, i.e., one that define names that aren't used.  The
+<em>pruned</em> style corrects that flaw by using liveness analysis to avoid
+inserting dead <i><b>phi</b></i>-nodes.  It therefore saves space at compile time, but
+at the cost of doing data-flow analysis that might not otherwise be needed.
+<p>
+One of Rice's innovations is a third approach that they call
+<em>semi-pruned</em>.  It's based on the fact that many of the names in a
+program being converted to SSA form are local to a single basic block.
+They are compiler-generated temporaries that are never live across a
+control-flow edge.  Therefore, they never require <i><b>phi</b></i>-nodes.
+Semi-pruned form uses this observation to avoid inserting many of the
+<i><b>phi</b></i>-nodes that would be in minimal form without performing the liveness
+analysis needed for fully pruned form.
+<p>
+Figure&nbsp;1.4 of the Rice code document illustrates the differences among the
+three flavors of <i><b>phi</b></i>-node insertion, and the text accompanying that
+figure talks about the settings in which each is most appropriate.
+<p>
+
+<h2><a name=toc5>Overview of the Library's Interface</a></h2>
+<a name="sec-overview"><b>[*]</b></a>
+<p>
+SSA form is a replacement intermediate representation.  Class <code>SsaCfg</code> is
+a subclass of <code>AnyBody</code>, which means that one of its instances can serve
+as the body of an optimization unit, just like those of <code>InstrList</code> and
+<code>Cfg</code>.
+<p>
+SSA form construction starts from an existing CFG, which remains embedded
+in the <code>SsaCfg</code> object that results.  You access it using the function
+<code>get_cfg</code>.  Conversion to SSA form changes the code, however, so that the
+contents of the CFG no longer fully describe its semantics.  The old names
+in the code are replaced by their new, SSA counterparts, but the
+<i><b>phi</b></i>-nodes that define some of the new names aren't inserted explicitly
+in the instruction stream.  Instead, each basic block in the CFG may have
+an associated set of <i><b>phi</b></i>-nodes.  The OPI includes functions that map
+from blocks to <i><b>phi</b></i>-nodes and vice versa.  In general, optimizations that
+use SSA form need to be aware of the <i><b>phi</b></i>-nodes and they must use these
+OPI functions for dealing with them.
+<p>
+At the end of an SSA-based optimization pass, you can call the function
+<code>restore</code> to convert back to conventional, non-SSA form, so that the code
+in the CFG again expresses the full semantics of the unit being compiled.
+At that point, you would normally also store the CFG as the body of the
+unit (using <code>set_body</code>), and then discard the SSA object.  Alternatively,
+you can leave the <code>SsaCfg</code> object as the body, for input to a later
+SSA-based pass.
+<p>
+Every SSA (new) name corresponds to an original (old) name, and when
+feasible, it's nice to restore the original names during conversion back
+from SSA form.  That's the default behavior of the <code>restore</code> function.
+But an SSA-based optimization may make this impossible.  Since mapping from
+SSA values to original names is many-to-one, there's no guarantee in
+general that every SSA-name occurrence falls at a point where the
+corresponding original location happens to hold the right value.
+(Figure&nbsp;1.5 of the Rice code shows a simple example.)  So <code>restore</code> takes
+a flag telling it not to restore the old names, but instead to leave the
+SSA names in the code.  This means that <i><b>phi</b></i>-nodes have to be replaced by
+copy instructions inserted in predecessor blocks.  The Rice group worked
+hard to make this efficient, and we retain their methods, but quite a few
+copy instructions may be inserted at this stage.  Fortunately, many of
+these copies can usually be eliminated by later optimization passes.
+<p>
+SSA conversion can optionally develop and record use-def and def-use
+chains, although since each use-def ``chain'' has exactly one element, we
+don't call it a chain.  The OPI includes function for accessing this
+data-flow information.
+<p>
+Other options at SSA construction time are to eliminate copy instructions
+and useless <i><b>phi</b></i>-nodes.  A copy instruction becomes unnecessary if
+subsequent uses of its destination name are replaced by its source name.
+If this is done, the copy can be dropped.  This is usually the right thing
+to do, but not always, because it means that <code>restore</code> can't restore old
+names.  A <em>useless</em> <i><b>phi</b></i>-node is one whose source operands are
+identical.  Folding of useless <i><b>phi</b></i>-nodes is always beneficial.
+<p>
+Sometimes, an optimization needs to introduce new names while the program
+is in SSA form and possibly to replace occurrences of existing names with
+the new ones.  There are OPI functions that you call to record such changes
+in the SSA database.  By convention, your optimization pass first modifies
+the code and related <i><b>phi</b></i>-nodes, and then calls methods to reflect the
+changes it has made.  For example, when you replace one use occurrence by
+another, you call <code>record_use_swap</code> to update the internal records of
+your <code>SsaCfg</code> object.  When you insert a completely new instruction or
+<i><b>phi</b></i>-node, you call <code>record_def</code> to record the new definition and
+<code>record_all_uses</code> to record the new use occurrences.
+<p>
+
+<h2><a name=toc6>Excerpts from An Example Pass</a></h2>
+<a name="sec-example-pass"><b>[*]</b></a>
+<p>
+<a name="NWD2">An SSA-based optimization pass called </a><code>dcessa</code> is distributed with
+Machine SUIF.  This is an implementation of the dead-code elimination
+algorithm given in Robert Morgan's textbook <b>[cite&nbsp;<a href="#NWcite-bib-morgan">bib-morgan</a>]</b>.  Without
+going into the details of the algorithm, we'll show how it makes use of the
+SSA library.
+<p>
+The conversion of an optimization unit's CFG to SSA form is carried out
+by these lines:
+<p>
+<pre><a name="NW3BLBW7-1oIppg-1" href="#NWD2"><dfn>&lt;Convert to semi-pruned SSA form&gt;=</dfn></a>
+    using namespace ssa;
+
+    unit_ssa = new_ssa_cfg(unit_cfg, cur_unit,
+                           BUILD_SEMI_PRUNED_FORM | BUILD_DEF_USE_CHAINS |
+                           PRINT_WARNINGS);
+    if_debug(5) {
+        fprintf(stderr, &quot;\nInitial SSA CFG:\n&quot;);
+        fprint (stderr, unit_ssa);
+    }
+</pre><p>
+
+The snippet above opens the <code>ssa</code> namespace so that SSA library tokens
+like <code>BUILD_PRUNED_FORM</code> can be used without qualification.  Next it
+creates the <code>SsaCfg</code> object that will be used throughout the pass, and it
+immediately does the conversion by applying <code>build</code> to the unit's CFG.
+In this case, we opt to retain use-def and def-use information because it's
+needed for eliminating dead code.  We also choose semi-pruned form to avoid
+the cost of doing liveness analysis.  The extra <i><b>phi</b></i>-nodes that may
+result because we avoided full pruning aren't ultimately detrimental
+because at the end of this particular optimization, we can restore the
+original names instead of having to insert copy instructions to realize
+each <i><b>phi</b></i>-node.  (We also choose <em>not</em> to fold away copy
+<a name="NWD3">instructions during </a><code>build</code>, because that would inhibit the restoration
+of original names later.)  Finally, when in high-verbosity debugging mode,
+we print the SSA representation on <code>stderr</code>.
+<p>
+Once the DCE pass has found an operation that must be preserved in the code
+being optimized, it goes through the input operands of that operation and
+marks the definition of each such operand as needing to be preserved
+itself.  Here's the code that does this for one operand, called <code>opnd</code>:
+<p>
+<pre><a name="NW3BLBW7-2f9Xnz-1" href="#NWD3"><dfn>&lt;Mark necessary definition&gt;=</dfn></a>
+        Operation def = get_unique_def(ssa, opnd);
+        if (!def.is_null())
+            dce-&gt;mark_necessary(def);
+</pre><p>
+
+Function <code>get_unique_def</code> takes the place of a use-def ``chain'';
+i.e., it connects a use to its defining operation, which may either be a
+<i><b><a name="NWD4">phi</a></b></i>-node or an instruction.  The snippet above first excludes operands
+(like immediate values) that have no definition, and then it deals
+separately with the two kinds of defining operations.
+<p>
+When applied to a <i><b>phi</b></i>-node, the DCE pass's <code>mark_necessary</code> function
+uses the name-to-identifier map stored in the <code>SsaCfg</code> object to obtain
+an integer ID uniquely associated with the name that the <i><b>phi</b></i>-node
+defines:
+<p>
+<pre><a name="NW3BLBW7-5GqW0-1" href="#NWD4"><dfn>&lt;Mark necessary <code>operation</code>&gt;=</dfn></a>
+    if (has_note(operation, k_necessary_operation))
+        return;
+    set_note(operation, k_necessary_operation, note_flag());
+    worklist.push_back(operation);
+</pre><p>
+
+<a name="NWD5">In the above excerpt, the elements of </a><code>worklist</code> have class
+<code>Operation</code>, so that each repesents a handle on either a <i><b>phi</b></i>-node or
+and instruction.
+<p>
+Finally, here is the code that handles control dependences for a
+known-necessary <code>operation</code> that has just been popped from the worklist:
+<p>
+<pre><a name="NW3BLBW7-2YCDmv-1" href="#NWD5"><dfn>&lt;Mark necessary CTIs&gt;=</dfn></a>
+        mark_controlling_ctis(get_parent_node(operation));
+</pre><p>
+
+<a name="NWD6">The helper </a><code>mark_controlling_ctis</code> that's used above takes a basic block
+and it makes sure that any control-transfer instruction (CTI) on which that
+block is control-dependent gets marked as necessary, i.e., not to be
+eliminated.  The overloaded function <code>get_parent_node</code> maps either a
+<i><b>phi</b></i>-node or an instruction to its associated basic block.
+<p>
+Finally, at the end of the <code>dcessa</code> pass, we call <code>restore</code> to put
+the code back in conventional executable form:
+<p>
+<pre><a name="NW3BLBW7-2QGp3z-1" href="#NWD6"><dfn>&lt;Restore conventional (non-SSA) form&gt;=</dfn></a>
+    unit_cfg = restore(unit_ssa);
+    set_body(unit, unit_cfg);
+
+    delete unit_ssa;
+</pre><p>
+
+The <code>restore</code> function detaches the <code>Cfg</code> object from the <code>SsaCfg</code>
+object and returns the former.  Otherwise, the subsequent <code>delete</code>
+statement would delete them both.  We use <code>set_body</code> to make the CFG the
+body of the current optimization unit, and then we discard the SSA variant
+that it replaces.
+<p>
+In this example, we chose to revert to the original names of the program,
+which is safe with DCE because its only effect is to eliminate unneeded
+instructions, not to reorder the code or make substitutions.  You can tell
+<code>restore</code> to retain the new names by passing it the Boolean argument
+<code>true</code>.
+<p>
+
+<h2><a name=toc7><a name="NWD7">A Reference Guide to the Library's Interface</a></a></h2>
+<a name="sec-reference-guide"><b>[*]</b></a>
+<p>
+This section briefly describes the part of the OPI that deals with SSA
+representation.  We give the declarations of relevant functions and types,
+followed by capsule summaries of their values and effects.
+<p>
+
+<p><pre><a name="NW3BLBW7-4GdIfU-1" href="#NWD7"><dfn>&lt;Transformation to and from SSA form&gt;=</dfn></a>
+SsaCfg* new_ssa_cfg(Cfg*, OptUnit*, unsigned flags = 0);
+Cfg* restore(SsaCfg*, bool not_old_names = false);
+</pre><p>
+
+Function <code>new_ssa_cfg</code> transforms a CFG to SSA form and returns a
+<code>SsaCfg</code> object that embeds the modified CFG.  It takes the current
+optimization unit as an argument to provide information about formal
+parameters.  Acceptable values for its values flag argument are described
+<a name="NWD8">just below.</a>
+<p>
+Function <code>restore</code> transforms back to conventional form.  It also
+disconnects and returns the embedded CFG, so that the SSA object can be
+reclaimed without affecting the CFG.  By default, it restores the original
+names for SSA variables, but flag <code>not_old_names</code> causes it to keep the
+SSA names.
+<p>
+
+<p><pre><a name="NW3BLBW7-3RXtPD-1" href="#NWD8"><dfn>&lt;Flags for SSA conversion&gt;=</dfn></a>
+namespace ssa {
+
+    enum {
+        BUILD_MINIMAL_FORM     = 1&lt;&lt;0,
+        BUILD_SEMI_PRUNED_FORM = 1&lt;&lt;1,
+        BUILD_PRUNED_FORM      = 1&lt;&lt;2,
+        BUILD_DEF_USE_CHAINS   = 1&lt;&lt;3,
+        FOLD_COPIES            = 1&lt;&lt;4,
+        OMIT_USELESS_PHI_NODES = 1&lt;&lt;5,
+        PRINT_WARNINGS         = 1&lt;&lt;6
+    };
+
+} // namespace ssa
+</pre><p>
+The <code>flags</code> argument to <code>new_ssa_cfg</code> should be the bitwise union of
+one or more of the above-defined tokens.  Note that these are in the
+<code>ssa</code> namespace.  To use them, you can either qualify each with the prefix
+<code>ssa::</code>, or you can open the namespace with a <code>using namespace</code>
+declaration, as shown in Section&nbsp;<a href="#sec-example-pass">[&lt;-]</a>.
+<p>
+<ul>
+
+<li><code>BUILD_MINIMAL_FORM</code>, <code>BUILD_SEMI_PRUNED_FORM</code>, and
+<code>BUILD_PRUNED_FORM</code> are mutually exclusive.  Minimal form ignores
+liveness in placing <i><b>phi</b></i>-nodes.  Pruned form only inserts <i><b>phi</b></i>-nodes at
+merge points where the defined value is known to be live.  Semi-pruned form
+is a compromise that doesn't require full-blown liveness analysis.  It
+places <i><b>phi</b></i>-nodes only for names known to be live on entry to <em>some</em>
+basic block.
+<p>
+<li><code>BUILD_DEF_USE_CHAINS</code> directs the library to record def-use mappings,
+which are available through the <code>get_use_chain</code> function (described below).
+<p>
+<li><code>FOLD_COPIES</code> causes the transformation into SSA form to eliminate copy
+instructions involving SSA names by propagating the source of a copy to
+the occurrences of its destination name.
+<p>
+<li><code><a name="NWD9">OMIT_USELESS_PHI_NODES</a></code> causes a <i><b>phi</b></i>-node to be omitted if every path to
+its basic block has the same SSA value for the original name.
+<p>
+<li><code>PRINT_WARNINGS</code> turns on some warnings that are suppressed by default.
+<p>
+</ul>
+
+
+<p><pre><a name="NW3BLBW7-3alWiZ-1" href="#NWD9"><dfn>&lt;Accessors for SSA form&gt;=</dfn></a>
+Cfg* get_cfg(SsaCfg*);
+
+bool has_minimal_form(SsaCfg*);
+bool has_semi_pruned_form(SsaCfg*);
+bool has_pruned_form(SsaCfg*);
+
+bool has_def_use_chains(SsaCfg*);
+bool has_copies_folded(SsaCfg*);
+bool has_useless_phi_nodes_folded(SsaCfg*);
+
+int get_loc_count(SsaCfg*);                     // number of original locations
+int get_value_count(SsaCfg*);                   // number of SSA defs
+
+const OpndCatalog* get_value_catalog(SsaCfg*);
+Opnd get_value_name(SsaCfg*, int value_id);     // map value_id to SSA name
+CfgNode* get_def_block(SsaCfg*, int value_id);  // block holding value's definer
+
+Operation get_unique_def(SsaCfg*, Opnd value_name);
+const List&lt;Operation&gt;&amp; get_def_use_chain(SsaCfg*, Opnd value_name);
+</pre><p>
+Several functions simply report the inputs used to build SSA form.
+<code>get_cfg</code> returns the embedded CFG.  The result of <code>has_minimal_form</code>
+reflects whether <code>BUILD_MINIMAL_FORM</code> form has been constructed.
+Similarly for <code>has_semi_pruned_form</code> and <code>has_pruned_form</code>.
+Likewise, <code>has_use_def_chains</code>, <code>has_copies_folded</code>, and
+<code>has_useless_phi_nodes_folded</code>, reflect the respective input flags.
+<p>
+The <code>get_loc_count</code> function returns the number of original names, while
+<code>get_value_count</code> gives the number of SSA definitions, i.e., the number
+of SSA values.
+<p>
+<code>get_value_catalog()</code> returns a map from SSA names to their integer
+identifiers.  (The map is an <code>OpndCatalog</code>, which is defined in the
+<code>machine</code> library and is typically used in data flow analysis.)  Function
+<code>get_value_name</code> inverts the map: it returns the SSA name for a given
+identifier.  And <code>get_def_block</code> returns the CFG node with which an SSA
+<a name="NWDA">definition (instruction or </a><i><b>phi</b></i>-node) is associated.  (It returns
+<code>NULL</code> if the definition is that of a useless <i><b>phi</b></i>-node that has been
+eliminated.)
+<p>
+Finally, <code>get_unique_def</code> returns the defining operation for a name in
+SSA form, and <code>get_def_use_chain</code> returns the list of operations
+containing use occurrences of a name.
+<p>
+
+<p><pre><a name="NW3BLBW7-jct0h-1" href="#NWDA"><dfn>&lt;Attachment of <code>PhiNode</code>s to blocks&gt;=</dfn></a>
+typedef List&lt;PhiNode*&gt;::iterator PhiHandle;
+
+const List&lt;PhiNode*&gt;&amp; get_phi_nodes(SsaCfg*, CfgNode*);
+PhiHandle append_phi_node(SsaCfg*, CfgNode*, PhiNode*);
+PhiNode* remove_phi_node(SsaCfg*, CfgNode*, PhiNode*);
+</pre><p>
+
+<a name="NWDB">The set of </a><i><b>phi</b></i>-nodes attached to a block is represented as a list, and
+the above functions allow you to access, extend and contract these lists
+<p>
+
+<p><pre><a name="NW3BLBW7-3aQetx-1" href="#NWDB"><dfn>&lt;Reflecting code changes&gt;=</dfn></a>
+void record_def(SsaCfg*, Opnd old_name, Operation, int dst_pos = 0);
+void record_use_swap(SsaCfg*, Opnd out, Opnd in, Operation);
+void record_all_uses(SsaCfg*, Operation);
+</pre><p>
+
+The <code>record_</code> functions are used to inform an <code>SsaCfg</code> object about
+changes that you make in the SSA code.
+<p>
+Function <code>record_def</code> takes note of a new definition, in the form either
+of an instruction or a <i><b>phi</b></i>-node.  It does not change the instruction or
+<i><b>phi</b></i>-node, but looks there to find the SSA name defined.  You give it the
+<code>old_name</code> so that it can later restore original names.  In the
+instruction case, you also provide the position of the relevant destination
+field in the instruction.
+<p>
+Function <code>record_use_swap</code> takes note of a replacement (<code>in</code> replacing
+<code>out</code>) among the use occurrences of SSA names in an instruction or
+<i><b>phi</b></i>-node.  It doesn't alter the instruction or <i><b>phi</b></i>-node; it just
+updates internal records (e.g., def-use chains) to reflect the swap.  If
+the name being swapped in is a newly-created SSA name, its definition must
+<a name="NWDC">already have been processed by </a><code>record_def</code> before <code>record_use_swap</code> is
+called.
+<p>
+Function <code>record_all_uses</code> takes note of all the use occurrences within a
+new instruction or <i><b>phi</b></i>-node.  It modifies internal records (e.g.,
+def-use chains) to reflect insertion of the instruction or <i><b>phi</b></i>-node into
+the code.
+<p>
+
+<p><pre><a name="NW3BLBW7-35Huhu-1" href="#NWDC"><dfn>&lt;Printing the SSA CFG&gt;=</dfn></a>
+void fprint(FILE*, SsaCfg*);
+</pre><p>
+<code><a name="NWDD">fprint</a></code> prints the CFG with <i><b>phi</b></i>-nodes for use in debugging.
+<p>
+
+<p><pre><a name="NW3BLBW7-4Dl5kW-1" href="#NWDD"><dfn>&lt;OPI functions for <code>PhiNode</code>s&gt;=</dfn></a>
+PhiNode* new_phi_node(int src_count);
+int srcs_size(PhiNode*);
+Opnd get_src(PhiNode*, int pos);
+void set_src(PhiNode*, int pos, Opnd);
+Opnd get_dst(PhiNode*);
+void set_dst(PhiNode*, Opnd);
+bool get_is_useless(PhiNode*);
+void set_is_useless(PhiNode*, bool);
+CfgNode* get_parent_node(PhiNode*);
+void map_opnds(PhiNode*, OpndFilter&amp;);
+</pre><p>
+
+<a name="NWDE">Function </a><code>new_phi_node</code> creates a <i><b>phi</b></i>-node with a given number of source
+names.  Then you use other functions in the above list to fill in its
+fields.  Most of these functions are analogous to their like-named
+counterparts for instructions.
+<p>
+
+<p><pre><a name="NW3BLBW7-4cCVMs-1" href="#NWDE"><dfn>&lt;Class <code>Operation</code>&gt;=</dfn></a>
+class Operation
+{
+  public:
+    Operation() :
+        instr_handle(one_null_instr.begin()),
+        phi_handle  (one_null_phi.begin())
+      { }
+
+    Operation(InstrHandle ih) { set_instr_handle(ih); }
+    Operation(PhiHandle ph) { set_phi_handle (ph); }
+
+    PhiHandle get_phi_handle() const { return phi_handle; }
+    InstrHandle get_instr_handle() const { return instr_handle; }
+
+    void set_instr_handle(InstrHandle ih)
+        { instr_handle = ih; phi_handle = one_null_phi.begin(); }
+    void set_phi_handle(PhiHandle ph)
+        { phi_handle = ph; instr_handle = one_null_instr.begin(); }
+
+    bool is_instr_handle() const
+        { return *phi_handle == NULL &amp;&amp; *instr_handle != NULL; }
+    bool is_phi_handle() const
+        { return *phi_handle != NULL &amp;&amp; *instr_handle == NULL; }
+    bool is_null() const
+        { return *phi_handle == NULL &amp;&amp; *instr_handle == NULL; }
+
+    static list&lt;Instr*&gt;   one_null_instr;
+    static list&lt;PhiNode*&gt; one_null_phi;
+
+  protected:
+    InstrHandle instr_handle;
+    PhiHandle phi_handle;
+};
+</pre><p>
+
+<a name="NWDF">Class </a><code>Operation</code> implements a ``union'' type each of whose instances is
+a handle on either a <i><b>phi</b></i>-node or an instruction.
+<p>
+
+<p><pre><a name="NW3BLBW7-3NIzuc-1" href="#NWDF"><dfn>&lt;Functions on <code>Operation</code>s&gt;=</dfn></a>
+Opnd get_dst(Operation, int pos = 0);
+CfgNode* get_parent_node(Operation);
+void map_opnds(Operation, OpndFilter&amp;);
+
+bool has_note (Operation, NoteKey);
+Note get_note (Operation, NoteKey);
+Note take_note(Operation, NoteKey);
+void set_note (Operation, NoteKey, const Note&amp;);
+
+</pre><p>
+
+The helpers above extend a few overloaded functions to class
+<code>Operation</code>.
+<p>
+
+<h2><a name=toc8>Adapter Passes</a></h2>
+<p>
+Machine SUIF includes simple passes for translating into and out of SSA
+form.  <code>cfg2ssa</code> transforms a procedure already CFG form to SSA form.
+<code>ssa2cfg</code> goes the other way.
+<p>
+The <code>cfg2ssa</code> pass take a command-line flag corresponding to each of the
+flags accepted by <code>new_ssa_cfg</code>.  For example, <code>-build_minimal_form</code> on
+the command line causes cfg2ssa to use the <code>BUILD_MINIMAL_FORM</code> flag when
+creating a <code>SsaCfg</code> object.
+<p>
+The <code>ssa2cfg</code> pass takes an optional <code>-restore_orig_names</code>.  When
+present, it causes original location names to be restored during conversion
+from SSA form to conventional form.
+<p>
+
+<h2><a name=toc9>Summary</a></h2>
+<a name="sec-summary"><b>[*]</b></a>
+<p>
+The Machine SUIF SSA library provides efficient conversion to and from SSA
+form.  It lets you control the trade-off between speed and space
+efficiency, and it gives you a number of options for performing
+optimizations during the conversion and for exposing data-flow information
+that it develops.  The implementation closely follows the design laid out
+by Briggs <em>et al</em> <b>[cite&nbsp;<a href="#NWcite-bib-rice-paper">bib-rice-paper</a>, <a href="#NWcite-bib-rice-code">bib-rice-code</a>]</b>, which has
+proven effective in a number of optimization studies.
+<p>
+
+<h2><a name=toc10>Acknowledgments</a></h2>
+<p>
+Our debt to the members of Keith Cooper's group at Rice University should
+be clear.  Todd Waterman wrote the first version of the Machine SUIF
+implementation while an undergraduate member of that group.  He used an
+alpha release of Machine SUIF, and the system was heavily revamped before
+its full release.  So at Harvard, Kathleen Durant reshaped Todd's code to
+accommodate the changes in Machine SUIF and to conform with our more
+conventional (less ``literate'') style of organization and documentation.
+<p>
+This work has been supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and a NSF
+Research Infrastructure award (CDA-9401024).  We also gratefully
+acknowledge the generous support of this research by Advanced Micro
+Devices, Compaq, Digital Equipment, Hewlett-Packard, International Business
+Machines, Intel, and Microsoft.
+<p>
+
+<h2><a name=toc11>References</a></h2>
+<p>
+<a name="NWcite-bib-appel"><b>[1]</b></a>  A. Appel. <em>Modern Compiler Implementation in
+{C,Java,ML}</em>.  Cambridge University Press, 1998.
+<p>
+<a name="NWcite-bib-rice-paper"><b>[2]</b></a>  P. Briggs, K. Cooper, T. Harvey, and L. Simpson.
+<em>Practical Improvements to the Construction and Destruction of Static
+Single Assignment Form</em>.  Software Practice and Experience, 28(8),
+pp. 859-881, July 1998.  Available via
+<code>http://www.cs.rice.edu/~harv/ssa.ps</code>.
+<p>
+<a name="NWcite-bib-rice-code"><b>[3]</b></a>  P. Briggs, T. Harvey, and L. Simpson.
+<em>Static Single Assignment Construction</em>.  Implementation document, 1996.
+Available via <code>ftp://ftp.cs.rice.edu/public/compilers/ai/SSA.ps</code>.
+<p>
+<a name="NWcite-bib-morgan"><b>[4]</b></a>  Robert Morgan.  <em>Building an Optimizing
+<a name="NWDG">Compiler.</a></em>  Digital Press, 1998.
+<p>
+<a name="NWcite-bib-muchnick"><b>[5]</b></a>  S. Muchnick. <em>Advanced Compiler Design and
+Implementation.</em>  Morgan Kaufmann, 1997.
+<p>
+
+
+<!-- Make \end{document} a chunk by itself to allow cross-reference info-->
+<!-- to be dumped in before it (noweave -delay).-->
+
+
+
+
+<ul>
+<li><a href="#NWD9"><i>&lt;Accessors for SSA form&gt;</i></a>: <a href="#NWD9">D1</a>
+<li><a href="#NWDA"><i>&lt;Attachment of <code>PhiNode</code>s to blocks&gt;</i></a>: <a href="#NWDA">D1</a>
+<li><a href="#NWDE"><i>&lt;Class <code>Operation</code>&gt;</i></a>: <a href="#NWDE">D1</a>
+<li><a href="#NWD2"><i>&lt;Convert to semi-pruned SSA form&gt;</i></a>: <a href="#NWD2">D1</a>
+<li><a href="#NWD8"><i>&lt;Flags for SSA conversion&gt;</i></a>: <a href="#NWD8">D1</a>
+<li><a href="#NWDF"><i>&lt;Functions on <code>Operation</code>s&gt;</i></a>: <a href="#NWDF">D1</a>
+<li><a href="#NWD4"><i>&lt;Mark necessary <code>operation</code>&gt;</i></a>: <a href="#NWD4">D1</a>
+<li><a href="#NWD5"><i>&lt;Mark necessary CTIs&gt;</i></a>: <a href="#NWD5">D1</a>
+<li><a href="#NWD3"><i>&lt;Mark necessary definition&gt;</i></a>: <a href="#NWD3">D1</a>
+<li><a href="#NWDD"><i>&lt;OPI functions for <code>PhiNode</code>s&gt;</i></a>: <a href="#NWDD">D1</a>
+<li><a href="#NWDC"><i>&lt;Printing the SSA CFG&gt;</i></a>: <a href="#NWDC">D1</a>
+<li><a href="#NWDB"><i>&lt;Reflecting code changes&gt;</i></a>: <a href="#NWDB">D1</a>
+<li><a href="#NWD6"><i>&lt;Restore conventional (non-SSA) form&gt;</i></a>: <a href="#NWD6">D1</a>
+<li><a href="#NWD7"><i>&lt;Transformation to and from SSA form&gt;</i></a>: <a href="#NWD7">D1</a>
+</ul>
+</body></html>
+

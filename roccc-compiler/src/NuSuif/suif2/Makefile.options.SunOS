@@ -1,0 +1,32 @@
+
+# SunOS-specific makefile
+
+ifeq (sun_procompiler,$(COMPILER_NAME))
+SHARED_LIB_FLAGS =        -G -xs
+else
+SHARED_LIB_FLAGS =        -G
+endif
+
+SHARED_LIB_FLAGS += -Wl,-R -Wl,$(LIBDIR) -Wl,-R -Wl,$(SHAREDLIBDIR)
+CXXLINKFLAGS += -Wl,-R -Wl,$(LIBDIR) -Wl,-R -Wl,$(SHAREDLIBDIR)
+
+## THESE VARIABLES SHOULD NOW BE SET UP BY THE ./install
+## script.  They can be overridden in the install script
+##  --with-GC_LIBDIRS='-L/usr/lib -lgc'
+##  --with-GC_INCLDIRS=-I/usr/include/gc
+##
+## See the file SUPPORTED_COMPILERS for a current list of
+##   GC_LIBDIRS and GC_INCLDIRS for various local platforms
+##
+#GC_DIRS_SET=1
+#GC_INCLDIRS = -I/usr/local/ultra/include/gc
+#GC_LIBDIRS= -lgc
+
+
+EXTRA_DL_LIBS = -lsocket
+
+COMPILER_SPECIFIC_CXXFLAGS += -DUSE_CPP_EXCEPTION
+EXTRA_CXXFLAGS += -DLONG_LONG_ALLOWED
+EXTRA_CFLAGS +=  -DLONG_LONG_ALLOWED
+
+

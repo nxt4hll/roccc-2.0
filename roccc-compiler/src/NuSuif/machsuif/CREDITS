@@ -1,0 +1,40 @@
+Machine SUIF 2 is a complete reimplementation of Machine SUIF 1.3.0, but
+much of the code is derived from that earlier system.  The file called
+AuthorList in its distribution (still available at our web site) gives
+detailed credits, but we mention a few because so many of their good ideas
+are being reused in the new system:
+
+    Gang Chen:	  	  Instruction scheduling.
+    Allyn Dimock:	  Data-flow analysis; constant-propagation
+		  	  optimization.
+    Jason Simmons:	  x86 code generation; support for debugging
+		  	  compiled code.
+    Cliff Young:  	  Control-flow analysis and transformation;
+		  	  code instrumentation and profiling; instruction
+			  scheduling.
+
+The design and initial implementation of Machine SUIF 2 were done by Mike
+Smith and Glenn Holloway.  Dave Walker and Ogi Kavasovic ported the
+compiled code debugging support to the new system.  Norman Ramsey made
+insightful suggestions that led to the simplification of the register-
+description interface.
+
+Cliff Young and Mike Smith developed the HALT system as part of Machine
+SUIF version 1.  The current library retains much of his original design.
+Adon Hwang, Vijak Sethaput and Dario Vlah made the initial port to Machine
+SUIF 2.  This was completed by Mike Smith and Martha Mercaldi.  Martha also
+implemented Ball-Larus path profiling.  Glenn Holloway helped with
+debugging and documentation of HALT.
+
+The SSA library is derived from the design and implementation done by Keith
+Cooper's research group at Rice University, including Preston Briggs,
+Timothy J. Harvey, and L. Taylor Simpson.  Todd Waterman of Rice did the
+first Machine-SUIF implementation, using an early pre-release of Machine
+SUIF 2.  That was modernized by Kathleen Durant at Harvard, and has been
+revised, extended and documented by Glenn Holloway.
+
+The IA64 target library was written by Kim Hazelwood Cettei and Glenn
+Holloway.
+
+As other optimization and analysis packages are released, their authors
+will be acknowledged here.

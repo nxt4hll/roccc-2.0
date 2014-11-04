@@ -1,0 +1,12 @@
+COMPILER_SPECIFIC_CFLAGS =  -g -Wall 
+COMPILER_SPECIFIC_CXXFLAGS =     -g -Wall 
+
+# This is required only for gcc >= 2.95 to compile
+# the suifbrowser.  for gcc < 2.95, it is an invalid flag.
+# The install should determine whether it's needed.  
+# Until install handles it, gcc 2.95 user should manually comment it in.
+#X11_SPECIAL_FLAGS = -fpermissive
+
+#PROFILE_COMPILE = -pg -g
+#PROFILE_DYNAMIC_LIBRARY = # -pg -g 
+#PROFILE_PROGRAM = -pg -g

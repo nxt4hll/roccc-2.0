@@ -1,0 +1,26 @@
+SUIF_INTERNAL = defined
+
+SRCS = annote_utils.cpp tree_utils.cpp loop_utils.cpp type_utils.cpp \
+symbol_utils.cpp print_utils.cpp expression_utils.cpp dataflow_utils.cpp \
+data_dependence_utils.cpp main.cpp
+
+OBJ_FILES = annote_utils.o tree_utils.o loop_utils.o type_utils.o \
+symbol_utils.o print_utils.o expression_utils.o dataflow_utils.o \
+data_dependence_utils.o main.o
+
+HEADERS = annote_utils.h list_utils.h tree_utils.h loop_utils.h type_utils.h \
+symbol_utils.h print_utils.h expression_utils.h dataflow_utils.h \
+data_dependence_utils.h
+ 
+LIBS += -lsuifkernel -liokernel -lcommon -lutils -ltransforms
+LIBS += -lcfenodes -lsuifnodes -lbasicnodes -lsuifpasses 
+LIBS += -ltypebuilder -lcfeutils -lsuifcloning -lsuiflocation
+
+TARGET_LIB = roccc_utils
+
+PASS_DRIVER =  do_roccc_utils
+MAIN_OBJ = main.o
+
+#EXTRA_CXXFLAGS += -I./.. 
+
+include $(NCIHOME)/Makefile.std

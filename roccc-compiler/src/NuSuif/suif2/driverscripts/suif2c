@@ -1,0 +1,137 @@
+#!/bin/sh -f
+
+ncibin=@ROCCC_HOME@/bin
+ncisolib=@ROCCC_HOME@/solib
+if [ x$LD_LIBRARY_PATH = x ]
+    then LD_LIBRARY_PATH=$ncisolib
+else
+    LD_LIBRARY_PATH=$ncisolib:$LD_LIBRARY_PATH
+fi
+
+
+#ncibin=@NCIHOME@/bin
+#ncisolib=@NCIHOME@/solib
+#if [ x$LD_LIBRARY_PATH = x ]
+#    then LD_LIBRARY_PATH=$ncisolib
+#else
+#    LD_LIBRARY_PATH=$ncisolib:$LD_LIBRARY_PATH
+#fi
+
+usage() {
+   echo "Usage: $0 [-o outputfile] [-keep] [-v] [-ftn] [-m macro_file]"
+   echo "    [-arch ARCH] [-f tmp_file] file.suif"
+   echo "  Create a C file from a suif file with SUIF and BASIC nodes."
+   echo "  The default output filename will be file.out.c"
+   echo "  The default macro filename is $NCIHOME/suif/suif2b/basesuif/s2c/c_text.mac"
+   echo "  The architecture will be read from the $ARCH variable"
+   echo "  or the command line -arch flag, or the output of 'uname'"
+   exit 1;
+}
+
+keep=0
+
+prog=program
+outputfile=""
+default_ext=.out.c
+macro_filename=@NCIHOME@/suif/suif2b/basesuif/s2c/c_text.mac
+
+defines=""
+
+tmpfile=$$.drv
+verbose=0
+fortran=0
+
+while [ ! -z $1 ];
+  do case x"$1" in 
+    x-o)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      outputfile=$1
+      shift ;;
+    x-v)  verbose=1
+      shift ;;
+    x-f)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      tmpfile=$1
+      shift ;;
+    x-m)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      macro_filename=$1
+      shift ;;
+    x-ftn) fortran=1
+      shift;;
+    x-arch)  shift
+      if [ -z $1 ] 
+          then usage; fi
+      ARCH=$1
+      shift;;
+    x-keep) keep=1
+      shift;;
+    x-*) 
+      echo "Bad option $1"; 
+      usage;;
+    *) break;;
+  esac
+done
+
+if [ -z $1 ] 
+    then usage; fi
+if [ $# -ne 1 ]
+    then echo "Error: Too many files in the input line"
+    usage
+fi
+if  [ x${ARCH} = x"" ]
+    then ARCH=`uname`
+    export ARCH
+fi
+
+
+inputfile=$1
+
+if [ x$outputfile = x"" ]
+    then base=`echo $inputfile | sed 's+^.*/++' | sed 's+^\(.*\)\..*+\1+'`
+    base2=`echo $inputfile | sed 's+^.*/++'`
+
+    if [ x$base2 = x$base ]
+	then echo "Error: Input file basename '$base2' has no does not have an extension"
+	usage
+    fi
+    outputfile="$base"$default_ext
+fi
+rm -f $outputfile
+
+if [ $fortran = 1 ]
+    then FORTRANDEF="-D F77=true"
+else
+    FORTRANDEF=""
+fi
+
+cat <<EOF > $tmpfile
+require usefulpasses
+require transforms
+require s2c
+load ${inputfile}
+#dismantle_common_blocks
+dismantle_multi_dim_arrays
+recycle_trash
+rename_colliding_symbols
+s2c ${FORTRANDEF} -D ARCH=${ARCH} ${outputfile} ${macro_filename}
+EOF
+
+if [ $verbose = 1 ]
+    then echo $ncibin/suifdriver -f $tmpfile
+fi
+$ncibin/suifdriver -f $tmpfile 2>&1
+if [ $? != 0 ]
+   then echo "FAILED: $ncibin/suifdriver -f $tmpfile"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then if [ $verbose = 1 ]
+    then echo rm -f $tmpfile
+  fi
+  rm -f $tmpfile
+fi
+

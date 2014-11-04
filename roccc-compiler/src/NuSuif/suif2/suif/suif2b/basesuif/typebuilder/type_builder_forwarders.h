@@ -1,0 +1,5 @@
+#ifndef TYPE_BUILDER_FORWARDERS_H
+#define TYPE_BUILDER_FORWARDERS_H
+class TypeBuilder;
+
+#endif /* TYPE_BUILDER_FORWARDERS_H */

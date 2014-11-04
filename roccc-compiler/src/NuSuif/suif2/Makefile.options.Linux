@@ -1,0 +1,22 @@
+EXTRA_WARNING_FLAGS = -Wall -ansi #-pedantic
+EXTRA_CXXFLAGS += -DLONG_LONG_ALLOWED -Wno-invalid-offsetof -fPIC ${EXTRA_WARNING_FLAGS}
+EXTRA_CFLAGS += -DLONG_LONG_ALLOWED  ${EXTRA_WARNING_FLAGS}
+
+## THESE VARIABLES SHOULD NOW BE SET UP BY THE ./install
+## script.  They can be overridden in the install script
+##  --with-GC_LIBDIRS='-L/usr/lib -lgc'
+##  --with-GC_INCLDIRS=-I/usr/include/gc
+##
+## See the file SUPPORTED_COMPILERS for a current list of
+##   GC_LIBDIRS and GC_INCLDIRS for various local platforms
+##
+#GC_DIRS_SET=1
+#GC_INCLDIRS=-I$(HOME)/gc
+#GC_LIBDIRS=-L$(HOME)/gc -lgc -lpthread
+
+# gcc options to pass to the gnu linker
+CXXFLAGS+=-Wno-invalid-offsetof
+SHARED_LIB_FLAGS += -Wl,-rpath-link -Wl,$(LIBDIR)
+#CXXLINKFLAGS += -rdynamic -Wl,-rpath-link -Wl,$(LIBDIR) -Wl,-defsym,_DYNAMIC=0
+#CCFLAGS += -fPIC -Wno-invalid-offsetof
+#SHARED_LIB_FLAGS = -shared

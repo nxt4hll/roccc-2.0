@@ -1,0 +1,2995 @@
+<if (! exists ARCH)>
+<set ARCH to unknown>
+<endif>
+/*	Architecture is <ARCH> */</>
+<def init_s2c>
+    <set cp_typedef_counter to 1>
+    <set tmp_cnt to 0>
+    <set generated_type_cnt to 0>
+
+    <set suppress_return to false>
+    <set nested_in_group_type to 0>
+    # HACK for Alpha OSF1 varargs
+
+    <if (ARCH=="OSF1")>
+        <set builtin[__builtin_next_arg] to exists>
+        <set builtin[__builtin_saveregs] to exists>
+    <endif>
+
+    # MORE set these from an information block???
+    # use these as defaults for when info is missing
+    # should really be there. Make them something useful 
+    # to point up lack of InformationBlock
+    <set intsize[8] to char>
+    <set intsize[16] to short>
+    <set intsize[32] to int>
+    <set intsize[64] to long long>
+    <if (ARCH=="OSF1")>
+	<set intsize[64] to long>
+    <endif>
+    <set floatsize[32] to float>
+    <set floatsize[64] to double>
+    <set size_of_c_int to 32>
+
+     <foreach info_block in information_blocks>
+       <if ([<!TYPE info_block>] == "TargetInformationBlock")>
+           <set byte_size to <info_block.byte_size>>
+       <endif>
+       <if ([<!TYPE info_block>] == "CInformationBlock")>
+          #   We set these from large to small.
+          #    <set intsize[128] to bint>
+          <set intsize[<info_block.signed_long_long_type.bit_size>] to long long>
+          <set intsize[<info_block.signed_long_type.bit_size>] to long>
+          <set intsize[<info_block.signed_int_type.bit_size>] to int>
+	  <set size_of_c_int to <info_block.signed_int_type.bit_size>>
+          <set intsize[<info_block.signed_short_type.bit_size>] to short>
+          <set intsize[<info_block.char_type.bit_size>] to char>
+ 
+          <set floatsize[<info_block.long_double_type.bit_size>] to long double>
+          <set floatsize[<info_block.double_type.bit_size>] to double>
+          <set floatsize[<info_block.float_type.bit_size>] to float>
+       <endif>
+    <endfor>
+
+    <set unary_op[negate] to \->
+    <set unary_op[logical_not] to \!>
+    <set unary_op[bitwise_not] to \~>
+    <set unary_op[add] to \+\+>
+    <set unary_op[subtract] to \-\->
+
+    <set binary_op[add] to \+>
+    <set binary_op[bitwise_and] to \&>
+    <set binary_op[bitwise_or] to \|>
+    <set binary_op[bitwise_xor] to \^ >
+    <set binary_op[logical_and] to \&\&>
+    <set binary_op[logical_or] to \|\|>
+    <set binary_op[logical_xor] to \^\^ >
+    <set binary_op[divide] to \/\ >
+    <set binary_op[is_equal_to] to \=\=>
+    <set binary_op[is_greater_than] to \> >
+    <set binary_op[is_greater_than_or_equal_to] to \>\= >
+    <set binary_op[is_less_than] to \< >
+    <set binary_op[is_less_than_or_equal_to] to \<\= >
+    <set binary_op[is_not_equal_to] to \!\=>
+    <set binary_op[left_shift] to \<\< >
+    <set binary_op[multiply] to \* >
+    <set binary_op[remainder] to \% >
+    <set binary_op[right_shift] to \>\> >
+    #<set binary_op[static_member_select_lval] to  >
+    #<set binary_op[static_member_select_rval] to  >
+    #<set binary_op[static_member_selection] to >
+    <set binary_op[subtract] to \- >
+
+    #<set binary_op_prec[static_member_select_lval] to 15>
+    #<set binary_op_prec[static_member_select_rval] to 15>
+    #<set binary_op_prec[static_member_selection] to 15>
+    <set binary_op_prec[divide] to 13>
+    <set binary_op_prec[multiply] to 13>
+    <set binary_op_prec[remainder] to 13>
+    <set binary_op_prec[add] to 12>
+    <set binary_op_prec[subtract] to 12>
+    <set binary_op_prec[left_shift] to 11>
+    <set binary_op_prec[right_shift] to 11>
+    <set binary_op_prec[is_greater_than] to 10>
+    <set binary_op_prec[is_greater_than_or_equal_to] to 10>
+    <set binary_op_prec[is_less_than] to 10>
+    <set binary_op_prec[is_less_than_or_equal_to] to 10>
+    <set binary_op_prec[is_equal_to] to 9>
+    <set binary_op_prec[is_not_equal_to] to 9>
+    <set binary_op_prec[bitwise_and] to 8>
+    <set binary_op_prec[bitwise_xor] to 7>
+    <set binary_op_prec[bitwise_or] to 6>
+<enddef>
+
+<def size_in_bytes size>
+    <eval (size / byte_size)>
+<enddef>
+
+######################################################################################
+# Macro to put out temporary names
+######################################################################################
+
+# use <retrieve_sym_name sym> instead
+#<def get_tmp_var_name>
+#    <set tmp_cnt to <eval (tmp_cnt + 1)>>
+#    <set tmp_name to tmp_var<tmp_cnt>>
+#<enddef>
+
+# this is to help handle anonymous symbols
+# It uses the symbol name it it exists.
+# Otherwise it checks to see is it has been given a tmp_name
+# otherwise it assigns a temp name.
+
+<def retrieve_sym_name sym:Symbol>
+    <if (sym.name != "" )>
+	<sym.name>
+    <else>
+	<if (!(exists sym.tmp_name))>
+#          <get_tmp_sym_name var_name>
+          <set sym.tmp_name to <get_tmp_sym_name sym>>
+	<endif>
+	<sym.tmp_name>
+    <endif>
+<enddef>
+
+<def get_tmp_sym_name sym:Symbol>
+    <set tmp_cnt to <eval (tmp_cnt + 1)>>
+    <if ([<!ISKINDOF sym CodeLabelSymbol>])>
+        tmp_label<tmp_cnt>
+    <elseif ([<!ISKINDOF sym VariableSymbol>])>
+        tmp_var<tmp_cnt>
+    <elseif ([<!ISKINDOF sym ProcedureSymbol>])>
+        tmp_proc<tmp_cnt>
+    <else>
+	tmp_sym<tmp_cnt>
+    <endif>
+    # add the orig name as a suffix
+    <set orig_name to <get_orig_name_annote sym>>
+    <if (orig_name != "")>
+        __<orig_name>
+    <endif>
+<enddef>
+
+
+<def get_generated_type_name>
+    <set generated_type_cnt to <eval (generated_type_cnt + 1)>>
+    <set generated_type_name to type_<generated_type_cnt>>
+<enddef>
+
+######################################################################################
+# Operator related macros
+######################################################################################
+
+<def put_unaryOp op_name>
+    <if (exists unary_op[<op_name>])>
+        <unary_op[<op_name>]>
+    <else>
+        /* Unary operator <op_name> not implemented */
+    <endif>
+<enddef>
+
+<def base_types_are_procdefs type1 type2>
+    <if ([<!TYPE type1>] == "PointerType")>
+        <base_types_are_procdefs type1.reference_type type2>
+        <endmac>
+    <endif>
+    <if ([<!TYPE type2>] == "PointerType")>
+        <base_types_are_procdefs type1 type2.reference_type>
+        <endmac>
+    <endif>
+
+    <if ([<!TYPE type1>] == "ArrayType")>
+        <base_types_are_procdefs type1.element_type type2>
+
+        <endmac>
+    <endif>
+    <if ([<!TYPE type2>] == "ArrayType")>
+        <base_types_are_procdefs type1 type2.element_type>
+        <endmac>
+    <endif>
+
+    <if (([<!TYPE type1>] == "CProcedureType") &&
+        ([<!TYPE type2>] == "CProcedureType"))>
+        true
+       <endmac>
+    <endif>
+false
+<enddef>
+
+<def generate_cast_inner type>
+    <put_type_name type>
+<enddef>
+
+<def generate_cast_inner type:QualifiedType>
+    <generate_cast_inner type.base_type>
+<enddef>
+
+<def generate_cast_ptr type>
+    <put_type_name type> *
+<enddef>
+
+<def generate_cast_ptr type:CProcedureType>
+    <put_type_name type>
+<enddef>
+
+<def generate_cast_ptr type:ArrayType>
+    <put_type_name type.element_type> *
+<enddef>
+
+<def generate_cast_ptr type:QualifiedType>
+    <generate_cast_ptr type.base_type>
+<enddef>
+
+<def generate_cast_inner type:PointerType>
+    <generate_cast_ptr type.reference_type>
+<enddef>
+
+<def generate_cast result_type>
+    (<generate_cast_inner result_type>)
+<enddef>
+    
+
+#default, must be first.  Handles everything but VariableSymbols and constants
+<def generate_cast_if_necessary result_type operand>
+    #<if ((![<base_types_are_procdefs result_type operand.result_type>]) &&
+    #     (![<equivalent_types result_type operand.result_type>]))>
+    <if (![<equivalent_types result_type operand.result_type>])>
+        <generate_cast result_type>
+    <endif>
+<enddef>
+
+<def generate_cast_if_necessary result_type operand:IntConstant >
+    <if (([<!TYPE result_type>] != "IntegerType") ||
+        (intsize[<result_type.bit_size>] != [int]))> 
+        <generate_cast result_type>
+    <endif>
+<enddef>
+
+<def generate_cast_if_necessary result_type operand:FloatConstant >
+    <if (([<!TYPE result_type>] != "FloatingPointType") &&
+        (floatsize[<result_type.bit_size>] != [double]))> 
+        <generate_cast result_type>
+    <endif>
+<enddef>
+
+<def generate_cast_if_necessary result_type operand:VariableSymbol >
+    <if (![<equivalent_types result_type operand.type.base_type>])>
+        <generate_cast result_type>
+    <endif>
+<enddef>
+
+<def put_binaryOp op_name>
+    <if (exists binary_op[<op_name>])>
+        <binary_op[<op_name>]>
+    <else>
+        /* Binary operator <op_name> not implemented */
+    <endif>
+<enddef>
+
+<def binary_op_precedence op>
+    <if (exists binary_op_prec[<op>])>
+         <binary_op_prec[<op>]>
+    <else>
+         [0]
+    <endif>
+<enddef>
+
+<def unary_op_precedence op>
+    [14]
+<enddef>
+
+######################################################################################
+# Macros to put out type names
+######################################################################################
+
+
+##
+## These are the critical functions
+## All are special cased for procedure type
+## derivations.
+##
+
+
+<def put_type_name type>
+    <if (exists type.typedef_name)>
+	<type.typedef_name>
+        <endmac>
+    <endif>
+    <if ([<is_ultimately_a_proc type>])>
+      <put_type_name_start type>
+      <put_type_name_helper type>\ 
+      <put_type_name_finish type>
+    <else>
+      <put_type_name_helper type>
+    <endif>
+<enddef>
+
+<def put_decl type name>
+   <put_decl_helper type name>
+<enddef>
+
+######################################################################################
+# Helpers for putting out type names.
+######################################################################################
+
+# building void (*)(int, int)
+# the "void(" is in put_type_name_start
+# the "*" comes from the pointer-to
+# the ")(int, int)" is in put_type_name_finish
+<def put_type_name_start x>
+    <if ([<!ISKINDOF x CProcedureType>])>
+        <put_type_name_helper x.result_type> (
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "ArrayType")>
+        <put_type_name_start x.element_type>
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "PointerType")>
+        <put_type_name_start x.reference_type>
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "QualifiedType")>
+        <put_type_name_start x.base_type>
+        <endmac>
+    <endif>
+    /* Not really a proc_type */
+<enddef>
+
+<def put_type_name_finish x>
+    <if ([<!TYPE x>] == "ArrayType")>
+#        /* Finishing PROC name ArrayType */</>
+        <put_type_name_finish x.element_type>
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "PointerType")>
+        <put_type_name_finish x.reference_type>
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "QualifiedType")>
+        <put_type_name_finish x.base_type>
+        <endmac>
+    <endif>
+    /* Not found to finish [<!TYPE x>] */</>
+<enddef>
+
+<def put_arguments_from_proc_def proc_def type>
+    (
+    <if (![<type.arguments_known>])>
+       # K&R style
+       <foreach param in proc_def.formal_parameters>
+          <if (!(first param))> , <endif>
+          <param.name>
+       <endfor>
+       )</></+2>
+       <foreach param in proc_def.formal_parameters>
+          <put_decl param.type param.name>;
+       <endfor>
+       </-2></>
+    <else>
+       <if (!exists proc_def.formal_parameters[0])>
+           <if (![<type.has_varargs>])>
+               # ANSI
+               void
+           <endif>
+       <else>
+         <foreach param in proc_def.formal_parameters>
+            <if (!(first param))> , <endif>
+            <put_decl param.type param.name>
+         <endfor>
+       <endif>
+       <if ([<type.has_varargs>])>
+           <comma_if_arguments proc_def.procedure_symbol.type.arguments>
+           ...
+       <endif>
+       )
+<enddef>
+
+<def put_arguments_from_proc_def proc_def type:MethodType>
+    (
+    <set need_comma to false>
+    <foreach param in proc_def.formal_parameters>
+        <if (([<!ISKINDOF method_symbol "StaticMethodSymbol">]) || (!(first param)))>
+            <if (need_comma)> , <endif>
+            <put_decl param.type,[<retrieve_sym_name param>]>
+            <set need_comma to true>
+        <endif>
+    <endfor>
+    <if ([<type.has_varargs>])>
+        <if (need_comma)> , <endif>
+        ...
+    <endif>
+    )
+<enddef>
+
+<def put_arguments_from_proc_type proc_type>
+  (
+  <if ([<proc_type.arguments_known>])>
+     <if (!exists proc_type.arguments[0])>
+        <if (![<proc_type.has_varargs>])>
+            void
+        <endif>
+      # ANSI
+     <else>
+        <foreach param_type in proc_type.arguments>
+           <if (!(first param_type))> , <endif>
+           <put_decl param_type "">
+        <endfor>
+     <endif>
+     <if ([<proc_type.has_varargs>])>
+        <comma_if_arguments proc_type.arguments>
+        ...
+     <endif>
+  <endif>
+  )
+<enddef>
+
+<def put_arguments_from_proc_type proc_type:InstanceMethodType>
+    (
+    <if (!exists proc_type.arguments[1])>
+        <if (!proc_type.has_varargs)>
+           void
+        <endif>
+    <else>
+        <set need_comma to false>
+        <foreach param_type in proc_type.arguments>
+            <if (!(first param_type))>
+                <if (need_comma)> , <endif>
+                <put_decl param_type "">
+                <set need_comma to true>
+            <endif>
+        <endfor>
+    <endif>
+    <if (proc_type.has_varargs)>
+        <comma_if_arguments proc_type.arguments>
+        ...
+    <endif>
+    )
+<enddef>
+
+<def put_type_name_finish x:CProcedureType>
+#    /* Finishing PROC name [<!TYPE x>] */</>
+    ) <put_arguments_from_proc_type x>
+<enddef>
+
+
+# default must be first
+<def put_type_name_helper type>
+    /* type name <!TYPE type> not found */
+<enddef>
+
+<def put_type_name_helper type:CProcedureType>
+    <type.typedef_name>
+<enddef>
+
+<def put_type_name_helper type:QualifiedType>
+	<put_type_name_helper type.base_type><put_const_if_necessary type>\  
+<enddef>
+
+<def is_ultimately_a_proc_or_array x>
+    <if (exists x.typedef_name)>
+	false
+	<endmac>
+    <endif>
+    <if ([<!ISKINDOF x CProcedureType>])>
+	true
+	<endmac>
+    <endif>
+    <if ([<!TYPE x>] == "ArrayType")>
+        true
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "PointerType")>
+	<is_ultimately_a_proc_or_array x.reference_type>
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "QualifiedType")>
+	<is_ultimately_a_proc_or_array x.base_type>
+        <endmac>
+    <endif>
+    false
+<enddef>
+
+<def is_ultimately_a_proc x>
+    <if (exists x.typedef_name)>
+	false
+	<endmac>
+    <endif>
+    <if ([<!ISKINDOF x CProcedureType>])>
+      true
+      <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "ArrayType")>
+        <is_ultimately_a_proc x.element_type>
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "PointerType")>
+      <is_ultimately_a_proc x.reference_type>
+        <endmac>
+    <endif>
+    <if ([<!TYPE x>] == "QualifiedType")>
+      <is_ultimately_a_proc x.base_type>
+        <endmac>
+    <endif>
+    false
+<enddef>
+
+<def put_type_name_helper type:PointerType>
+#    <if ([<is_ultimately_a_proc_or_array type.reference_type>])>
+#        <put_type_name_helper type.reference_type>\ 
+#    <else>
+        <put_type_name_helper type.reference_type>
+    <if ([<!ISKINDOF type.reference_type CProcedureType>])>
+        <endmac>
+    <endif>
+    *\ 
+#    <endif>
+<enddef>
+
+
+<def put_type_name_helper type:ReferenceType>
+    <put_type_name_helper type.reference_type>
+    <if (exists Generating_CPP)>& <else> *<endif>
+<enddef>
+
+<def put_type_name_helper type:BooleanType>
+        int 
+<enddef>
+
+
+<def put_type_name_helper type:VoidType>
+        void
+<enddef>
+
+<def put_type_name_helper type:IntegerType>
+    <if (type.name != "")>
+        <type.name>\ 
+        <endmac>
+    <endif>
+    <if (type.is_signed != "true")>
+        unsigned\ 
+    <endif>
+    <if (exists intsize[<type.bit_size>])>
+        <intsize[<type.bit_size>]>\ 
+    <else>
+        /* Undefined type: no integer type with bitsize <type.bit_size> */
+    <endif>
+<enddef>
+
+<def put_type_name_helper type:FloatingPointType>
+    <if (type.name != "")>
+        <type.name>\ 
+        <endmac>
+    <endif>
+    <if (exists floatsize[<type.bit_size>])>
+        <floatsize[<type.bit_size>]>
+    <else>
+        /* Undefined type: no floating point type with bitsize <type.bit_size> */
+    <endif>
+<enddef>
+
+<def put_type_simple_name type>
+    <if (type.name != "")>
+         <type.name>\ 
+    <else>
+        # if nested anonymous group type, no name needed
+        <if (nested_in_group_type != 0)>
+            <endmac>
+        <endif>
+        <if (!exists type.generated_name)>
+            <get_generated_type_name>
+            <set type.generated_name to <generated_type_name>>
+        <endif>
+        <type.generated_name>\ 
+    <endif>
+<enddef>
+
+<def put_type_name_helper type:EnumeratedType>
+    enum <put_type_simple_name type>
+<enddef>
+
+<def put_type_name_helper type:ArrayType>
+    <if (exists type.typedef_name)>
+        <type.typedef_name>
+        <endmac>
+    <endif>
+
+#    <put_type_name_helper type.element_type>*
+#     /*MM*/
+#    <put_array_decl_prefix type.element_type>
+#    <name>
+#    <put_array_decl_suffix type>
+    <put_type_name_helper type.element_type>
+<enddef>
+
+<def is_a_bitfield fld>
+    <force_build_of_annote_adapters fld>
+    <foreach annote in fld.annotes
+        such that (annote.name == "bitfield")>
+            true
+            <endmac>
+        <endif>
+    <endfor>
+    false
+<enddef>
+
+<def get_bitfield_offset fld>
+    <foreach annote in fld.annotes
+      such that (annote.name == "bitfield")>
+        <annote.bricks[0].value>
+        <endmac>
+      <endif>
+    <endfor>
+<enddef>
+
+<def force_build_of_annote_adapters annoteObj>
+    <foreach annote in annoteObj.annotes>
+    <endfor>
+<enddef>
+
+<def bit_offset_of_field fld>
+    <if ([<is_a_bitfield fld>])>
+        <eval ([<fld.bit_offset.value>] + [<get_bitfield_offset fld>])>
+    <else>
+        <fld.bit_offset.value>
+    <endif>
+<enddef>
+
+<def put_type_name_helper type:GroupType>
+    <if (exists type.group_symbol_table.symbol_table_objects[1]) >
+      <let first_obj  be type.group_symbol_table.symbol_table_objects[0],
+           second_obj be type.group_symbol_table.symbol_table_objects[1]>
+        <if ([<bit_offset_of_field first_obj>] == [<bit_offset_of_field second_obj>])>
+            union\ 
+        <else>
+            struct\ 
+        <endif>
+      <endlet>
+    <else>
+        struct\ 
+    <endif>
+
+    <put_type_simple_name type>
+<enddef>
+
+<def put_type_name_helper type:StructType>
+    struct <put_type_simple_name type>
+<enddef>
+
+<def put_type_name_helper type:UnionType>
+    union <put_type_simple_name type>
+<enddef>
+
+<def put_type_name_helper type:ClassType>
+    <if ([<!TYPE type>] == "CppStructType")>
+        struct\ 
+    <elseif ([<!TYPE type>] == "CppUnionType")>
+        union\ 
+    <endif>
+
+    <put_type_simple_name type>
+<enddef>
+
+######################################################################################
+# Macros to put out type definitions
+######################################################################################
+
+
+<def put_type_def type>
+<enddef>
+
+<def put_type_def type:CProcedureType>
+    <if (exists type.typedef_name)>
+	<endmac>
+    <endif>
+    <put_forward_decl_if_necessary type.result_type>
+    <foreach param_type in type.arguments>
+        <put_forward_decl_if_necessary param_type>
+    <endfor>
+
+    typedef\  
+    <put_type_name_helper type.result_type>
+    (*__cp_<cp_typedef_counter>
+    <put_type_name_finish type>;</>
+    <set type.typedef_name to __cp_<cp_typedef_counter>>
+    <set cp_typedef_counter to  <eval (cp_typedef_counter + 1)>>
+<enddef>
+
+<def put_forward_decl_if_necessary type>
+    <put_forward_type_decl type "true">
+<enddef>
+
+<def put_forward_type_decl type group_def_required>
+<enddef>
+
+<def put_forward_type_decl type:ProcedureType group_def_required>
+    <put_type_def type>
+<enddef>
+
+<def put_forward_type_decl type:PointerType group_def_required>
+    <put_forward_type_decl type.reference_type "false">
+<enddef>
+
+<def put_forward_type_decl type:ReferenceType group_def_required>
+    <put_forward_type_decl type.reference_type "false">
+<enddef>
+
+<def put_forward_type_decl type:ArrayType group_def_required>
+    <put_forward_type_decl type.element_type "false">
+    <put_type_decl_only  type>
+<enddef>
+
+<def put_forward_type_decl type:GroupType group_def_required>
+    <if (! exists type.defined)>
+        <if (group_def_required == "true")>
+            <put_type_def type>
+        <else>
+            <put_type_decl_only type>
+        <endif>
+    <endif>
+<enddef>
+
+<def put_forward_type_decl type:EnumeratedType group_def_required>
+    <put_type_def type>
+<enddef>
+
+<def put_forward_type_decl type:QualifiedType group_def_required>
+    <put_forward_type_decl type.base_type>
+<enddef>
+
+<def put_type_decl_only type>
+    <put_type_def type>
+<enddef>
+
+<def put_type_decl_only type:ArrayType>
+    <if (exists type.typedef_name)>
+        <endmac>
+    <endif>
+    <put_type_def type.element_type>
+    typedef\ 
+    <put_array_decl_prefix type>
+    __ar_<cp_typedef_counter>
+    <put_array_decl_suffix type>;</>
+    <set type.typedef_name to __ar_<cp_typedef_counter>>
+    <set cp_typedef_counter to  <eval (cp_typedef_counter + 1)>>
+<enddef>
+
+<def put_type_decl_only type:QualifiedType>
+    <put_type_decl_only type.base_type>
+<enddef>
+
+<def put_type_decl_only type:GroupType>
+    <put_type_name_helper type>;</>
+<enddef>
+
+<def put_type_def type:PointerType>
+    <handle_line type>
+    <handle_pragma type>
+    <put_type_def type.reference_type>
+<enddef>
+
+<def put_type_def type:ReferenceType>
+    <handle_line type>
+    <handle_pragma type>
+    <put_type_def type.reference_type>
+<enddef>
+
+<def put_type_def type:QualifiedType>
+    <handle_line type>
+    <handle_pragma type>
+    <put_type_def type.base_type>
+<enddef>
+
+<def put_type_def type:ArrayType>
+    <put_type_def type.element_type>
+<enddef>
+
+<def put_type_def type:EnumeratedType>
+    <if (exists type.defined) >
+        <endmac>
+    <endif>
+
+    <handle_line type>
+    <handle_pragma type>
+    <set type.defined to exists>
+    enum <put_type_simple_name type>
+    {
+    <foreach arm in type.case>
+         <if (!(first arm))> , <endif>
+         <arm.first>
+         <if (arm.second != "") >
+             \ = <arm.second>
+         <endif>
+    <endfor>
+    };</>
+<enddef>
+
+<def put_type_def type:GroupType>
+    <if (exists type.defined) >
+        <endmac>
+    <endif>
+
+     <put_type_def_without_terminator type>
+    ;</></>
+<enddef>
+
+<def put_type_def_without_terminator type:GroupType>
+    <if (exists type.defined) >
+        <endmac>
+    <endif>
+
+    <handle_line type>
+    <handle_pragma type>
+    <put_type_decl_only type>
+    <set type.defined to exists>
+    <foreach obj in type.group_symbol_table.symbol_table_objects>
+        <put_forward_decl_if_necessary obj.type>
+    <endfor>
+    <put_type_name_helper type>
+    <if (type.is_complete) >
+        {</+4></>
+        <foreach obj in type.group_symbol_table.symbol_table_objects>
+            <if ([<is_a_bitfield obj>])>
+                <put_bitfield_decls obj>
+            <else>
+                <put_decl obj.type obj.name>;</>
+            <endif>
+        <endfor>
+        </-4>
+        }
+    <endif>
+<enddef>
+
+<def put_access_from_annote annote_list>
+    <foreach annote in annote_list>
+        <if ((annote.name == "private") ||  (annote.name == "public") ||
+             (annote.name == "protected"))>
+            <if (annote.name != current_member_access)>
+                </-2></>
+                <annote.name>:</+2></>
+                <set current_member_access to <annote.name>>
+            <endif>
+            <endmac>
+        <endif>
+    <endfor>
+<enddef>
+
+<def put_inherit_access obj>
+    <foreach attr in obj.attributes>
+        <if ((attr == "private") ||  (attr == "public") ||  (attr == "protected"))>
+            <attr>
+        <endif>
+    <endfor>
+<enddef>
+
+<def put_access obj>
+    <foreach attr in obj.attributes>
+        <if ((attr == "private") ||  (attr == "public") ||  (attr == "protected"))>
+            <if (attr != current_member_access)>
+                </-2></>
+                <attr>:</+2></>
+                <set current_member_access to <attr>>
+            <endif>
+            <endmac>
+        <endif>
+    <endfor>
+    /* no access attribute specified for the following member */</>
+<enddef>
+
+<def define_method_param_return_types obj class>
+    <if (![<defined_in_symbol_table obj.type.result_type.name class.per_class_symbol_table>])>
+        <put_forward_decl_if_necessary obj.type.result_type>
+    <endif>
+    <foreach param_type in obj.type.arguments>
+        <if (![<defined_in_symbol_table param_type.name class.per_class_symbol_table>])>
+            <put_forward_decl_if_necessary param_type>
+        <endif>
+    <endfor>
+<enddef>
+
+<def put_field_definition obj>
+    <if (([<!ISKINDOF obj.type.base_type GroupType>]) &&
+         (obj.type.base_type.name == "" ))>
+        <put_type_def_without_terminator obj.type.base_type> <obj.name>;</></>
+    <else>
+        <if ([<is_a_bitfield obj>])>
+            <put_bitfield_decls obj>
+        <else>
+            <put_decl obj.type obj.name>;</>
+        <endif>
+    <endif>
+<enddef>
+
+<def put_type_def type:ClassType>
+    <if (exists type.defined) >
+        <endmac>
+    <endif>
+
+    <put_type_def_without_terminator type>
+   ;</></>
+<enddef>
+
+<def put_type_def_without_terminator type:ClassType>
+    <if (exists type.defined) >
+        <endmac>
+    <endif>
+
+    <set type.defined to exists>
+    #insure all the method parameter types have been defined
+    <foreach obj in type.instance_method_symbol_table.symbol_table_objects>
+        <define_method_param_return_types obj type>
+    <endfor>
+    <foreach obj in type.per_class_symbol_table.symbol_table_objects
+      such that  ([<!ISKINDOF obj ProcedureSymbol>])>
+        <define_method_param_return_types obj type>
+    <endfor>
+# MORE should this be a "handle search"
+# this works only in the simplest case, 
+    <foreach obj in type.group_symbol_table.symbol_table_objects>
+         <if (![<defined_in_symbol_table obj.name type.group_symbol_table>])>
+            <put_forward_decl_if_necessary obj.type>
+         <endif>
+    <endfor>
+
+
+    <if ([<!TYPE type>] == "CppStructType")>
+        struct\ 
+    <elseif ([<!TYPE type>] == "CppUnionType")>
+        union\ 
+    <else>
+        class\ 
+    <endif>
+    <put_type_simple_name type>
+
+    <if (type.is_complete)>
+        <set current_member_access to not_set>
+        <foreach base_class_link in type.parent_classes>
+            <if (first base_class_link)> : <else> , <endif>
+            <put_inherit_access base_class_link>\ 
+            <if (base_class_link.is_virtual)> virtual\ <endif>
+            <base_class_link.parent_class_type.name>
+        <endfor>
+        <set nested_in_group_type to <eval (nested_in_group_type + 1)>>
+        {</+4></>
+        <foreach obj in type.friend_class>
+            friend class <put_forward_type_decl obj "false">;</>
+        <endfor>
+        <foreach obj in type.friend_procedure>
+            friend <handle_SymbolTableObject obj>
+        <endfor>
+        <foreach obj in type.per_class_symbol_table.symbol_table_objects>
+            <set current_member_access to not_set>
+            <if ([<!ISKINDOF obj Type>])>
+                <if (obj.name != "")>
+                    <put_access_from_annote obj.annotes>
+                    <put_type_def obj>
+                <endif>
+            <elseif ([<!ISKINDOF obj StaticFieldSymbol>])>
+                <put_access_from_annote obj.annotes>
+                static\ 
+                <put_field_definition obj>
+            <elseif ([<!ISKINDOF obj ProcedureSymbol>])>
+                <put_access obj>
+                static\ 
+                <handle_SymbolTableObject obj type.name></>
+            <endif>
+        <endfor>
+        <foreach obj in type.group_symbol_table.symbol_table_objects>
+            <if ([<!ISKINDOF obj FieldSymbol>])>
+                <if (obj.name != [__<type.name>_vtable_ptr_])>
+                    <put_access_from_annote obj.annotes>
+                    <put_field_definition obj>
+                <endif>
+            <endif>
+        <endfor>
+        <foreach obj in type.instance_method_symbol_table.symbol_table_objects>
+            <put_access obj>
+            <handle_SymbolTableObject obj type.name>
+        <endfor>
+        </-4>
+        <set nested_in_group_type to <eval (nested_in_group_type - 1)>>
+        }
+    <endif>
+<enddef>
+
+######################################################################################
+# Misc. type related macros
+######################################################################################
+
+<def equivalent_types type1 type2>
+    <if ([<!TYPE type1>] ==  [<!TYPE type2>])>
+	<if ([<!TYPE type1>] == "IntegerType")>
+            <if ((type1.is_signed == type2.is_signed)
+                && (type1.bit_size == type2.bit_size)
+                && (type1.bit_alignment == type2.bit_alignment))>
+       	        true
+		<endmac>
+	    <endif>
+	<elseif ([<!TYPE type1>] == "FloatingPointType")>
+            <if (type1.bit_size == type2.bit_size)>
+                true
+                <endmac>
+            <endif>
+        <elseif ([<!TYPE type1>] == "PointerType")>
+             <if ([<equivalent_types type1.reference_type type2.reference_type>])>
+                true
+                <endmac>
+             <endif>
+        <elseif ([<!TYPE type1>] == "QualifiedType")>
+        # DLH not quite true, but it would be if we checked the quals
+             <if ([<equivalent_types type1.base_type type2.base_type>])>
+                true
+                <endmac>
+             <endif>
+        <elseif ([<!TYPE type1>] == "ReferenceType")>
+             <if ([<equivalent_types type1.reference_type type2.reference_type>])>
+                true
+                <endmac>
+             <endif>
+	<elseif  ([<!TYPE type1>] == "ArrayType")>
+            <if ([<equivalent_types type1.element_type type2.element_type>])>
+                true
+                <endmac>
+            <endif>
+        <elseif ([<!ISKINDOF type1 GroupType>])>
+              # HACK, need "HANDLE" (pointer) equality
+             <if (type1.name == type2.name)>
+                true
+                <endmac>
+            <endif>
+        <elseif ([<!ISKINDOF type1 EnumeratedType>])>
+             <if (type1.name == type2.name)>
+                true
+                <endmac>
+            <endif>
+        <endif>
+    <else>
+        <if (([<!TYPE type1>] == "PointerType") &&
+             ([<!TYPE type2>] == "ArrayType"))>
+                <if ([<equivalent_types type1.reference_type type2.element_type>])>
+                    true
+                    <endmac>
+                <endif>
+        <elseif (([<!TYPE type2>] == "PointerType") &&
+                 ([<!TYPE type1>] == "ArrayType"))>
+            <if ([<equivalent_types type2.reference_type type1.element_type>])>
+                true
+                <endmac>
+            <endif>
+        <elseif ([<!TYPE type1>] == "ReferenceType")>
+             <if ([<!TYPE type2>] == "PointerType")>
+                 <if ([<equivalent_types type1.reference_type type2.reference_type>])>
+                    true
+                    <endmac>
+                 <endif>
+             <else>
+                 <if ([<equivalent_types type1.reference_type type2>])>
+                    true
+                    <endmac>
+                 <endif>
+             <endif>
+        <elseif ([<!TYPE type2>] == "ReferenceType")>
+             <if ([<!TYPE type1>] == "PointerType")>
+                 <if ([<equivalent_types type1.reference_type type2.reference_type>])>
+                    true
+                    <endmac>
+                 <endif>
+             <else>
+                 <if ([<equivalent_types type2.reference_type type1>])>
+                    true
+                    <endmac>
+                 <endif>
+             <endif>
+        <elseif ([<!TYPE type1>] == "QualifiedType")> 
+            <if ([<equivalent_types type1.base_type type2>])>
+                true
+                <endmac>
+            <endif>
+        <elseif ([<!TYPE type2>] == "QualifiedType")> 
+            <if ([<equivalent_types type2.base_type type1>])>
+                true
+                <endmac>
+            <endif>
+        <endif>
+    <endif>
+    false
+<enddef>
+
+######################################################################################
+# Macros to put out declarations/definitions
+######################################################################################
+
+# default must be first
+<def put_decl_helper type name>
+    <put_type_name type> <name>
+<enddef>
+
+<def put_decl_helper type:QualifiedType name>
+     <foreach x in type.qualifications such that (x != "const")>
+         <x>\ 
+     <endfor>
+#     <put_type_name type.base_type><put_const_if_necessary type> <name>
+     
+     <put_decl_helper type.base_type name>
+<enddef>
+
+<def put_decl_helper type:PointerType name>
+    <put_type_name_helper type> <name>
+<enddef>
+ 
+<def put_decl_helper type:ReferenceType name>
+    <put_decl_helper type.reference_type ""> 
+    <if (exists Generating_CPP)>&<else>*<endif><name>
+<enddef>
+ 
+#<def put_decl_helper type:QualifiedType name>
+#     <foreach x in type.qualifications such that (x != "const")>
+#      <x>\ 
+#     <endfor>
+#     <put_type_name type.base_type><put_const_if_necessary type> <name>
+#<enddef>
+
+<def put_decl_helper type:CProcedureType name>
+#     <foreach x in type.qualifications such that (x != "const")>
+#      <x>\ 
+#     <endfor>
+#     <put_type_name type.base_type><put_const_if_necessary type> <name>
+<enddef>
+
+<def put_decl_helper type:EnumeratedType name>
+    <put_type_def type>
+    <put_type_name type> <name>
+<enddef>
+
+<def put_array_decl_prefix type>
+    <if ([<!TYPE type>] == "ArrayType")>
+        <put_array_decl_prefix type.element_type>
+    <elseif (([<!TYPE type>] == "QualifiedType") &&
+             ([<!TYPE type.base_type>] == "ArrayType"))>
+        <put_array_decl_prefix type.base_type.element_type>
+#    <elseif (([<!TYPE type>] == "PointerType") &&
+#            ([<!TYPE type.reference_type>] == "CProcedureType"))>
+#        <put_decl_helper type.reference_type.result_type ""> ( *
+    <else>
+         <put_decl_helper type "">
+    <endif>
+<enddef>
+
+<def put_array_bound x y>
+    <if (x == "??")>
+        \[\]
+    <else>
+        \[<eval (x+1-y)>\]
+<enddef>
+
+<def put_array_decl_suffix type>
+<enddef>
+
+<def put_array_decl_suffix type:ArrayType>
+    <if (([<!TYPE type.lower_bound>] == "IntConstant") &&
+	 ([<!TYPE type.upper_bound>] == "IntConstant")) >
+        <put_array_bound type.upper_bound.value type.lower_bound.value>
+    <else>
+	\[/*Non-const bounds*/\]
+    <endif>
+    <put_array_decl_suffix type.element_type>
+<enddef>
+
+<def put_array_decl_suffix type:QualifiedType>
+    <put_array_decl_suffix type.base_type>
+<enddef>
+
+<def put_decl_helper type:ArrayType name>
+    <if (exists type.typedef_name)>
+	<type.typedef_name> <name>
+	<endmac>
+    <endif>
+    <put_array_decl_prefix type.element_type>
+    <name>
+    <put_array_decl_suffix type>
+<enddef>
+
+<def put_decl_helper type:GroupType name>
+    <put_type_def type>
+    <put_type_name type> <name>
+<enddef>
+
+<def put_bitfield_decls fld>
+    <set bitfld_cnt to 0>
+    <foreach annote in fld.annotes
+      such that (annote.name == "bitfield")>
+        <put_type_name fld.type>\ 
+        <if (annote.bricks[2].value != "")>
+            <annote.bricks[2].value>\ 
+        <else>
+            <fld.name>_<bitfld_cnt>\ 
+        <endif>
+        : <annote.bricks[1].value>;</>
+        <set bitfld_cnt to <eval (bitfld_cnt +1)>>
+    <endfor>
+<enddef>
+
+<def handle_ProcedureDefinitions procedure_defs>
+    <use proc_defs>
+    <foreach proc_def in procedure_defs>
+        <handle_line proc_def>
+        <handle_pragma proc_def>
+        <handle_ProcedureDefinition proc_def>
+    <endfor>
+    <use *>
+<enddef>
+
+<def handle_CodeLabelSymbol symbol >
+    <retrieve_sym_name symbol>:;</>
+<enddef>
+
+#
+# handle variable initialization
+#
+
+<def define_symbols_used_in_initialization obj >
+    # /*<!TYPE obj> */
+    <if ([<!TYPE obj>] == "VariableSymbol")>
+        <if (exists obj.definition.initialization)>
+            <define_symbols_in_ValueBlock obj.definition.initialization>
+        <endif>
+    <endif>
+
+<enddef>
+
+#default - do nothing, must be first
+<def define_symbols_in_ValueBlock value_block>
+<enddef>
+
+<def define_symbols_in_ValueBlock value_block:LoadVariableExpression>
+    <define_symbols_in_ValueBlock value_block.source>
+<enddef>
+
+<def define_symbols_in_ValueBlock value_block:ExpressionValueBlock>
+    <define_symbols_in_ValueBlock value_block.expression>
+<enddef>
+
+<def define_symbols_in_ValueBlock value_block:MultiValueBlock>
+    <foreach val in value_block.sub_blocks.second>
+        <define_symbols_in_ValueBlock val>
+    <endfor>
+<enddef>
+
+<def define_symbols_in_ValueBlock value_block:RepeatValueBlock>
+    <define_symbols_in_ValueBlock value_block.sub_block>
+<enddef>
+
+<def define_symbols_in_ValueBlock symbol:Symbol>
+    <if ([<defined_in_symbol_table symbol.name external_symbol_table>])>
+        <handle_global_SymbolTableObject symbol>
+    <else>
+        <handle_FileBlock_SymbolTableObject symbol>
+    <endif>
+<enddef>
+
+#
+# Handle (define symbols used in) expressions that can appear in a Valueblock (variable
+# initialization).  Expressions handled:
+#   BinaryExpression,
+#   UnaryExpression, 
+#   LoadExpression,
+#   SymbolAddressExpression,
+#   ArrayReferenceExpression,
+#   FieldAccessExpression
+#   ExtractFieldExpression
+#   CallExpression
+#
+<def define_symbols_in_ValueBlock expr:BinaryExpression>
+    <define_symbols_in_ValueBlock expr.source1>
+    <define_symbols_in_ValueBlock expr.source2>
+<enddef>
+
+<def define_symbols_in_ValueBlock expr:UnaryExpression>
+    <define_symbols_in_ValueBlock expr.source>
+<enddef>
+
+<def define_symbols_in_ValueBlock expr:ArrayReferenceExpression>
+    <define_symbols_in_ValueBlock expr.base_array_address>
+<enddef>
+
+<def define_symbols_in_ValueBlock expr:FieldAccessExpression>
+    <define_symbols_in_ValueBlock expr.base_group_address>
+<enddef>
+
+<def define_symbols_in_ValueBlock expr:LoadExpression>
+    <define_symbols_in_ValueBlock expr.source_address>
+<enddef>
+
+<def define_symbols_in_ValueBlock expr:SymbolAddressExpression>
+    <define_symbols_in_ValueBlock expr.addressed_symbol>
+<enddef>
+
+<def define_symbols_in_ValueBlock expr:CallExpression>
+    <foreach arg in expr.arguments>
+        <if ([<!ISKINDOF expr InstanceMethodCallExpression>])>
+            <if (!(first arg))>
+                <define_symbols_in_ValueBlock arg>
+            <endif>
+        <else>
+            <define_symbols_in_ValueBlock arg>
+        <endif>
+    <endfor>
+<enddef>
+
+<def put_variable_initialization var_def >
+    <if (exists var_def.initialization)>
+        <handle_ValueBlock var_def.initialization " = ">
+    <endif>
+<enddef>
+
+######################################################################################
+# Macros to handle symbol tables and symbol table objects
+######################################################################################
+
+<def handle_global_SymbolTableObject obj>
+    <if ((exists obj.defined) || (exists builtin[<obj.name>]))>
+        <endmac>
+    <endif>
+
+    <define_symbols_used_in_initialization obj>
+  
+        <if (([<!TYPE obj>] == "ProcedureSymbol") ||
+             ([<!TYPE obj>] == "VariableSymbol"))>
+            <if (!exists obj.definition)>
+		<if (!exists F77)>
+               extern\ 
+		<endif>
+            <endif>
+        <endif>
+    <handle_SymbolTableObject obj>
+<enddef>
+
+<def put_const_if_necessary obj>
+<enddef>
+
+<def put_const_if_necessary obj:QualifiedType>
+    <foreach q in obj.qualifications such that (q == "const")>
+       \ const\ 
+       <endmac>
+    <endfor>
+<enddef>
+
+<def put_static_if_necessary obj>
+    <if ([<!TYPE obj>] == "ProcedureSymbol")>
+        <if ([<defined_in_symbol_table obj.name file_set_symbol_table>])>
+               static\ 
+        <endif>
+    <elseif ([<!TYPE obj>] == "VariableSymbol")>
+        <if (exists obj.definition)>
+            <if (obj.definition.is_static == "true")>
+        	<if (!([<defined_in_symbol_table obj.name external_symbol_table>]))>
+                  static\
+		<endif>
+            <endif>
+        <endif>
+    <endif>
+<enddef>
+
+<def handle_FileBlock_SymbolTableObject obj>
+    
+    <if (exists obj.defined) >
+        <endmac>
+    <endif>
+
+    <set obj.defined to true>
+
+    <define_symbols_used_in_initialization obj>
+  
+    <handle_SymbolTableObject obj>
+<enddef>
+
+<def handle_local_SymbolTableObject obj>
+    <if (exists obj.defined) >
+        <endmac>
+    <endif>
+
+    <define_symbols_used_in_initialization obj>
+  
+    <handle_SymbolTableObject obj>
+<enddef>
+
+#
+# default - must be  the first
+#
+<def handle_SymbolTableObject obj>
+<enddef>
+
+<def handle_SymbolTableObject obj:ReferenceType>
+<enddef>
+
+<def handle_SymbolTableObject obj:QualifiedType>
+<enddef>
+
+<def handle_SymbolTableObject obj:PointerType>
+#   <put_type_decl_only obj.reference_type>
+<enddef>
+
+<def handle_SymbolTableObject obj:ArrayType>
+   <put_type_decl_only obj>
+<enddef>
+
+<def handle_SymbolTableObject obj:Type>
+    <put_type_def obj>
+<enddef>
+
+<def handle_SymbolTableObject obj:ParameterSymbol>
+#already handled
+<enddef>
+
+<def comma_if_arguments x>
+    <foreach y in x>
+	,
+        <endmac>
+    <endfor>
+<enddef>
+
+<def is_destructor proc_sym class_name>
+    <if (proc_sym.name == [~<class_name>])>
+        true
+    <else>
+        false
+    <endif>
+<enddef>
+
+<def is_constructor proc_sym class_name>
+    <if (proc_sym.name == class_name)>
+        true
+    <else>
+        false
+    <endif>
+<enddef>
+
+<def is_constructor_or_destructor proc_sym class_name>
+    <if ([<is_constructor proc_sym class_name>])>
+        true
+        <endmac>
+    <elseif ([<is_destructor proc_sym class_name>])>
+        true
+        <endmac>
+    <endif>
+    false
+<enddef>
+
+<def handle_SymbolTableObject proc_sym:CppStaticMethodSymbol class_name>
+    <put_forward_decl_if_necessary proc_sym.type.result_type>
+    static\ 
+    <put_decl proc_sym.type.result_type "">
+    <proc_sym.name>
+    <if (proc_sym.is_inline)>
+      <let def be proc_sym.definition>
+        <put_arguments_from_proc_def def proc_sym.type></>
+        <handle_block def.definition_block def.symbol_table def.body>
+      <endlet>
+    <else>
+        <put_arguments_from_proc_type proc_sym.type>
+        ;</>
+    <endif>
+<enddef>
+
+<def handle_SymbolTableObject proc_sym:CppInstanceMethodSymbol class_name>
+    <if (proc_sym.is_compiler_generated)>
+        <endmac>
+    <endif>
+    <put_forward_decl_if_necessary proc_sym.type.result_type>
+    <if (proc_sym.is_dispatched == "true")>
+        virtual\ 
+    <endif>
+    <if (!([<is_constructor_or_destructor proc_sym class_name>]))>
+        <put_decl proc_sym.type.result_type "">
+    <else>
+        <set suppress_return to true>
+    <endif>
+    <if (proc_sym.is_inline)>
+      <let def be proc_sym.definition>
+        <if (proc_sym.is_compiler_generated)>
+            # Punt for now, suifint is not currently generating these, needs to be fixed.
+            # and block need to be put out
+            #<put_arguments_from_proc_def def proc_sym.type></>
+            #<put_arguments_from_proc_type proc_sym.type>;</>
+            #<handle_block def.definition_block def.symbol_table def.body>
+        <else>
+            <proc_sym.name>
+            <put_arguments_from_proc_def def proc_sym.type></>
+            <if ([<is_constructor proc_sym class_name>])>
+                <handle_initialization_list def.member_initialization_list>
+            <endif>
+            <handle_block def.definition_block def.symbol_table def.body>
+        <endif>
+      <endlet>
+    <else>
+        <proc_sym.name>
+        <put_arguments_from_proc_type proc_sym.type>
+        <if (proc_sym.is_pure_virtual)>
+            \ = 0
+        <endif>
+        ;</>
+    <endif>
+    <set suppress_return to false>
+<enddef>
+
+<def handle_SymbolTableObject proc_sym:ProcedureSymbol>
+    #ensure all the parameter types have been defined
+    <put_forward_decl_if_necessary proc_sym.type.result_type>
+    <foreach param_type in proc_sym.type.arguments>
+        <put_forward_decl_if_necessary param_type>
+    <endfor>
+
+    <put_static_if_necessary proc_sym>
+    <put_decl proc_sym.type.result_type "">
+    <proc_sym.name>
+    <put_arguments_from_proc_type proc_sym.type>;</>
+<enddef>
+
+<def generate_variable_decl_def variable_symbol>
+  <let type be variable_symbol.type,
+       name be variable_symbol.name>
+    
+    <handle_line variable_symbol>
+    <handle_pragma variable_symbol>
+    <put_static_if_necessary variable_symbol>
+    <put_decl type,[<retrieve_sym_name variable_symbol>]>
+    <set variable_symbol.defined to exists>
+    <if (exists variable_symbol.definition)>
+        <put_variable_initialization variable_symbol.definition>
+    <endif>
+    ;</>
+  <endlet>
+<enddef>
+
+<def handle_SymbolTableObject variable_symbol:VariableSymbol>
+    <if (exists variable_symbol.definition.has_location_mark)>
+            <if (variable_symbol.definition.has_location_mark)>
+                <endmac>
+            <endif>
+        <endif>
+    <endif>
+
+    <generate_variable_decl_def variable_symbol>
+<enddef>
+
+#<def handle_SymbolTableObject variable_symbol:VariableSymbol>
+#  <let type be variable_symbol.type>
+##       name be variable_symbol.name>
+#    
+#    <handle_line variable_symbol>
+#    <handle_pragma variable_symbol>
+#    <put_decl type <retrieve_sym_name variable_symbol>>
+#    <set variable_symbol.defined to exists>
+#    <if (exists variable_symbol.definition)>
+#        <put_variable_initialization variable_symbol.definition>
+#    <endif>
+#    ;</>
+#  <endlet>
+#<enddef>
+
+<def handle_BasicSymbolTable symbol_table>
+    <foreach obj in symbol_table.symbol_table_objects>
+        #<if ([<!ISKINDOF obj Type>])>
+        #    <put_type_def obj>
+        #<else>
+            <handle_local_SymbolTableObject obj>
+        #<endif>
+    <endfor>
+<enddef>
+
+<def handle_file_symbol_table symbol_table>
+    <foreach obj in symbol_table.symbol_table_objects>
+        <if ([<!ISKINDOF obj Type>])>
+            <put_type_def obj>
+        <else>
+            <handle_FileBlock_SymbolTableObject obj>
+        <endif>
+    <endfor>
+<enddef>
+
+<def defined_in_symbol_table identifier symbol_table>
+    <foreach obj in symbol_table.symbol_table_objects>
+        <if (exists obj.name)>
+            <if (obj.name == identifier)>
+                true
+                <endmac>
+            <endif>
+        <endif>
+    <endfor>
+    false
+<enddef>
+
+<def handle_global_symbol_table symbol_table file_blocks>
+    #
+    # Using 3 loops was an early (unsucessful) attempt to get variable
+    # definition ordering correct.  This problem has been solved elsewhere
+    # so, if these three loops are a performance problem, they could be replaced
+    # by the single loop in the comments below. I have left it this way for
+    # cosmetic reasons (I like the way it looks).
+    #
+    <foreach obj in symbol_table.symbol_table_objects
+     such that ([<!ISKINDOF obj Type>])>
+        <handle_SymbolTableObject obj>
+    <endfor>
+    </>
+    <foreach obj in symbol_table.symbol_table_objects
+     such that ([<!TYPE obj>] == "ProcedureSymbol")>
+        <handle_global_SymbolTableObject obj>
+    <endfor>
+    </>
+    <foreach obj in symbol_table.symbol_table_objects
+     such that ([<!TYPE obj>] == "VariableSymbol")>
+        <handle_global_SymbolTableObject obj>
+    <endfor>
+
+#    <foreach obj in symbol_table.symbol_table_objects>
+#        <if ([<!ISKINDOF obj Type>])>
+#           <put_type_def obj>
+#        <else>
+#            <handle_global_SymbolTableObject obj>
+#        <endif>
+#    <endfor>
+<enddef>
+
+######################################################################################
+# Macros to put out constants and value blocks
+######################################################################################
+
+<def put_constant constant type>
+    <if (([<!TYPE constant>] == "IntConstant") &&
+          [<!ISKINDOF type DataType>])>
+        <if (intsize[<type.bit_size>] == [char])>
+            # should put out character literal but convert_IInteger_to_String doesn't
+            # know when to build characters so it always builds ints
+            #'<constant.int_constant.value>'
+            <constant.value>
+        <else>
+            <constant.value>
+            <if ([<!ISKINDOF type IntegerType>])>
+	     <if (! type.is_signed)>
+	       U
+	     <endif>
+             <if (intsize[<type.bit_size>] == [long])>
+	       L
+	     <endif>
+	    <endif>
+        <endif>
+    <else>
+        <constant.value>
+    <endif>
+<enddef>
+
+# default handle_ValueBlock, must be the first handle_ValueBlock macro definition
+<def handle_ValueBlock value prefix>
+    /* ValueBlock <!TYPE value> not implemented */</>
+<enddef>
+
+<def handle_ValueBlock value:UndefinedValueBlock prefix>
+    /*UVB*/
+<enddef>
+
+<def handle_ValueBlock value:ConstantValueBlock prefix>
+    <prefix>
+    #<if (prefix != "")> { <endif>
+    <put_constant value.constant value.type>
+    #<if (prefix != "")> } <endif>
+<enddef>
+
+<def handle_ValueBlock value:MultiValueBlock prefix>
+    <prefix>
+    {</+8>
+     <foreach val in value.sub_blocks.second>
+         <if (!(first val))> , </><endif>
+         <handle_ValueBlock val "">
+     <endfor>
+    </-8>
+    }
+<enddef>
+
+<def handle_repeat_value_block count sub_block >
+    <if (count = 0)>
+	<endmac>
+    <endif>
+    <handle_ValueBlock sub_block "">
+    <if (count == 1)>
+	<endmac>
+    <endif>
+    ,
+    <handle_repeat_value_block [<eval (count-1)>] sub_block >
+<enddef>
+
+
+<def handle_ValueBlock value:RepeatValueBlock prefix>
+    <prefix>
+    # There was a disagreement about meaning of repeat value blocks
+    # which we have not yet resolved because we want to fix it right.
+    # for the moment, punt
+    <if (exists F77)>{</+8><endif>
+    <handle_repeat_value_block value.num_repetitions value.sub_block>
+    <if (exists F77)></-8>}<endif>
+<enddef>
+
+<def handle_ValueBlock value:ExpressionValueBlock prefix>
+    <if ([<!TYPE value.expression>] == "CppConstructorInitialization")>
+        # if no argument 1, default constructor call.  Do nothing or it 
+        # will be seen as a function decl.
+        <if (exists value.expression.arguments[1])>
+             <handle_Expression value.expression "">
+        <endif>
+    <else>
+        <prefix>
+        <if (([<does_implicit_deref value.expression>]) &&
+             ([<!TYPE value.expression.result_type>] != "ReferenceType") &&
+             ([<!TYPE value.expression.result_type.reference_type.base_type>] != "ArrayType"))>
+            &
+        <endif>
+        <handle_Expression value.expression "">
+    <endif>
+<enddef>
+
+<def handle_ValueBlock value:CppConstructorValueBlock prefix>
+    <if (exists value.expression.arguments[1])>
+        <handle_call_args value.expression>
+    <endif>
+<enddef>
+
+# handle arrays with non-zero low bounds
+# needs to handle variable low bounds too
+<def handle_index_expression expression>
+  \[<handle_Expression expression.index expression>
+  <let array_type be expression.base_array_address.result_type.reference_type.base_type>
+    <if (exists array_type.lower_bound)>
+      <if (array_type.lower_bound.value == 0)>
+	  ]<endmac>
+      <endif>
+      - <array_type.lower_bound.value>
+    <endif>
+   <endlet>
+   ]
+<enddef>
+
+<def handle_multi_index_expression expression>
+    <set temp_multi_var to >
+    <foreach index in expression.indexes>
+	<set temp_multi_var to [<handle_Expression index expression>\]<temp_multi_var>>
+    <endfor>
+    <temp_multi_var>
+<enddef>
+
+######################################################################################
+# Macros to handle Expressions
+######################################################################################
+
+#default, must be first
+<def handle_Expression expr parent_expr>
+    /* Expression <!TYPE expr> not implemented */
+<enddef>
+
+<def handle_Expression expr:VaArgExpression parent_expr>
+<check_stdarg_include>
+va_arg(*<handle_Expression expr.ap_address expr>,<put_type_name expr.result_type>)
+<enddef>
+
+<def handle_Expression expr:SelectExpression  parent_expr>
+    (<handle_Expression expr.selector parent_expr>?<handle_Expression expr.selection1 parent_expr>:<handle_Expression expr.selection2 parent_expr>)
+<enddef>
+
+<def handle_Expression expr:ScSelectExpression  parent_expr>
+    (<handle_Expression expr.selector parent_expr>?<handle_Expression expr.selection1 parent_expr>:<handle_Expression expr.selection2 parent_expr>)
+<enddef>
+
+
+<def handle_Expression expr:ByteOffsetOfExpression parent_expr>
+    <eval ([<expr.field.bit_offset.value>]/8)>
+<enddef>
+
+#
+# The SUIF expressions
+#    FieldAccessExpression,
+#    ArrayReferenceExpression, and
+#    MultiDimArrayExpression
+# return addresses.  Their C counterparts return values if they are not
+# on the left hand side of an assignment.  To decide if we need to take
+# the address of (i.e., prefix the expression with the "&" operator)
+# we must examine the context of the expression.
+#
+<def parent_expects_an_address expr>
+     
+    <if ([<!TYPE expr.parent>] == "LoadExpression")>
+        false
+    <elseif (([<!TYPE expr.parent>] == "ArrayReferenceExpression") ||
+              ([<!TYPE expr.parent>] == "MultiDimArrayExpression"))>
+        # these parent expressions' C counterparts do implicit derefs and expect
+        # their children to be addreses, the parent expression's parents (...)
+        # must determine whether to take the "addr of"
+
+        false
+    <elseif (([<!TYPE expr.parent>] == "FieldAccessExpression") ||
+             ([<!TYPE expr.parent>] == "InstanceMethodCallExpression"))>
+        # These parent expressions can handle either addresses (using "->")
+        #  or values (instances) (using ".").
+
+        false
+    <elseif (([<!TYPE expr.parent>] == "ExpressionValueBlock") ||
+             ([<!TYPE expr.parent>] == "StoreStatement") ||
+             ([<!TYPE expr.parent>] == "StoreVariableStatement"))>
+        # These are assignments that must check the type of the expression against
+        # their expected types to determine if an "addr of" is needed.
+
+        false
+    <else>
+        true
+    <endif>
+<enddef>
+
+<def handle_Expression expr:FieldAccessExpression parent_expr>
+    <if ([<parent_expects_an_address expr>])>
+        &(
+    <endif>
+
+    (<handle_Expression expr.base_group_address expr>)
+    <if (([<!TYPE expr.base_group_address>] == "SymbolAddressExpression") ||
+         ([<does_implicit_deref expr.base_group_address>] &&
+          [<!TYPE expr.base_group_address.result_type.reference_type.base_type>] !=
+            "PointerType"))>
+        .
+    <else>
+        -\>
+    <endif>
+    <expr.field.name>
+
+    <if ([<parent_expects_an_address expr>])>
+	 )
+    <endif>
+<enddef>
+
+<def handle_Expression expr:LoadVariableExpression parent_expr>
+        <retrieve_sym_name expr.source>
+<enddef>
+
+<def handle_Expression expr:LoadValueBlockExpression parent_expr>
+    # UNTESTED
+    = <handle_ValueBlock expr.value_block>;
+<enddef>
+
+<def handle_Expression expr:Constant parent_expr>
+    # <generate_cast_if_necessary expr.result_type  expr.constant>
+    <put_constant expr expr.result_type>
+<enddef>
+
+<def handle_Expression expr:IntConstant parent_expr>
+    # cast all call params to avoid ambiguous calls to overloaded fcns
+    <if ([<!ISKINDOF parent_expr CallExpression>])>
+        (<put_type_name expr.result_type>)
+    <endif>
+    <put_constant expr expr.result_type>
+<enddef>
+
+<def handle_Expression expr:FloatConstant parent_expr>
+    # cast all call params to avoid ambiguous calls to overloaded fcns
+    <if ([<!ISKINDOF parent_expr CallExpression>])>
+        (<put_type_name expr.result_type>)
+    <endif>
+    <put_constant expr expr.result_type>
+<enddef>
+
+<def handle_Expression expr:SymbolAddressExpression parent_expr>
+    <if (([<!TYPE expr.result_type>] != "PointerType") &&
+         ([<!TYPE expr.result_type>] != "ArrayType") &&
+         ([<!TYPE expr.result_type>] != "ReferenceType"))>
+         /* WARNING non-ptr SymbolAddressExpression <!TYPE expr.result_type>*/
+    <endif>
+
+  <let symbol be expr.addressed_symbol>
+    <if ([<!ISKINDOF symbol CodeLabelSymbol>])>
+        &&<retrieve_sym_name symbol>
+    <else>
+        # if the parent C expression  cannot treat the symbol as an lval or
+        #    the symbols C type is not an address
+        #     take the address of the symbol
+        <if ((! [<does_implicit_deref parent_expr>]) &&
+              ([<!TYPE symbol.type.base_type>] != "ArrayType") &&
+              (!(([<!TYPE symbol.type.base_type>] == "ReferenceType") &&
+                ([<!TYPE symbol.type.base_type.reference_type.base_type>] == "ArrayType"))))>
+            &
+        <endif>
+        <retrieve_sym_name symbol>
+    <endif>
+  <endlet>
+<enddef>
+
+<def handle_load_array_expr expr>
+    <handle_Expression expr.base_array_address expr><handle_index_expression expr>
+<enddef>
+
+<def does_implicit_deref oprnd>
+    false
+<enddef>
+
+<def does_implicit_deref oprnd:FieldAccessExpression>
+    true
+<enddef>
+
+<def does_implicit_deref oprnd:ArrayReferenceExpression>
+    true
+<enddef>
+
+<def does_implicit_deref oprnd:MultiDimArrayExpression>
+    true
+<enddef>
+
+<def handle_Expression expr:LoadExpression parent_expr>
+     <if ((! [<does_implicit_deref expr.source_address>]) &&
+          ([<!TYPE expr.source_address.result_type>] != "ReferenceType"))>
+
+        *
+     <endif>
+     (<handle_Expression expr.source_address expr>)
+<enddef>
+
+#	An ArrayReferenceExpression always returns an address unless it is called from a
+#	LoadExpression or the array base address is another array (i.e., multi-dim array).
+
+<def handle_array_base_Expression expr:LoadVariableExpression parent_expr>
+    (*<handle_Expression expr parent_expr>)
+<enddef>
+
+<def handle_array_base_Expression expr parent_expr>
+    (<handle_Expression expr parent_expr>)
+<enddef>
+
+<def handle_array_base_Expression expr:UnaryExpression parent_expr>
+    (
+    <if (expr.opcode != "convert")>
+	*
+    <endif>
+    <handle_Expression expr parent_expr>)
+<enddef>
+
+<def handle_Expression expr:ArrayReferenceExpression parent_expr>
+    <if ([<parent_expects_an_address expr>])>
+        &
+    <endif>
+    (<handle_array_base_Expression expr.base_array_address expr>)
+    <handle_index_expression expr>
+<enddef>
+
+<def handle_Expression expr:MultiDimArrayExpression parent_expr>
+    <if ([<parent_expects_an_address expr>])>
+        &
+    <endif>
+    <handle_Expression expr.base_array_address expr><handle_multi_index_expression expr>
+<enddef>
+
+<def handle_call_target expr>
+    (*<handle_Expression expr expr>)
+<enddef>
+
+<def handle_call_target expr:SymbolAddressExpression>
+    <retrieve_sym_name expr.addressed_symbol>
+<enddef>
+
+<def handle_call_args expr:CallExpression>
+    (
+    <foreach arg in expr.arguments>
+        <if (!(first arg))> , <endif>
+        <handle_Expression arg expr>
+    <endfor>
+    )
+<enddef>
+	
+<def handle_call_args expr:InstanceMethodCallExpression>
+  (
+  <set need_comma to false>
+  <foreach arg in expr.arguments>
+      <if (!(first arg))>
+          <if (need_comma)> , <endif>
+          <handle_Expression arg expr>
+          <set need_comma to true>
+      <endif>
+  <endfor>
+  )
+<enddef>
+
+<def handle_Expression expr:CallExpression parent_expr>
+    <if ([<!TYPE expr.callee_address>] == "LoadVariableExpression")>
+	(*<expr.callee_address.source.name>)
+    <else>
+        <if ([<is_delete_call expr.callee_address>])>
+            <handle_delete expr parent_expr>
+            <endmac>
+        <elseif ([<is_new_call expr.callee_address>])>
+            <handle_new expr parent_expr>
+            <endmac>
+        <else>
+            <handle_call_target expr.callee_address>
+        <endif>
+    <endif>
+    <handle_call_args expr>
+<enddef>
+
+<def handle_Expression expr:StaticMethodCallExpression parent_expr>
+    <method.parent.parent.name>::
+    <handle_call_target expr.callee_address>
+    <handle_call_args expr>
+<enddef>
+
+<def handle_Expression expr:CppConstructorInitialization parent_expr>
+    <if ([<!TYPE expr.arguments[0]>] == "LoadVariableExpression")>
+        <if (expr.arguments[0].source.name != "")>
+            <handle_call_args expr>
+            <endmac>
+        <endif>
+    <elseif (([<!TYPE expr.arguments[0]>] == "FieldAccessExpression")>>
+            <handle_call_args expr>
+            <endmac>
+        <endif>
+    <endif>
+    <handle_call_target expr.callee_address>
+    <handle_call_args expr>
+<enddef>
+
+<def handle_Expression expr:InstanceMethodCallExpression parent_expr>
+    <if ([<is_delete_call expr.callee_address>])>
+        <handle_delete expr parent_expr>
+    <else>
+      <let method be expr.target_method>
+         <if ([<is_constructor method method.parent.parent.name>])>
+             <handle_call_target expr.callee_address>
+             <handle_call_args expr>
+         <else>
+             (<handle_Expression  expr.arguments[0] parent_expr>)
+             <if (([<!TYPE expr.arguments[0].result_type>] != "PointerType") ||
+                  (([<does_implicit_deref expr.arguments[0]>]) &&
+                   ([<!TYPE expr.arguments[0].result_type.reference_type.base_type>] !=
+                     "PointerType")))>
+                 .
+             <else>
+                 -\>
+             <endif>
+	     <handle_call_target expr.callee_address>
+             <handle_call_args expr>
+         <endif>
+      <endlet>
+    <endif>
+<enddef>
+
+<def handle_new expr parent_expr>
+    new\ 
+    <if ([<!TYPE expr.result_type.reference_type.base_type>] == "CppClassType")>
+        <put_type_simple_name expr.result_type.reference_type.base_type>
+        # first param is size param to "new", skip it 
+        (
+        <set need_comma to false>
+        <foreach arg in expr.arguments>
+            <if (!(first arg))>
+                <if (need_comma)> , <endif>
+                <handle_Expression arg expr>
+                <set need_comma to true>
+            <endif>
+        <endfor>
+        )
+    <else>
+        <if (expr.callee_address.addressed_symbol.name == "operator new[]")>
+            <put_type_name expr.result_type.reference_type.base_type>
+            \[<handle_Expression expr.arguments[0]>\]
+        <else>
+            <put_type_name expr.result_type.reference_type.base_type>
+            <handle_call_args expr>
+        <endif>
+    <endif>
+<enddef>
+
+<def is_new_call callee_address>
+    <if (exists callee_address.addressed_symbol)>
+        <if ((callee_address.addressed_symbol.name == "operator new") ||
+             (callee_address.addressed_symbol.name == "operator new[]"))>
+            true
+            <endmac>
+        <endif>
+    <endif
+    false
+<enddef>
+
+<def is_delete_call callee_address>
+  <let callee_name be callee_address.addressed_symbol.name>
+    <if (exists callee_address.addressed_symbol.parent.parent)>
+      <let parents_parent be callee_address.addressed_symbol.parent.parent>
+        <if ([<!TYPE parents_parent>] == "CppClassType")>
+            <if ([~<parents_parent.name>] == callee_name)>
+                true
+                <endmac>
+            <endif>
+        <endif>
+    <endif>
+    <if (exists callee_address.addressed_symbol)>
+        <if ((callee_address.addressed_symbol.name == "operator delete") ||
+              (callee_address.addressed_symbol.name == "operator delete[]"))>
+            true
+            <endmac>
+        <endif>
+    <endif>
+  <endlet>
+    false
+<enddef>
+
+<def handle_delete expr parent_expr>
+    delete\ 
+    <if (expr.callee_address.addressed_symbol.name == "operator delete[]")>
+        \[\]\ 
+    <endif>
+    <handle_Expression expr.arguments[0] expr>
+<enddef>
+
+<def node_is_a_convert node>
+    <if ( [<!TYPE node>] == "UnaryExpression")>
+        <if (node.opcode == "convert")>
+            true
+            <endmac>
+        <endif>
+    <endif>
+    false
+<enddef>
+
+<def is_pointer_sourceop source>
+    <if ([<!TYPE source.result_type>] == "PointerType")>
+            true
+            <endmac>
+    <endif>
+false
+<enddef>
+
+<def generate_pointer_expr expr:BinaryExpression source1 source2>
+#    <let tsize be <get_type_size source1.result_type.reference_type>>
+    <let tsize be source1.result_type.reference_type.base_type.bit_size>
+	# It would be nice to have a partial evaluator here.
+	# to simplify the (a*2)/2 type expressions
+	<handle_Expression source1 expr>
+       	<put_binaryOp expr.opcode>
+	(<handle_Expression source2 expr> / <size_in_bytes tsize>)
+    <endlet>
+<enddef>
+
+# source1 is the pointer.
+<def generate_pointer_expr_w_cast expr:BinaryExpression source1 source2>
+	(
+	<generate_cast_if_necessary expr.result_type source1>(
+       <generate_pointer_expr expr source1 source2> )
+	)
+<enddef>
+
+
+<def generate_pointer_arithmetic expr:BinaryExpression>
+    <if ([<is_pointer_sourceop expr.source1>])>
+	<generate_pointer_expr_w_cast expr expr.source1 expr.source2>
+    <elseif ([<is_pointer_sourceop expr.source2>])>
+        <generate_pointer_expr_w_cast expr expr.source2 expr.source1>
+    <else>
+       	/* No pointer source for pointer arithmetic */
+    <endif>
+<enddef>
+
+#	The next two have not been tested yet - you may need to change
+<def handle_Expression expr:ScAndExpression parent_expr>
+    (<handle_Expression expr.source1 expr> && <handle_Expression expr.source2 expr>)
+<enddef>
+
+<def handle_Expression expr:ScOrExpression parent_expr>
+    (<handle_Expression expr.source1 expr> || <handle_Expression expr.source2 expr>)
+<enddef>
+
+
+
+<def handle_Expression expr:BinaryExpression parent_expr> 
+    # make sure sizes are retained; c likes to extend to integer
+    <if (exists expr.result_type.name)>
+        <if (expr.result_type.bit_size < size_of_c_int)>
+            (<intsize[<expr.result_type.bit_size>]>)
+        <endif>
+    <endif>
+    <if (expr.opcode = "maximum")>
+       <if (!(exists maximum_defined))>
+            <use hash_defines>
+            \#define MAX(x,y) (((x)>(y))?(x):(y))</>
+            <set maximum_defined to true>
+            <use *>
+        <endif>
+	MAX(<handle_Expression expr.source1 expr>,
+		<handle_Expression expr.source2 expr>)
+	<endmac>
+    <endif>
+    <if (expr.opcode = "minimum")>
+       <if (!(exists minimum_defined))>
+            <use hash_defines>
+            \#define MIN(x,y) (((x)<(y))?(x):(y))</>
+            <set minimum_defined to true>
+            <use *>
+        <endif>
+        MIN(<handle_Expression expr.source1 expr>,
+                <handle_Expression expr.source2 expr>)
+        <endmac>
+    <endif>
+    <if (expr.opcode = "divfloor")>
+       <if (!(exists divfloor_defined))>
+            <use hash_defines>
+            \#define DIVFLOOR(x,y) ((((x)\<0) ^ ((y)\<0)) ? (((x)\<0) ? (((x)-(y)+1)/(y)) : (((x)-(y)-1)/(y))) : (x)/(y))</>
+            <set divfloor_defined to true>
+            <use *>
+        <endif>
+        DIVFLOOR(<handle_Expression expr.source1 expr>,
+                 <handle_Expression expr.source2 expr>)
+	  <endmac>
+    <endif>
+
+    <set expr[precedence] to <binary_op_precedence expr.opcode>>
+
+# DLH - this code doesn't work yet.
+#    <if ([<is_pointer_sourceop expr>])>
+#	<generate_pointer_arithmetic expr>
+#        <endmac>
+#    <endif>
+
+    # <if (exists parent_expr.precedence)>
+    #     <if (expr.precedence <= parent_expr.precedence)>
+            (
+    #     <endif>
+    # <endif>
+    <if ([<is_pointer_sourceop expr.source1>])>
+        <if (![<node_is_a_convert parent_expr>])>
+            <if ([<!TYPE expr.result_type.reference_type.base_type>] == "IntegerType")>
+                <if (intsize[<expr.result_type.reference_type.base_type.bit_size>] != "char")>
+                    <generate_cast expr.result_type>(
+                <endif>
+            <else>
+                <generate_cast expr.result_type>(
+            <endif>
+        <endif>
+        ((
+        <if ([<!TYPE expr.result_type.reference_type.base_type>] == "IntegerType")>
+         <if (expr.result_type.reference_type.base_type.is_signed != "true")>
+              unsigned\ 
+         <endif>
+        <endif>
+       char *) 
+    <endif>
+    <handle_Expression expr.source1 expr>
+    <if ([<is_pointer_sourceop expr.source1>])>
+        )
+    <endif>
+    
+    <put_binaryOp expr.opcode>
+    <if ([<is_pointer_sourceop expr.source2>])>
+        ((
+        <if ([<!TYPE expr.result_type.reference_type.base_type>] == "IntegerType")>
+         <if (expr.result_type.reference_type.base_type.is_signed != "true")>
+              unsigned\ 
+         <endif>
+        <endif>
+       char *) 
+    <endif>
+    <handle_Expression expr.source2 expr>
+    <if ([<is_pointer_sourceop expr.source2>])>
+        )
+    <endif>
+
+
+    <if ([<is_pointer_sourceop expr.source1>])>
+        <if (![<node_is_a_convert parent_expr>])>
+            <if ([<!TYPE expr.result_type.reference_type.base_type>] == "IntegerType")>
+                <if (intsize[<expr.result_type.reference_type.base_type.bit_size>] != "char")>
+                    )
+                <endif>
+            <else>
+                )
+            <endif>
+        <endif>
+    <endif>
+
+    # <if (exists parent_expr.precedence)>
+    #     <if (expr.precedence <= parent_expr.precedence)>
+           )
+    #     <endif>
+    # <endif>
+<enddef>
+
+<def handle_Expression expr:UnaryExpression parent_expr> 
+    <set expr[precedence] to <unary_op_precedence expr.opcode>>
+
+    # <if (exists parent_expr.precedence)>
+    #     <if (expr.precedence <= parent_expr.precedence)>
+            (
+    #     <endif>
+    # <endif>
+
+    <if (expr.opcode == "convert")>
+	<if ([<!TYPE parent_expr>] != "ArrayReferenceExpression")>
+            <generate_cast_if_necessary expr.result_type expr.source>(
+            <handle_Expression expr.source expr> 
+            )
+	<else>
+	    <generate_cast_if_necessary expr.result_type expr.source>(
+	    <handle_Expression expr.source expr>
+	    )
+	<endif>
+    <elseif (expr.opcode == "absolute_value")>
+	<if (!(exists absolute_value_defined))>
+	    <use hash_defines>
+	    \#define ABS(x) ((x>=0)?(x):(-x))</>
+	    <set absolute_value_defined to true>
+	    <use *>
+	<endif>
+	ABS(<handle_Expression expr.source expr>)
+    <else>
+	# no * necessary for  original  C code: i = !k; 
+        <put_unaryOp expr.opcode> <handle_Expression expr.source expr>
+    <endif>
+
+    # <if (exists parent_expr.precedence)>
+    #     <if (expr.precedence <= parent_expr.precedence)>
+           )
+    #     <endif>
+    # <endif>
+<enddef>
+
+<def handle_Expression expr:BitOffsetOfExpression parent_expr>
+    <expr.field.bit_offset.value>
+<enddef>
+
+
+### Output size of Type in bytes
+
+<def put_byte_size_type type:Type>
+    /* Cannot compute size of <!TYPE type> Type */
+<enddef>
+
+<def put_byte_size_type type:QualifiedType>
+    <put_byte_size_type type.base_type>
+<enddef>
+
+<def put_byte_size_type type:DataType>
+    <eval ([<type.bit_size>]/8)>
+<enddef>
+
+
+### Output size of Type in bits
+
+<def put_bit_size_type type:Type>
+    /* Cannot compute size of <!TYPE type> Type */
+<enddef>
+
+<def put_bit_size_type type:QualifiedType>
+    <put_bit_size_type type.base_type>
+<enddef>
+
+<def put_bit_size_type type:DataType>
+    <type.bit_size>
+<enddef>
+
+<def handle_Expression expr:ByteSizeOfExpression parent_expr>
+    <put_byte_size_type expr.ref_type>
+<enddef>
+
+<def handle_Expression expr:BitSizeOfExpression parent_expr>
+    <put_bit_size_type expr.ref_type>
+<enddef>
+
+
+### Output alignment of Type in bytes
+
+<def put_byte_alignment_type type:Type>
+    /* Cannot compute alignment of <!TYPE type> Type */
+<enddef>
+
+<def put_byte_alignment_type type:QualifiedType>
+    <put_byte_alignment_type type.base_type>
+<enddef>
+
+<def put_byte_alignment_type type:DataType>
+    <eval ([<type.bit_alignment>]/8)>
+<enddef>
+
+<def put_byte_alignment_type type:CProcedureType>
+    <eval ([<type.bit_alignment>]/8)>
+<enddef>
+
+
+### Output alignment of Type in bits
+
+<def put_bit_alignment_type type:Type>
+    /* Cannot compute alignment of <!TYPE type> Type */
+<enddef>
+
+<def put_bit_alignment_type type:QualifiedType>
+    <put_bit_alignment_type type.base_type>
+<enddef>
+
+<def put_bit_alignment_type type:DataType>
+    <type.bit_alignment>
+<enddef>
+
+<def put_bit_alignment_type type:CProcedureType>
+    <type.bit_alignment>
+<enddef>
+
+
+<def handle_Expression expr:ByteAlignmentOfExpression parent_expr>
+    <put_byte_alignment_type expr.ref_type>
+<enddef>
+
+<def handle_Expression expr:BitAlignmentOfExpression parent_expr>
+    <put_bit_alignment_type expr.ref_type>
+<enddef>
+
+<def handle_Expression expr:ThrowExpression parent_expr>
+    throw\ 
+    <if (exists expr.exception_object)>
+        <handle_Expression expr.exception_object>
+    <endif>
+<enddef>
+
+######################################################################################
+# Macros to handle Statements
+######################################################################################
+
+# handle pragmas attached to statements as annotations
+<def handle_pragma obj>
+   <foreach annote in obj.annotes
+	such that  (annote.name == "pragma")>
+	<foreach brick in annote.bricks>
+        	</0></>#pragma <brick.value></0></>
+	<endfor>
+        <endmac>
+    <endfor>
+<enddef>
+
+# this should do nothing when line annotes are turned off.
+<def handle_line obj>
+   <foreach annote in obj.annotes
+	such that  (annote.name == "line")>
+        	</0></>/*#line <annote.bricks.0.value> "<annote.bricks.1.value>"</0>*/</>
+        <endmac>
+    <endfor>
+<enddef>
+
+<def get_orig_name_annote obj>
+   <foreach annote in obj.annotes such that  (annote.name == "orig_name")>
+        <annote.bricks.0.value>
+        <endmac>
+    <endfor>
+<enddef>
+
+#default, must be first
+<def handle_Statement stat>
+    /* Statement <!TYPE stat> not implemented */
+<enddef>
+
+<def check_stdarg_include>
+<use hash_defines>
+\#include \<stdarg.h\></>
+<use *>
+<def check_stdarg_include>
+<enddef>
+<enddef>
+
+<def handle_Statement stat:VaStartStatement>
+<check_stdarg_include>
+va_start(*<handle_Expression stat.ap_address>,<stat.parmn.name>);
+<enddef>
+
+<def handle_Statement stat:VaEndStatement>
+<check_stdarg_include>
+va_end(*<handle_Expression stat.ap_address>);
+<enddef>
+	
+<def handle_Statement expr:CallStatement>
+    <if (exists expr.destination)>
+	<retrieve_sym_name expr.destination>
+        \ = \ 
+    <else>
+         (void)
+    <endif>
+    <if ([<!TYPE expr.callee_address>] == "LoadVariableExpression")>
+	(*<expr.callee_address.source.name>)
+    <else>
+        <if ([<is_delete_call expr.callee_address>])>
+            <handle_delete_statement expr>
+            <endmac>
+        <else>
+            <handle_call_target expr.callee_address>
+        <endif>
+    <endif>
+    ( 
+    <foreach arg in expr.arguments>
+        <if (!(first arg))> , <endif>
+        <handle_Expression arg "">
+    <endfor>
+    )<statement_terminator></>
+<enddef>
+
+<def handle_Statement stat:EvalStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <foreach expr in  stat.expressions>
+        <handle_Expression expr ""><statement_terminator></>
+    <endfor>
+<enddef>
+
+<def controlled_statement stat>
+    <if (exists stat)>
+	</+4></>
+	<handle_Statement stat>
+	</-4>
+    <else>
+	<statement_terminator>	
+    <endif>
+    </>
+<enddef>
+
+<def handle_Statement stat:IfStatement>
+    if ( <handle_Expression stat.condition ""> ) {</+4></>
+	<controlled_statement stat.then_part>
+	}</-4></>
+	<if (exists stat.else_part)>
+    else {</+4></>
+	    <handle_Statement stat.else_part>
+	    } </-4></>
+	   <endif>
+        <endif>
+<enddef>
+
+<def handle_Statement stat:WhileStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    while ( <handle_Expression stat.condition ""> ) {</+4></>
+	<if (exists stat.continue_label)>
+	    <handle_CodeLabelSymbol stat.continue_label></>
+	<endif>
+        <handle_Statement stat.body>
+	}</-4></>
+    <if (exists stat.stat.break_label)>
+        <handle_CodeLabelSymbol stat.break_label></>
+    <endif>
+<enddef>
+
+<def handle_Statement stat:DoWhileStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    do {</+4></>
+	<if (exists stat.continue_label)>
+            <handle_CodeLabelSymbol stat.continue_label></>
+        <endif>
+        <handle_Statement stat.body>
+        } while (<handle_Expression stat.condition ""> );</-4></>
+    <if (exists stat.stat.break_label)>
+        <handle_CodeLabelSymbol stat.break_label></>
+    <endif>
+<enddef>
+
+<def handle_comma_separated stat>
+    <set statement_terminator to >
+    <handle_Statement stat>
+    <set statement_terminator to ;>
+<enddef>
+
+<def handle_comma_separated stat:StatementList>
+    <set statement_terminator to ,>
+    <foreach s in stat.statements>
+      <if (last s)>
+          <set statement_terminator to >
+      <endif>
+        <handle_Statement s>
+    <endfor>
+    <set statement_terminator to ;>
+<enddef>
+
+
+<def handle_Statement stat:CForStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    for(</+2></>
+      <if (exists stat.before)>
+          <handle_comma_separated stat.before>
+      <endif>
+      ;
+      <if (exists stat.test)>
+          <handle_Expression stat.test>
+      <endif>
+      ;
+      <if (exists stat.step)>
+            <handle_comma_separated stat.step>
+      <endif>
+      ) {</+2></>
+    <if (exists stat.stat.continue_label)>
+        <handle_CodeLabelSymbol stat.continue_label></>
+    <endif>
+
+      <if (exists stat.body)>
+          <handle_Statement stat.body>
+      <endif>
+      }</-4></>
+    <if (exists stat.stat.break_label)>
+        <handle_CodeLabelSymbol stat.break_label></>
+    <endif>
+
+<enddef>
+
+
+
+
+<def handle_Statement stat:ForStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    for( 
+    <if (exists stat.lower_bound) >
+        <stat.index.name> = <handle_Expression stat.lower_bound "">
+    <endif>
+    ; 
+    <if (exists stat.upper_bound) >
+        <stat.index.name>
+        <put_binaryOp stat.comparison_opcode>
+        <handle_Expression stat.upper_bound "">
+    <endif>
+    ; 
+    <if (exists stat.step)>
+        <stat.index.name> += <handle_Expression stat.step "">
+    <endif>
+    ) {</></+2>
+    <handle_Statement stat.body>
+    </-2>} </>
+<enddef>
+
+<def handle_Statement stat:ScopeStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <handle_block stat.definition_block stat.symbol_table stat.body>
+<enddef>
+
+<def handle_Statement stat:VaStartOldStatement>
+/* unimplemented*/
+<enddef>
+
+<def handle_Statement stat:TryStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    try\ 
+    <handle_Statement stat.body>
+    <foreach catch_statement in stat.catch_statements>
+        <handle_Statement catch_statement>
+    <endfor>
+<enddef>
+
+<def handle_Statement stat:CatchStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    catch ( 
+    <if (exists stat.catch_argument)>
+        <put_decl stat.catch_type, [<retrieve_sym_name stat.catch_argument>]>
+    <else>
+        ...
+    <endif>
+    )
+    <handle_Statement stat.body>
+<enddef>
+
+<def dest_deref_required exp>
+    true
+<enddef>
+
+<def dest_deref_required exp:FieldAccessExpression>
+    false
+<enddef>
+
+<def dest_deref_required oprnd:ArrayReferenceExpression>
+    false
+<enddef>
+
+<def dest_deref_required oprnd:MultiDimArrayExpression>
+    false
+<enddef>
+
+<def dest_deref_required exp:Expression>
+    <if ([<!TYPE exp.result_type>] == "ReferenceType")>
+        false
+    <else>
+        true
+    <endif>
+<enddef>
+
+<def handle_Statement stat:StoreStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <let dest be stat.destination_address,
+         val be stat.value>
+    <if (([<!TYPE dest.result_type>] == "PointerType") &&
+        ([<!TYPE dest.result_type.reference_type.base_type>] == "ArrayType"))>
+       <if ([<!TYPE val.result_type>] == "ArrayType")>
+        memcpy(
+# This needs an overhaul like the StoreVariableStatement
+# because it ONLY works when these expressions are LoadVariableExpressions
+	    <handle_Expression dest "">,
+	    <handle_Expression val "">,
+            <eval ([<dest.result_type.reference_type.base_type.bit_size>]/8)>)<statement_terminator></>
+         <endmac>
+      <endif>
+    <endif>
+
+    <if ([<dest_deref_required dest>])>
+        * 
+    <endif>
+    (<handle_Expression dest "">) =
+
+    <if (([<does_implicit_deref val>]) &&
+         ([<equivalent_types dest.result_type.reference_type.base_type val.result_type>]))>
+        &
+    <endif>
+    (<handle_Expression val "">)<statement_terminator></>
+
+    <endlet>
+<enddef>
+
+<def handle_Statement stat:ReturnStatement>
+    <if (suppress_return)>
+        ;
+        <endmac>
+    <endif>
+    <handle_line stat>
+    <handle_pragma stat>
+    return\ 
+    <if (exists stat.return_value)>
+        <handle_Expression stat.return_value "">\ 
+    <endif>
+    <statement_terminator></>
+<enddef>
+
+<def goto_loop stat label>
+#   /* checking <!TYPE stat> <label.name> */</>
+   <if (([<!TYPE stat>] == "DoWhileStatement") ||
+        ([<!TYPE stat>] == "WhileDoStatement") ||
+        ([<!TYPE stat>] == "ForStatement"))>
+#       /* It's a LOOP */</>
+        # how do I test for pointer equality??
+#       /* [<label.name>] [<stat.break_label.name>] */
+        <if ([<label.name>] == [<stat.break_label.name>])>
+        #<if (label = stat.break_label)>
+           # [<label.name>] [<stat.break_label.name>]
+           break;</>
+           <endmac>
+        <endif>
+        <if ([<label.name>] == [<stat.continue_label.name>])>
+#       <if (label = stat.continue_label)>
+           continue;</>
+           <endmac>
+        <endif>
+        goto <retrieve_sym_name label>;</>
+        <endmac>
+   <endif>
+#   /* Not a LOOP */</>
+   <if ((exists stat.parent) &&
+        ([<!ISKINDOF stat.parent Statement>]))>
+#      /* Try Again */</>
+      <goto_loop stat.parent label>
+   <else>
+#      /* just a GOTO */</>
+      goto <retrieve_sym_name label>;</>
+   <endif>
+#   /* finished */</>
+<enddef>
+
+<def handle_Statement stat:JumpStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <goto_loop stat.parent stat.target>
+<enddef>
+
+<def handle_Statement stat:JumpIndirectStatement>
+goto *<handle_Expression stat.target>;</>
+<enddef>
+
+<def handle_Statement stat:BranchStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    if (<handle_Expression stat.decision_operand "">)
+    </+4></>
+    goto <retrieve_sym_name stat.target>;</-4></>
+<enddef>
+
+<def handle_Statement stat:MultiWayBranchStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    switch (<handle_Expression stat.decision_operand "">) {</+4></>
+        <foreach arm in stat.case>
+	    case <arm.first>:</>
+	    goto <retrieve_sym_name arm.second>;</>
+	<endfor>
+	<if (exists stat.default_target)>
+	    default: goto <retrieve_sym_name stat.default_target>;</>
+	<endif>
+        }</-4></>
+<enddef>
+
+<def handle_Statement stat:LabelLocationStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <handle_CodeLabelSymbol stat.defined_label>
+<enddef>
+
+<def handle_Statement stat:AssertStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    assert(<handle_Expression stat.asserted_value "">);</>
+<enddef>
+
+<def handle_Statement stat:MarkStatement>
+     <handle_line stat>
+<enddef>
+
+<def handle_Statement stat:SetFieldStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <handle_Expression stat.base_group_op "">.<stat.field.name> = <handle_expression stat.int_constant.value ""><statement_terminator></>
+<enddef>
+
+<def handle_Statement stat:SetElementStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <handle_Expression stat.base_array_op "">[<handle_expression stat.index "">] = <handle_expression stat.int_constant.value ""><statement_terminator></>
+<enddef>
+
+<def handle_Statement stat:StoreVariableStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <let dest be stat.destination,
+         val be stat.value,
+         name be stat.destination.name>
+    <if ([<!TYPE stat.destination.type.base_type>] == "ArrayType")>
+       <if ([<!TYPE stat.value.result_type>] == "ArrayType")>
+ 	   memcpy(&<name>,
+#  This needed an overhaul like the StoreVariableStatement
+#  because it ONLY worked when the source address is a LoadVariableExpression
+#  This is not quite right either.  Really, we would like to
+#  have a handle_address_of_expression that skips the load
+#  and handles a LoadVariableExpression by taking its address.
+#  This should also apply to the StoreVariable as well.
+# -DLH
+	   <if ([<!TYPE stat.value>] == "LoadExpression")>
+	       <handle_Expression stat.value.source_address "">,
+           <else>
+	        <handle_Expression stat.value "">,
+           <endif>
+	   <eval ([<stat.destination.type.base_type.bit_size>]/8)>)<statement_terminator></>
+           <endmac>
+       <else> 	
+ 	  *<name> = <handle_Expression stat.value "">;</>
+ 	   <endmac>
+       <endif>
+    <endif>
+
+    <retrieve_sym_name stat.destination> =\ 
+    <if (([<does_implicit_deref stat.value>]) &&
+         ([<equivalent_types dest.type val.result_type>]))>
+        &
+    <endif>
+    (<handle_Expression stat.value "">)<statement_terminator></>
+    <endlet>
+<enddef>
+
+<def handle_Statement stat:StoreMultiVariableStatement>
+    <handle_line stat>
+    <handle_pragma stat>
+    <foreach dest in stat.destinations>
+        <dest.name> = <handle_Expression stat.value ""><statement_terminator></>
+    <endif>
+<enddef>
+
+<def handle_Statement stat:CppVariableDefinitionLocationStatement>
+    <generate_variable_decl_def stat.variable_symbol>
+<enddef>
+
+<def handle_Statement object:StatementList>
+	<foreach stat in object.statements>
+         # /* <!TYPE stat>*/</>
+	    <handle_Statement stat>
+            # g++ requires a label to be followed by a statement,
+            # put out a null statement
+            <if ((exists Generating_CPP) && (last stat))>
+                <if ([<!TYPE stat>] == "LabelLocationStatement")>
+                    <statement_terminator></>
+                <endif>
+            <endif>
+	<endfor>
+<enddef>
+
+###############################################################################
+# Macros that handle procedure and block definitions
+###############################################################################
+
+<def handle_block definition_block symbol_table body>
+    {</+4></>
+    <handle_BasicSymbolTable symbol_table>
+    <handle_Statement body>
+    </-4></>
+    }</></>
+<enddef>
+
+<def handle_ProcedureDefinition proc_def>
+    <if (![<defined_in_symbol_table proc_def.procedure_symbol.name external_symbol_table>])>
+        static\ 
+    <endif>
+    <put_decl proc_def.procedure_symbol.type.result_type "">
+    <proc_def.procedure_symbol.name>
+    <put_arguments_from_proc_def proc_def proc_def.procedure_symbol.type></>
+    <handle_block proc_def.definition_block proc_def.symbol_table proc_def.body>
+<enddef>
+
+<def handle_initialization_list init_list>
+    <if (exists init_list.statements[0])>
+        :
+        <foreach stat in init_list.statements>
+            <if (!(first stat))> , <endif>
+            <if ([<!TYPE stat>] == "StoreStatement")>
+                <stat.destination_address.field.name>
+                (<handle_Expression stat.value>)
+            <else>
+                <stat.expressions[0].arguments[0].field.name>
+                <handle_Expression stat.expressions[0]>
+            <endif>
+        <endfor>
+    <endif>
+<enddef>
+
+<def handle_method_definition method_def class>
+  <let method_symbol be method_def.procedure_symbol>
+    <if (![<is_constructor_or_destructor method_symbol class.name>])>
+        <put_decl method_symbol.type.result_type "">
+    <endif>
+
+    <class.name>::<method_symbol.name>
+    <put_arguments_from_proc_def method_def method_symbol.type></>
+
+    <if ([<is_constructor method_symbol class.name>])>
+        <handle_initialization_list method_def.member_initialization_list>
+    <endif>
+
+    <if ([<is_constructor_or_destructor  method_symbol class.name>])>
+        <set suppress_return to true>
+    <endif>
+    <handle_block method_def.definition_block method_def.symbol_table method_def.body>
+    <set suppress_return to false>
+  <endlet>
+<enddef>
+
+<def handle_class_definitions symbol_table>
+    <foreach class in symbol_table.symbol_table_objects
+      such that ([<!TYPE class>] == "CppClassType")>
+        <handle_class_definitions class.group_symbol_table>
+    <endfor>
+
+    <foreach class in symbol_table.symbol_table_objects
+      such that ([<!ISKINDOF class ClassType>])>
+        <foreach method_def in class.definition_block.procedure_definitions
+          such that (!method_def.procedure_symbol.is_inline)>
+            <handle_method_definition method_def class>
+        <endfor>
+    <endfor>
+<enddef>
+
+#==============================================================================
+# Start of macro main line
+#==============================================================================
+<init_s2c>
+<set statement_terminator to ;>
+#	establish an area at top of program for #defines we might want
+<use hash_defines>
+<use body_of_program>
+<handle_global_symbol_table external_symbol_table file_blocks>
+<handle_global_symbol_table file_set_symbol_table file_blocks>
+</>
+<foreach file in file_blocks>
+
+    #/*</> * from file <file.source_file_name>*/</> </></>
+    <handle_file_symbol_table file.symbol_table>
+    </>
+    <handle_ProcedureDefinitions file.definition_block.procedure_definitions>
+    <handle_class_definitions external_symbol_table>
+<endfor>
+

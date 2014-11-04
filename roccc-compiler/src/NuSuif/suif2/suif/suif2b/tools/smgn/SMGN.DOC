@@ -1,0 +1,190 @@
+A quick instroduction to Smeg.
+=============================
+
+Smeg procedes in three stages.
+
+i)	Read in a grammar
+
+ii) 	Use the grammar to parse somne text
+
+iii)	Use the results of the parse to process a macro file.
+
+
+Format of the grammar:
+=====================
+
+The grammar consists of productions of the form
+
+<lhs> ::= <rhs> [ | <rhs>
+
+Terminal symbols are written literally. for example
+
+<if_stat> ::= if <expression> then <statement> | if <expression> then <statement> else <else_part>
+
+There is a special pseudo-nonterminal <identifier> which matches any 
+identifier.
+
+The Parser
+=========
+
+The parser is a straight-forward back-tracking parser. See the README file
+for limitations of the current parser.
+
+When a parse is successful, a tree is generated representing the text parsed.
+In this tree, terminals (except for <identifier> are removed. Each node on the
+tree contains a list of names, which are the names of the non-terminals matched
+by the production. (This means that all the non-terminals in a production 
+must have unique names!)
+
+The text matched by a production is always present as the "text" field.
+
+The -p option on smgn causes this structure to be pronted out. Portions of it can also
+be printed out with the "show" macro command.
+
+The Macro Processor.
+===================
+
+The macro processor uses the tree created by the parse to expand some text 
+provided by the user. 
+
+Parameters can be substituted in the text by enclosing the name of the parameter
+in angle brackets. For example <statement.if_stat.expression.text> would 
+substitute the text of the if expression for this angle bracketed name.
+
+It is not an error to expand a field that does not exist. If you do this, nothing is
+output. You will get a warning message.
+
+There are also a number of commands available. 
+
+<if (expression)> ...  <endif>
+==============================
+
+The text inside the if is only expanded if the expression is true. The usual operators
+(< <= = > >= !=) are implemented. ! is unary not. There is also an "exists" operator.
+
+<if (exists statement.if_stat.else_part)> 
+
+This is true if there is a node in the tree for the given name. Note that there need
+not be anything in it! If you want to make sure it is not empty, test
+
+<if (exists statement.if_stat.else_part.text)>
+
+the text field is only created if not empty.
+
+Note the use of the round brackets inside the angle brackets. This is required.
+
+There are <else> and <elseif (expression)> clauses. These have not been extensively tested.
+
+<let id be name> .... <endlet>
+==============================
+
+defines the is to be the same as name. This allows short-hand forms.
+
+<def macro_name p1 p2 ...>
+==========================
+
+Defines a macro. The names (p1, p2 etc) are the names by which parameters will be knwon within
+thew macro. You can expand macros by writing <macro_name actual1 actual2 ...> (NB - nop commas!)
+
+The text inside a macro definition is not expanded until the macro is called. All macros and 
+variables (such as those set with "let") are accessible in the macro.
+
+There is a special command <endmac> which will immediately terminate expansion of a macro when 
+encountered. You can put this in and if to only terminate the macro if the condition is true.
+
+<foreach id in name> .... <endfor>
+==================================
+
+Allows iteration through a list. Smeg handles list productions specially. If you have a production
+of the form
+
+<lhs> ::= <element> | <element> <lhs>
+
+NB - currently it must have exactly this form.
+
+Then instead of a tree of elements you get a flattened list. This list can be iterated across with
+forall.
+
+The syntax would be:
+
+<forall element in lhs>
+
+Note that this points at the <element> node. You must write <element.element> to actually get the fields
+of the element.
+
+You can "look through" iterators. For example, I could write:
+
+<forall type_dec in lhs.element.type_declarations.type_dec>
+
+And this would give me a list of type decs in elements. Any element that did not contain a type_dec would
+be ignored.
+
+There is also a "such that" clause which can be used to further select items.
+
+<forall type_dec in  lhs.element.type_declarations.type_dec such that (type_dec.text = "int")>
+
+Which allows further selection of items.
+
+<echo text>
+===========
+
+Used for debugging. The text is printed to stdout. Note that the text is expanded with the macro
+processor before output.
+
+<show name>
+===========
+
+Show the tree anchored at a name. This is real useful inside macros when you want to see exactly
+what has been passed.
+
+<set name to text>
+==================
+
+This command allows you to put new nodes into the tree. name can be a multiple level names (separated
+by dots). text is expanded before entry into the tree, so you always get a string; you cannot copy 
+subtrees this way (needs a setq)
+
+This command can be used to build tables because there is a second form of specifying a name. You can
+given part of a name in square parentheses.
+
+statement.if_stat[else_part]
+
+This happens to be exactly equivalent to statement.if_stat.else_part. The difference is that the
+text in the square brackets is macro expanded before name lookup is done. This allows you to build tables.
+
+For example, suppose we have a list of declarations and you want to find duplicates. You could write.
+
+<foreach id in declarations>
+  <if (exists declarations[<id.declaration.identifier>])>
+    <echo <id.declaration.identifier> already exists>
+  <endif>
+  <set declarations[<id.declaration.identifier>] to <declarations[<id.declaration.type.identifier>]
+<endfor>
+
+Note that the result of the macro expansion need not be a name. Any text string can and will
+be entered into the tree.
+
+</>
+===
+
+This outputs a newline in the output. Because of the intermixing of commands and text, real newlines
+are not output. You have to use this command to get one.
+
+</=n> </+n> </-n>
+=================
+
+These commands change the indentation of lines. Leading spaces are always skipped. You must use these
+commands to control indentation of output text. You must issue this command before the new line is 
+requested for the following line to be indented by the new amount. This could be considered a bug.
+
+#
+=
+
+Not really a command. Any line starting with this is a comment line. IF you need a line of
+output to start with a # (to output #include, for example) quite the # with a \.
+	
+
+
+
+
+

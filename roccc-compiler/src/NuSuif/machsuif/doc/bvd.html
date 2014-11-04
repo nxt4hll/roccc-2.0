@@ -1,0 +1,1229 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>The Machine SUIF Bit-Vector Data-Flow-Analysis Library</title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+
+           <!-- Omit \clearpage for new source file-->
+<p>
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>The Machine SUIF Bit-Vector Data-Flow-Analysis Library</a></h1>
+<!-- (Leave \title{} at left margin ...-->
+<!--  ... to aid HTML extraction.)-->
+<address><em>Release version 2.02.07.15</em> <br><br>Glenn Holloway and Allyn Dimock <br>{holloway,dimock}@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<p>
+<!-- Handy macros for this document only.-->
+
+
+
+<p>
+
+
+
+
+
+
+
+
+
+
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+The bit-vector data-flow (BVD) library of Machine SUIF <b>[cite&nbsp;<a href="#NWcite-bibmachine">bibmachine</a>]</b>
+is a framework for iterative, bit-vector-based data-flow analyzers.  It
+uses Machine SUIF's control-flow graph (CFG) library <b>[cite&nbsp;<a href="#NWcite-bibcfg">bibcfg</a>]</b> to
+parse the program being analyzed into basic blocks, and it associates
+data-flow results with these CFG nodes.
+<p>
+Each specific data-flow solver is derived from an abstract class called
+<code>bvd</code>, which supplies the generic machinery.  It is quite easy to
+develop solvers for problems that fit the classical paradigm.
+<p>
+At present, the BVD library contains two concrete solvers, one that
+computes liveness information and another that does reaching-definitions
+analysis.  Others will follow as the need for them arises.
+<p>
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">Class Bvd</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc5">Terminology.</a></li>
+      <li><a href="#toc6">The base class for data-flow solvers.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc7">Accessing data-flow results</a></li>
+  <li><a href="#toc8">Constructing a data-flow analyzer</a></li>
+  <li><a href="#toc9">Solving a data-flow problem</a></li>
+  <li><a href="#toc10">Analyzing individual instructions</a></li>
+  <li><a href="#toc11">Implementation</a></li>
+  <li><a href="#toc12">Header file solve.h</a></li>
+  </ul>
+<li><a href="#toc13">Flow functions</a></li>
+  <ul compact>
+  <li><a href="#toc14">Class FlowFun</a></li>
+  <li><a href="#toc15">Implementation</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc16">Inlined methods.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc17">Header file flow_fun.h</a></li>
+  </ul>
+<li><a href="#toc18">Class Liveness</a></li>
+  <ul compact>
+  <li><a href="#toc19">Class Liveness</a></li>
+  <li><a href="#toc20">Class DefUseAnalyzer</a></li>
+  <li><a href="#toc21">Class RegPartition</a></li>
+  </ul>
+<li><a href="#toc22">Mapping operands to bit-vector slots</a></li>
+  <ul compact>
+  <li><a href="#toc23">Class RegSymCatalog</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc24">Constructing a RegSymCatalog.</a></li>
+      </ul>
+    </ul>
+  <li><a href="#toc25">Implementation details</a></li>
+    <ul compact>
+    <li><a href="#toc26">Class RegSymCatalog</a></li>
+    </ul>
+  <li><a href="#toc27">Header file for module catalog</a></li>
+  </ul>
+<li><a href="#toc28">Library initialization</a></li>
+<li><a href="#toc29">Header file for the BVD library</a></li>
+<li><a href="#toc30">Copyright</a></li>
+<li><a href="#toc31">Acknowledgments</a></li>
+<li><a href="#toc32">References</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+Data-flow analysis (DFA) is a textbook example of code reuse
+<b>[cite&nbsp;<a href="#NWcite-bibdragon">bibdragon</a>, <a href="#NWcite- bibcrafting"> bibcrafting</a>, <a href="#NWcite- bibmuchnick"> bibmuchnick</a>]</b>.  Available expressions,
+live variables, reaching definitions, or other useful sets of
+properties can be computed for all points in a program using a generic
+algorithmic framework.  Typically, the property sets are represented as
+bit vectors, and the generic algorithm propagates them iteratively over
+a flow graph, transforming them monotonically to reflect the effects of
+basic blocks and the confluence of edges, until they converge at all
+points.  Different problems have different initial conditions for the
+bit vectors (empty or full), different confluence transformations (union
+or intersection), different directions of traversal (with control flow
+or against it), and different rules for expressing the effects of a
+basic block.  But the fact that their solvers fit a common pattern is
+useful, because once the framework is in place, it enables new analyzers
+to be added quickly and correctly.
+<p>
+The bit-vector data-flow (BVD) library of Machine SUIF <b>[cite&nbsp;<a href="#NWcite-bibmachine">bibmachine</a>]</b>
+is a framework for iterative, bit-vector-based data-flow analyzers.  It
+uses Machine SUIF's control-flow graph (CFG) library <b>[cite&nbsp;<a href="#NWcite-bibcfg">bibcfg</a>]</b> to
+parse the program being analyzed into basic blocks, and it associates
+data-flow results with these CFG nodes.
+<p>
+Each specific data-flow solver is derived from an abstract class called
+<code>bvd</code>, which supplies the generic machinery.
+<a name="NWD2">Section&nbsp;</a><a href="#sec-class-bvd">[-&gt;]</a> describes this class, and
+Section&nbsp;<a href="#sec-flow-functions">[-&gt;]</a> describes data structures used by
+<code>bvd</code> for capturing data flow that is local to a basic block.
+<p>
+For now, the BVD library contains a solver for liveness information and a
+reaching-definitions analyzer.  The <code>liveness</code> subclass of <code>bvd</code> is
+described in Section&nbsp;<a href="#sec-class-liveness">[-&gt;]</a>.
+Section&nbsp;<a href="#sec-operand-catalogs">[-&gt;]</a> develops the map from operands to
+bit-vector positions used in liveness analysis.
+<p><h2><a name=toc4>Class <code>Bvd</code></a></h2>
+<a name="sec-class-bvd"><b>[*]</b></a>
+<p>
+The classical iterative, bit-vector-based algorithm for data-flow
+analysis is covered in many general-purpose texts on optimizing
+compilation.  We assume you are familiar with the basic approach, and we
+concentrate on describing how to use the BVD library to develop
+instances of this useful paradigm.  Our running example will be the
+liveness analyzer, the details of which are described in
+Sections&nbsp;<a href="#sec-class-liveness">[-&gt;]</a> and&nbsp;<a href="#sec-operand-catalogs">[-&gt;]</a>.
+<p>
+<h5><a name=toc5>Terminology.</a></h5>
+<p>
+The data-flow analyzers covered here do two things: they identify an
+interesting class (or <em>universe</em>) of syntactic or semantic program
+elements, and for each such element, they identify the points in the
+program to which the element, or some aspect of the element, ``flows''.
+For an available-expressions problem, the elements are syntactic
+expressions evaluated by the program, and an expression <i>e</i> flows to
+point <i>p</i> in the program if <i>e</i> is computed (<em>generated</em>) on every
+path to <i>p</i> without being invalidated (<em>killed</em>) by an assignment
+to some variable in <i>e</i> before <i>p</i> is reached.  For the
+reaching-definitions problem, the universe of interesting elements
+consists of the statements that assign to, or otherwise side-affect
+storage locations, and these definitions flow to all the program points
+reached by paths that don't contain an overriding assignment.  For a
+liveness problem, the universe consists of storage cells, such as
+variables and registers.  The liveness of a variable is generated by a
+use of the variable, and it (the liveness) flows backward along control
+paths until killed by a definition of (e.g., an assignment to) the
+variable.
+<p>
+In the examples just mentioned, the data-flow behavior of each element
+in the chosen universe is independent of the others.  Iterative
+data-flow analysis, as implemented in the BVD library, exploits this
+fact by dealing with all the elements in parallel.  For each element <i>e</i>
+and each program point <i>p</i>, it wants to produce one bit of information:
+true if <i>e</i> flows to <i>p</i> and false if it does not.  The parallelism is
+achieved by packing these bits into bit vectors, with one bit position,
+or <em>slot</em>, per universe element, and then solving the data-flow
+equations for all elements at once by computing on the bit vectors
+instead of the individual slots.
+<p>
+To avoid the storage cost of allocating a different bit vector for every
+point in the program, it is customary to associate them only with the
+entry and/or exit points of nodes in the CFG of the program.  It is easy
+to propagate from one of these node boundaries through the linear
+sequence of instructions of the node when necessary.
+<p>
+We take exactly this classical approach.  We assume that every data-flow
+solver determines the universe of interesting elements and assigns a
+small non-negative number as the identifier of each element.  We call
+this number the <em>slot</em> of the element.  Instead of using the
+bit-vector or bit-string metaphor when describing flow-analysis results,
+we use sets of slots.  That is, instead of describing computations in
+terms of bitwise boolean operations on vectors, we use set operations on
+sets of small integers.  The two metaphors are conceptually equivalent,
+and of course, we make sure that the sets used for data-flow analysis
+have the complexity properties that have made ``bit-vector-based''
+data-flow analysis effective and popular.  The advantage of the set
+metaphor is simply that much of the machinery that works for sets based
+on bit vectors carries over smoothly to sets with other performance
+properties.
+<p>
+The slot-set types used in this library are derived from <code>NatSet</code>, a
+natural-number set class defined in the Utilities section of the
+<code>machine</code> library document <b>[cite&nbsp;<a href="#NWcite-bibmachine">bibmachine</a>]</b>.  You should familiarize
+yourself with the properties of those set types if you haven't already.
+For data-flow analysis results, we use the class <code>NatSetDense</code>, which
+has bit-vector-like complexity traits.  Where a sparse representation is
+more suitable, we use the list-based set class <code>NatSetSparse</code>.  The
+<a name="NWD3">operations on all the </a><code>NatSet</code> classes are the same.  There is an
+iterator class for these set types called <code>NatSetIter</code>.
+<p>
+
+<h5><a name=toc6>The base class for data-flow solvers.</a></h5>
+<p>
+The abstract base class from which you derive a data-flow
+solver is <code>Bvd</code>:
+<p>
+<pre><a name="NWoqTyD-D8tdK-1" href="#NWD3"><dfn>&lt;class <code>Bvd</code>&gt;=</dfn></a> <b>(<a href="#NWoqTyD-e318W-1">U-&gt;</a>)</b>
+class Bvd {
+  public:
+    virtual ~Bvd() { }
+
+    const NatSet* in_set(CfgNode*)  const;
+    const NatSet* out_set(CfgNode*) const;
+
+    virtual void find_kill_and_gen(Instr *) = 0;
+
+    virtual const NatSet* kill_set() const = 0;
+    virtual const NatSet* gen_set() const = 0;
+
+    virtual int num_slots() const = 0;
+    void print(CfgNode*, FILE* = stdout) const;
+
+  protected:
+    enum direction { forward, backward };
+    enum confluence_rule { any_path, all_paths };
+
+    Bvd(Cfg*,
+        direction = forward,
+        confluence_rule = any_path,
+        FlowFun *entry_flow = NULL,
+        FlowFun *exit_flow = NULL,
+        int num_slots_hint = 0);
+
+    bool solve(int iteration_limit = INT_MAX);
+
+<a name="NWoqTyD-D8tdK-1-u1" href="#NWD4"><i>&lt;<code>Bvd</code> details&gt;</i></a>
+};
+</pre><p>
+
+<h3><a name=toc7>Accessing data-flow results</a></h3>
+<p>
+Note that most methods of <code>Bvd</code> are protected from public use.  Apart
+from its destructor, the public methods are all about accessing the
+results of data-flow analysis.
+<p>
+The <code>num_slots</code> method (which must defined by a concrete subclass)
+returns the total number of allocated slots once the solver has been
+run.  In other words, it is the size of the universe of items found in
+the program during data-flow analysis.  At present, this and the
+<code>print</code> method are mainly used for debugging.  The essential public
+methods are those that access the sets associated by <code>Bvd</code> with each
+CFG node.
+<p>
+<table><!-- alignment is l@{\hspace*{2em}}p{.7\linewidth}--><!-- 2 columns--><tr><td align=left valign=top><code>in_set(</code><i>n</i><code>)</code>     </td><td align=left valign=top>Returns the slot set for the (control) entry
+point of node <i>n</i>. </td></tr>
+<tr><td align=left valign=top><code>out_set(</code><i>n</i><code>)</code>    </td><td align=left valign=top>Returns the slot set for the (control) exit
+point of node <i>n</i>.
+</td></tr></table>
+<p>
+The sets returned are owned by the <code>Bvd</code> object; you don't need to
+worry about deleting them.
+<p>
+To use liveness analysis as an example, <code>in_set(</code><i>node</i><code>)</code>
+indicates which items are live on entry to <i>node</i> and
+<code>out_set(</code><i>node</i><code>)</code> indicates those live at its exit.  (Note
+that, even though liveness is a ``backward'' data-flow problem, the
+<code>in_set</code> method refers to a node's control-flow entry, not its exit.)
+<p>
+
+<h3><a name=toc8>Constructing a data-flow analyzer</a></h3>
+<p>
+The concrete subclass that derives a specific data-flow solver from
+<code>Bvd</code> supplies the following parameters to its constructor.
+<p>
+<ul>
+<li>The CFG of the procedure to be analyzed.
+<p>
+<li>The <em>direction</em> of the data-flow problem: either <code>forward</code>,
+following edges in the direction of control flow from the entry
+node, or <code>backward</code>, following edges in reverse from the exit
+node.
+<p>
+Liveness, for example, is a backward problem.  Liveness
+information is <em>generated</em> by use occurrences of variables
+(say), and propagates backward against the direction of control
+flow until it is <em>killed</em> by definition occurrences (e.g.,
+assignments).
+<p>
+<li>The <em>confluence rule</em> to be used when data flow from
+multiple nodes is combined: either <code>all_paths</code> or <code>any_paths</code>.
+<p>
+The <code>all_paths</code> rule means that to obtain the slot describing
+data flow entering node <i>n</i>, we use <em>intersection</em> over the
+sets that represent flow out of <i>n</i>'s data-flow predecessors:
+<p>
+<blockquote><i>before[n] = INTERSECTION(p&nbsp;<b>in</b>&nbsp;pred(n))&nbsp;&nbsp;after[p]
+</i></blockquote><p>
+The <code>any_path</code> rule is the same, except that it uses
+<em>union</em> instead of intersection:
+<p>
+<blockquote><i>before[n] = UNION(p&nbsp;<b>in</b>&nbsp;pred(n))&nbsp;&nbsp;after[p]
+</i></blockquote><p>
+The set of data-flow predecessors <i><i>pred</i>(n)</i> depends on
+the direction of the problem.  In a forward problem, they are the
+control-flow predecessors; in a backward problem, the control-flow
+successors.  In a forward problem, <i><i>before</i>[n]</i> is the
+information at the control-flow entry of <i>n</i> and
+<i><i>after</i>[n]</i> is that at its exit.  In a backward problem,
+it's the other way around.
+<p>
+For all nodes <i>n</i>, the initial value of <i><i>before</i>[n]</i>
+depends on the confluence rule.  For an any-path problem, these
+sets start empty and accrue information through set union.  With
+an all-paths (intersection) problem, the <i><i>before</i>[n]</i>
+start as the universal set and the final solution is carved out by
+intersection.
+<p>
+The liveness example is an any-path problem: a variable is live at
+the exit of node <i>n</i> (i.e., the point before data flow propagates
+backward through <i>n</i>) if it is live at the entry of any of <i>n</i>'s
+control-flow successors (i.e., its data-flow predecessors).
+<p>
+<li>Special flow functions for the entry (<code>entry_flow</code>) and exit
+(<code>exit_flow</code>) nodes.  Since these nodes contain no code, their
+local data flow is by default represented using the identity
+function on slot sets (Section&nbsp;<a href="#sec-flow-functions">[-&gt;]</a>).  If
+there are special boundary conditions for a particular data-flow
+problem, however, use (<code>entry_flow</code>) and/or
+(<code>exit_flow</code>) to express them.
+<p>
+<li>An optional estimate, <code>num_slots_hint</code>, of the number of slots
+in each slot set of the analysis.  This can be used by the
+implementation to preallocate storage for data-flow results.
+</ul>
+<p>
+
+<h3><a name=toc9>Solving a data-flow problem</a></h3>
+<p>
+In addition to its constructor, class <code>Bvd</code> defines the protected
+method <code>solve</code> for use by its subclasses, typically in their own
+constructor methods.  <code>solve</code> initializes the slot sets associated
+with nodes and then pre-computes the net effect of each node as a
+flow function from slot sets to slot sets.
+<p>
+Next, <code>solve</code> computes the local flow functions that capture the
+effects of the individual nodes.  A flow function is a slot-set
+transformer; it captures the total effect of a CFG node <i>n</i> in one data
+structure that is applied to <i><i>before</i>[n]</i>, yielding
+<i><i>after</i>[n]</i>.  Starting with the plain identity function as the
+flow function for the node, <code>solve</code> scans its instructions in forward
+(backward) order for a forward (backward) problem.  It first uses the
+<i><i>kill</i>[i]</i> set for instruction <i>i</i> to alter the flow function so
+that it removes the corresponding slots from the argument set.  Then it
+uses <i><i>gen</i>[i]</i> to make the flow function insert the generated
+slots.  For the entry (exit) node, it uses the <code>entry_flow</code>
+(<code>exit_flow</code>) parameter to accommodate boundary conditions, as
+discussed above.
+<p>
+Finally, <code>solve</code> runs an iterative propagation algorithm on the slot
+sets until it converges at a fixed point or until a caller provided
+iteration limit is reached.  In the latter case, <code>solve</code> returns
+<code>false</code> to indicate abnormal termination.
+<p>
+
+<h3><a name=toc10>Analyzing individual instructions</a></h3>
+<p>
+The remaining public member functions are pure virtual methods to be
+defined by the subclass for a specific data-flow problem.  They handle
+the analysis of single instructions.
+<p>
+<table><!-- alignment is l@{\hspace*{2em}}p{.7\linewidth}--><!-- 2 columns--><tr><td align=left valign=top><tt>find_kill_and_gen(<i>i</i>)</tt></td><td align=left valign=top>Prepares to enumerate the <i>kill</i>
+and <i>gen</i> sets of instruction <i>i</i>. </td></tr>
+<tr><td align=left valign=top><code>kill_set()</code>          </td><td align=left valign=top>Returns the <i>kill</i> set
+of the instruction analyzed
+by <code>find_kill_and_gen</code>. </td></tr>
+<tr><td align=left valign=top><code>gen_set()</code>           </td><td align=left valign=top>Returns the <i>gen</i> set
+of the instruction analyzed
+by <code>find_kill_and_gen</code>.
+</td></tr></table>
+<p>
+When the flow function that represents the net effect of a node is being
+constructed, the solver calls <code>find_kill_and_gen</code> once on each
+instruction in the node.  It then uses the <code>kill_set</code> and
+<code>gen_set</code> methods to obtain the results that <code>find_kill_and_gen</code>
+has found, i.e., to scan the slots killed by and those generated by the
+current instruction.
+<p>
+In the liveness example,  the slots killed by an instruction are those
+for variables or registers that the instruction defines, i.e., writes
+to.  The slots generated by an instruction are those for variables or
+registers that it uses.  <code>find_kill_and_gen</code> determines the definition
+set and the use set for the instruction and <code>kill_set</code> and
+<code>gen_set</code> allow the solver to access them.
+<p>
+
+<h3><a name=toc11>Implementation</a></h3>
+<p>
+Our implementation uses the following storage:
+<p>
+<ul>
+<li><a name="NWD4">A </a><code>FlowFun</code> for each node in the CFG, reclaimed after <code>solve</code>.
+<li>A <code>NatSetDense</code>  for the entry of each node.
+<li>A <code>NatSetDense</code>  for the exit of each node.
+</ul>
+<p>
+
+The non-public members of <code>Bvd</code> are declared as follows.
+<p>
+<pre><a name="NWoqTyD-324Hd3-1" href="#NWD4"><dfn>&lt;<code>Bvd</code> details&gt;=</dfn></a> <b>(<a href="#NWD3">&lt;-U</a>)</b>
+  protected:
+    Cfg* _graph;
+    FlowFun* _entry_flow;
+    FlowFun* _exit_flow;
+    int _num_slots_hint;
+
+    direction _dir;
+    confluence_rule _rule;
+
+    Vector&lt;FlowFun&gt; _flow;              // slot set transformer for each node
+    Vector&lt;NatSetDense&gt; _in;            // node-entry slot set for each node
+    Vector&lt;NatSetDense&gt; _out;           // node-exit  slot set for each node
+
+    Vector&lt;NatSetDense&gt; *_before;       // &amp;_in  if forward, &amp;_out if backward
+    Vector&lt;NatSetDense&gt; *_after;        // &amp;_out if forward, &amp;_in  if backward
+
+    void compute_local_flow(int);       // subroutines ...
+    void combine_flow(CfgNode *);       //   ... of method solve
+</pre><p>
+
+
+<h3><a name=toc12><a name="NWD5">Header file </a><code>solve.h</code></a></h3>
+<p>
+Class <code>Bvd</code> is defined in header file <code>solve.h</code>, which also
+declares the initialization and finalization functions for the
+BVD library:
+<p>
+<pre><a name="NWoqTyD-2yQnwg-1" href="#NWD5"><dfn>&lt;BVD library initialization&gt;=</dfn></a> <b>(<a href="#NWoqTyD-e318W-1">U-&gt;</a> <a href="#NWDL">U-&gt;</a>)</b> <b>[D<a href="#NWDK">-&gt;</a>]</b>
+extern &quot;C&quot; void enter_bvd(int *argc, char *argv[]);
+extern &quot;C&quot; void exit_bvd(void);
+</pre><p>
+
+<pre><a name="NWoqTyD-e318W-1" href="#NWoqTyD-e318W-1"><dfn>&lt;bvd/solve.h&gt;=</dfn></a>
+/* file &quot;bvd/solve.h&quot; -- Iterative bit-vector data-flow solver */
+
+<a name="NWoqTyD-e318W-1-u1" href="#NWDO"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef BVD_SOLVE_H
+#define BVD_SOLVE_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;bvd/solve.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+#include &lt;cfg/cfg.h&gt;
+
+#include &lt;bvd/flow_fun.h&gt;
+
+
+<a name="NWoqTyD-e318W-1-u2" href="#NWD3"><i>&lt;class <code>Bvd</code>&gt;</i></a>
+
+<a name="NWoqTyD-e318W-1-u3" href="#NWD5"><i>&lt;BVD library initialization&gt;</i></a>
+
+#endif /* BVD_SOLVE_H */
+</pre><p>
+<h2><a name=toc13>Flow functions</a></h2>
+<a name="sec-flow-functions"><b>[*]</b></a>
+<p>
+Muchnick <b>[cite&nbsp;<a href="#NWcite-bibmuchnick">bibmuchnick</a>]</b> and other authors present the theoretical
+basis for data-flow problems in terms of <em>flow functions</em> (or
+sometimes <em>transfer functions</em>).
+<p>
+Here we define the three monotone <i><i>boolean</i></i>-to-<i><i>boolean</i></i>
+functions, extended pointwise to vectors of booleans, i.e., bit vectors.
+As in Section&nbsp;<a href="#sec-class-bvd">[&lt;-]</a> we use the slot-set metaphor instead
+of talking in terms of bit vectors, and so these flow functions operate
+on values of type <code>NatSetDense</code>.  Class <code>FlowFun</code> has a method
+<code>apply</code> that applies the flow function that it represents to a
+<code>NatSetDense</code> value.  This allows us to encode operations on
+<code>NatSetDense</code>s directly from the theory.
+<p>
+The reason that we get away with using the theory in practice is that
+there are only three monotone boolean functions (the identity function,
+the function that always returns the constant 
+
+<b>top</b> (
+
+<i>true</i>, 1), and the function that always returns the constant
+
+<b>bottom</b> (
+
+<i><a name="NWD6">false</a></i>, 0).  So we only need two bits to represent a monotone
+<i><i>boolean</i></i>-to-<i><i>boolean</i></i> function.  Thus the pointwise
+extension of boolean functions to slot sets can be represented in only
+twice as much space as the sets that they manipulate.
+<p>
+
+<h3><a name=toc14>Class <code>FlowFun</code></a></h3>
+<p>
+<pre><a name="NW3gAiyp-2b5Hjz-1" href="#NWD6"><dfn>&lt;class <code>FlowFun</code>&gt;=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b>
+class FlowFun {
+  public:
+    FlowFun(int num_slots_hint = 0);
+
+    FlowFun(const FlowFun&amp;);
+    void operator=(const FlowFun&amp;);
+    
+    void set_to_top();
+    void set_to_top(int slot);
+    void set_to_bottom();
+    void set_to_bottom(int slot);
+    void set_to_id();
+    void set_to_id(int slot);
+    
+    void apply(NatSetDense &amp;updated);
+    
+    void print(int bound, FILE* = stdout);
+    
+<a name="NW3gAiyp-2b5Hjz-1-u1" href="#NWD7"><i>&lt;<code>FlowFun</code> details&gt;</i></a>
+};
+</pre><p>
+
+When you create an instance of <code>FlowFun</code>, it is initialized to the
+identity function.  The constructor takes an integer that the
+implementation can use as an estimate of slot-set sizes.
+<p>
+<table><!-- alignment is l@{\hspace*{2em}}p{.7\linewidth}--><!-- 2 columns--><tr><td align=left valign=top><code>set_to_top(n)</code>   </td><td align=left valign=top>Makes <code>this</code> a function that
+sets bit <code>n</code> to 1 (<i><b>top</b></i>). </td></tr>
+<tr><td align=left valign=top><code>set_to_top()</code>    </td><td align=left valign=top>Makes <code>this</code> a function that
+sets all bits to 1 (<i><b>top</b></i>). </td></tr>
+<tr><td align=left valign=top><code>set_to_bottom(n)</code></td><td align=left valign=top>Makes <code>this</code> a function that
+sets bit <code>n</code> to 0 (<i><b>bottom</b></i>). </td></tr>
+<tr><td align=left valign=top><code>set_to_bottom()</code> </td><td align=left valign=top>Makes <code>this</code> a function that
+sets all bits to 0 (<i><b>bottom</b></i>). </td></tr>
+<tr><td align=left valign=top><code>set_to_id(n)</code>    </td><td align=left valign=top>Makes <code>this</code> a function that
+passes the value of bit <code>n</code> unchanged. </td></tr>
+<tr><td align=left valign=top><code>set_to_id()</code>     </td><td align=left valign=top>Makes <code>this</code> a function that
+passes the values of all bits unchanged. </td></tr>
+<tr><td align=left valign=top><code><a name="NWD7">apply(b)</a></code>        </td><td align=left valign=top>Applies <code>this</code> to set <code>b</code>,
+overwriting <code>b</code> with the result. </td></tr>
+</table>
+<p>
+
+<h3><a name=toc15>Implementation</a></h3>
+<p>
+As hinted earlier, we use two slot sets to represent a flow function.
+<p>
+<pre><a name="NW3gAiyp-2vhfsn-1" href="#NWD7"><dfn>&lt;<code>FlowFun</code> details&gt;=</dfn></a> <b>(<a href="#NWD6">&lt;-U</a>)</b>
+  private:
+    NatSetDense _id;
+    NatSetDense _cs;
+</pre><p>
+
+Roughly speaking, the presence or absence of <i>s</i> in set <code>_id</code>
+determines whether the flow function is the identity at slot <i>s</i> or
+always produces a constant (<i><b>top</b></i> or <i><b>bottom</b></i>) at that slot.  In the
+latter case, the particular constant is determined by whether or not
+<code>_cs</code> contains <i>s</i>.  Here are the precise rules:
+<p>
+<blockquote>
+<table border><!-- alignment is l|cc--><!-- 3 columns--><tr><td align=left valign=top></td><td align=center><i>s <b>not</b><b>in</b> <code>_cs</code></i> </td><td align=center><i>s <b>in</b> <code>_cs</code></i>     </td></tr>
+<tr><td align=left valign=top><i>s <b>not</b><b>in</b> <code>_id</code></i>   </td><td align=center><i><b>bottom</b></i> at <i>s</i>         </td><td align=center><i><b>top</b></i> at <i>s</i>         </td></tr>
+<tr><td align=left valign=top><i>s <b>in</b> <code>_id</code></i>   </td><td align=center><i>identity</i> at <i>s</i> </td><td align=center><i>(disallowed)</i>
+</td></tr></table>
+</blockquote>
+<p>
+
+<h5><a name=toc16><a name="NWD8">Inlined methods.</a></a></h5>
+<p>
+For efficiency, we define the methods that compute and apply flow
+functions as <code>inline</code> members.
+<p>
+<pre><a name="NW3gAiyp-OO0lQ-1" href="#NWD8"><dfn>&lt;<code>FlowFun</code> inlines&gt;=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b> <b>[D<a href="#NW3gAiyp-OO0lQ-2">-&gt;</a>]</b>
+inline void
+FlowFun::set_to_top()
+{
+    // set function to &quot;constant 1&quot; on all bits
+    _id.remove_all();
+    _cs.insert_all();
+}
+</pre><p>
+
+<pre><a name="NW3gAiyp-OO0lQ-2" href="#NWD8"><dfn>&lt;<code>FlowFun</code> inlines&gt;+=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b> <b>[<a href="#NWD8">&lt;-</a>D<a href="#NW3gAiyp-OO0lQ-3">-&gt;</a>]</b>
+
+inline void
+FlowFun::set_to_top(int slot)
+{
+    claim(slot &gt;= 0, &quot;FlowFun::set_to_top - negative slot %d&quot;, slot);
+    _id.remove(slot);
+    _cs.insert(slot);
+}
+</pre><p>
+
+<pre><a name="NW3gAiyp-OO0lQ-3" href="#NWD8"><dfn>&lt;<code>FlowFun</code> inlines&gt;+=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b> <b>[<a href="#NW3gAiyp-OO0lQ-2">&lt;-</a>D<a href="#NW3gAiyp-OO0lQ-4">-&gt;</a>]</b>
+
+inline void
+FlowFun::set_to_bottom()
+{
+    // set function to &quot;constant 0&quot; on all bits
+    _id.remove_all();
+    _cs.remove_all();
+}
+</pre><p>
+
+<pre><a name="NW3gAiyp-OO0lQ-4" href="#NWD8"><dfn>&lt;<code>FlowFun</code> inlines&gt;+=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b> <b>[<a href="#NW3gAiyp-OO0lQ-3">&lt;-</a>D<a href="#NW3gAiyp-OO0lQ-5">-&gt;</a>]</b>
+
+inline void
+FlowFun::set_to_bottom(int slot)
+{
+    claim(slot &gt;= 0, &quot;FlowFun::set_to_bottom - negative slot %d&quot;, slot);
+    _id.remove(slot);
+    _cs.remove(slot);
+}
+</pre><p>
+
+<pre><a name="NW3gAiyp-OO0lQ-5" href="#NWD8"><dfn>&lt;<code>FlowFun</code> inlines&gt;+=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b> <b>[<a href="#NW3gAiyp-OO0lQ-4">&lt;-</a>D<a href="#NW3gAiyp-OO0lQ-6">-&gt;</a>]</b>
+
+inline void
+FlowFun::set_to_id()
+{
+    // set function to &quot;identity&quot; on all bits
+    _id.insert_all();
+    _cs.remove_all();
+}
+</pre><p>
+
+<pre><a name="NW3gAiyp-OO0lQ-6" href="#NWD8"><dfn>&lt;<code>FlowFun</code> inlines&gt;+=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b> <b>[<a href="#NW3gAiyp-OO0lQ-5">&lt;-</a>D<a href="#NWD9">-&gt;</a>]</b>
+
+inline void
+FlowFun::set_to_id(int slot)
+{
+    _id.insert(slot);
+    _cs.remove(slot);
+}
+</pre><p>
+
+<a name="NWD9">To apply a flow function to a slot set, we subtract away any slots at</a>
+which the function is constant and then union in the new constant slots.
+We rely on the representation invariant that <i><code>_cs</code> INTERSECTION<code>_id</code> =
+&Oslash;</i>.
+<p>
+<pre><a name="NW3gAiyp-OO0lQ-7" href="#NWD8"><dfn>&lt;<code>FlowFun</code> inlines&gt;+=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b> <b>[<a href="#NW3gAiyp-OO0lQ-6">&lt;-</a>D]</b>
+
+inline void
+FlowFun::apply(NatSetDense &amp;updated)
+{
+    updated *= _id;
+    updated += _cs;
+}
+</pre><p>
+
+
+<h3><a name=toc17><a name="NWDA">Header file </a><code>flow_fun.h</code></a></h3>
+<p>
+Class <code>FlowFun</code> is defined in the following header file.
+<p>
+<pre><a name="NW3gAiyp-2IjNSN-1" href="#NWDA"><dfn>&lt;bvd/flow_fun.h&gt;=</dfn></a>
+/* file &quot;bvd/flow_fun.h&quot; -- Flow functions */
+
+<a name="NW3gAiyp-2IjNSN-1-u1" href="#NWDO"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef BVD_FLOW_FUN_H
+#define BVD_FLOW_FUN_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;bvd/flow_fun.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+<a name="NW3gAiyp-2IjNSN-1-u2" href="#NWD6"><i>&lt;class <code>FlowFun</code>&gt;</i></a>
+
+<a name="NW3gAiyp-2IjNSN-1-u3" href="#NWD8"><i>&lt;<code>FlowFun</code> inlines&gt;</i></a>
+
+#endif /* BVD_FLOW_FUN_H */
+</pre><p>
+<h2><a name=toc18>Class <code>Liveness</code></a></h2>
+<a name="sec-class-liveness"><b>[*]</b></a>
+<p>
+As mentioned in Section&nbsp;<a href="#sec-class-bvd">[&lt;-]</a> the only elements needed
+to build a liveness analyzer on top of class <code>Bvd</code> are a mechanism for
+mapping the ``interesting'' operands of a program to slot numbers, and a
+way of enumerating the slots of operands defined and/or used by a
+particular instruction.  The map from operands to slots is called an
+operand catalog.  It has class <code>OpndCatalog</code>, and it is the
+subject of Section&nbsp;<a href="#sec-operand-catalogs">[-&gt;]</a>.  The ``def/use'' analyzer
+<a name="NWDB">for a single instruction is described later in this section.</a>
+<p>
+
+<h3><a name=toc19>Class <code>Liveness</code></a></h3>
+<p>
+To perform liveness analysis, you simply construct an instance of class
+<code>Liveness</code>, passing a CFG, an operand catalog, and (optionally) a
+def/use analyzer as arguments to the constructor.
+<p>
+<pre><a name="NW1B6DHA-4P7p8f-1" href="#NWDB"><dfn>&lt;class <code>Liveness</code>&gt;=</dfn></a> <b>(<a href="#NW1B6DHA-4RQxsr-1">U-&gt;</a>)</b>
+class Liveness : public Bvd {
+  public:
+    Liveness(Cfg *graph, OpndCatalog *catalog, DefUseAnalyzer *analyzer)
+        : Bvd(graph, backward, any_path)
+    {
+        _catalog = catalog;
+
+        if (analyzer) {
+            _analyzer_own = NULL; _analyzer = analyzer;
+        } else
+            _analyzer_own = _analyzer = new DefUseAnalyzer(catalog);
+
+        solve();
+    }
+
+    virtual ~Liveness()                       { delete _analyzer_own; }
+
+    virtual void find_kill_and_gen(Instr *mi)
+        { _analyzer-&gt;analyze(mi); }
+
+    virtual const NatSet* kill_set() const    { return _analyzer-&gt;defs_set(); }
+    virtual const NatSet* gen_set()  const    { return _analyzer-&gt;uses_set(); }
+
+    virtual int num_slots() const             { return _catalog-&gt;num_slots(); }
+
+  protected:
+    OpndCatalog* catalog()                    { return _catalog; }
+    DefUseAnalyzer* analyzer()                { return _analyzer; }
+
+  private:
+    OpndCatalog *_catalog;
+    DefUseAnalyzer *_analyzer;
+    DefUseAnalyzer *_analyzer_own;            // default analyzer
+};
+</pre><p>
+
+The operand catalog, of type pointer to <code>OpndCatalog</code>, serves two
+purposes.  It screens out the uninteresting operands, and it assigns slot
+numbers to the interesting one.  You don't need to have enrolled any
+operands in the catalog before invoking the <code>Liveness</code> constructor
+(although you are free to do so).  In the course of scanning the CFG,
+the solver enrolls interesting operands as needed.  Then, after analysis
+is complete, you use the catalog to map operands to slot numbers so that
+you can access the data-flow results.
+<p>
+Note that the constructor and destructor and <code>num_slots</code> are the only
+public methods defined by <code>Liveness</code>.  (Recall from
+Section&nbsp;<a href="#sec-class-bvd">[&lt;-]</a> that <code>num_slots</code> returns number of slots
+in the final catalog after liveness has been computed.)  To get at the
+analysis, you use the inherited methods <code>in_set</code> and <code>out_set</code>.
+<p>
+The protected methods are principally those that any subclass of <code>Bvd</code>
+must supply:
+<p>
+<table><!-- alignment is l@{\hspace*{2em}}p{.65\linewidth}--><!-- 2 columns--><tr><td align=left valign=top><tt>find_kill_and_gen(<i>i</i>)</tt></td><td align=left valign=top>Analyzes instruction <i>i</i> prior to use
+of <code>kill_iter</code> and <code>gen_iter</code>.  For
+<code>Liveness</code>, this extracts the slots of
+operands defined (written) and operands
+used (read) by <i>i</i>. </td></tr>
+<tr><td align=left valign=top><code>kill_iter()</code>             </td><td align=left valign=top>Produces an iterator over the <i>kill</i>
+set for the instruction most recently analyzed
+instruction by <code>find_kill_and_gen</code>.  For
+<code>Liveness</code>, the <i>kill</i> set holds the
+slots of operands <em>defined</em>. </td></tr>
+<tr><td align=left valign=top><code>gen_iter()</code>              </td><td align=left valign=top>Produces an iterator over the <i>gen</i>
+set for the instruction most recently analyzed
+instruction by <code>find_kill_and_gen</code>.  For
+<code>Liveness</code>, the <i>gen</i> set holds the
+slots of operands <em>used</em>.
+</td></tr></table>
+<p>
+Since liveness is a backward data-flow problem, the solver built into
+class <code>Bvd</code> applies <code>find_kill_and_gen</code> to the instructions in a
+basic block by starting at the last one and working backward to the
+entry of the block.  It starts with a ``blank'' flow function (one
+that would do nothing if applied to a slot set) and accumulates the
+block's net effect on liveness (for all slots) as it goes through the
+block.  For each instruction, the operands defined are considered first;
+their liveness is ``killed'' because just before their
+definitions, their old values cannot be useful.  The operands used by
+the instruction are considered next; they become live (their liveness is
+``generated'') from the point of view of code preceding the current
+instruction.  The flow function that results from this one pass over
+a node in the CFG captures its effect on liveness.  The solver therefore
+has no further need to examine instructions as is solves the liveness
+problem for the whole procedure.
+<p>
+The <code>catalog</code> and <code>analyzer</code> methods of class <code>Liveness</code> simply
+return pointers to the operand catalog and the instruction def/use analyzer
+associated with an instance of the class.
+<p>
+Note that all of the code for <code>Liveness</code> is given in the above
+class declaration.  All that's required to build a <code>Bvd</code>-based
+analyzer is to establish a map from ``interesting data-flow items'' to
+bit-vector slots, and to write a <i>gen</i>/<i>kill</i> analyzer for
+instructions.
+<p>
+
+<h3><a name=toc20>Class <code>DefUseAnalyzer</code></a></h3>
+<p>
+<a name="NWDC">The task of identifying the data-flow items defined and used by a</a>
+particular instruction is handled by an instance of class
+<code>DefUseAnalyzer</code>.  This class handles explicit operands as well as
+implicit definitions and uses recorded in <code>regs_defd</code> and <code>regs_uses</code>
+annotations.  The latter are used, for example, on call and return
+instructions for certain architectures to indicate registers used for
+argument and result transmission and also registers potentially defined
+because they are not protected by a callee-saves convention.
+<p>
+<pre><a name="NW1B6DHA-qYF6t-1" href="#NWDC"><dfn>&lt;class <code>DefUseAnalyzer</code>&gt;=</dfn></a> <b>(<a href="#NW1B6DHA-4RQxsr-1">U-&gt;</a>)</b>
+class DefUseAnalyzer {
+  public:
+    DefUseAnalyzer(OpndCatalog *catalog)
+        : _catalog(catalog), _partition(new RegPartition(catalog))
+        { _own_partition = _partition; }
+    DefUseAnalyzer(OpndCatalog *catalog, const RegPartition *partition)
+        : _catalog(catalog), _partition(partition), _own_partition(NULL) { }
+    virtual ~DefUseAnalyzer() { delete _own_partition; }
+
+    virtual void analyze(Instr *mi);
+
+    NatSetIter defs_iter() const              { return _defs.iter(); }
+    NatSetIter uses_iter() const              { return _uses.iter(); }
+
+    const NatSet *defs_set() const            { return &amp;_defs; }
+    const NatSet *uses_set() const            { return &amp;_uses; }
+
+  protected:
+    OpndCatalog *catalog()                    { return _catalog; }
+    const RegPartition *partition()           { return _partition; }
+    NatSet *defs()                            { return &amp;_defs; }
+    NatSet *uses()                            { return &amp;_uses; }
+
+  private:
+    OpndCatalog *_catalog;
+    const RegPartition *_partition;
+    const RegPartition *_own_partition;
+    NatSetSparse _defs;
+    NatSetSparse _uses;
+};
+</pre><p>
+
+The only input needed to create a <code>DefUseAnalyzer</code> is the operand
+catalog.  When the <code>analyze</code> method is applied to an instruction, it
+attempts to enroll each operand of the instruction in the catalog.  This
+has the effects of excluding uninteresting operands, of enrolling
+interesting operands in the catalog, and of providing slot numbers that
+can be used to make up def/use sets.  The <code>analyze</code> method builds
+these sets for the instruction.  The the other public methods can be
+used to access them, either directly as sets (methods <code>defs_set</code> and
+<code>uses_set</code>) or as iterations (methods <code>defs_iter</code> and
+<code>uses_iter</code>).
+<p>
+The <code>_partition</code> component of a <code>DefUseAnalyzer</code> is used to ensure that
+data flow is properly tracked when the target machine has overlapping
+<a name="NWDD">registers.  Its class is defined next.</a>
+<p>
+
+<h3><a name=toc21>Class <code>RegPartition</code></a></h3>
+<p>
+A <code>RegPartition</code> is a map from a hard register's number to the set of
+catalog indices for the registers that share one or more cells with that
+register.  The catalog indices in such a set are called <em>mates</em>.
+<p>
+<pre><a name="NW1B6DHA-3JjmdK-1" href="#NWDD"><dfn>&lt;class <code>RegPartition</code>&gt;=</dfn></a> <b>(<a href="#NW1B6DHA-4RQxsr-1">U-&gt;</a>)</b>
+class RegPartition {
+  public:
+    RegPartition(OpndCatalog*);
+    const NatSet* mates(int reg) const;
+
+  private:
+    OpndCatalog *_catalog;
+    Vector&lt;NatSetSparse&gt; _mates;
+};
+</pre><p>
+
+
+<pre><a name="NW1B6DHA-4RQxsr-1" href="#NW1B6DHA-4RQxsr-1"><dfn>&lt;bvd/liveness.h&gt;=</dfn></a>
+/* file &quot;bvd/liveness.h&quot; -- Liveness analyzer */
+
+<a name="NW1B6DHA-4RQxsr-1-u1" href="#NWDO"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef BVD_LIVENESS_H
+#define BVD_LIVENESS_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;bvd/liveness.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+#include &lt;cfg/cfg.h&gt;
+
+#include &lt;bvd/solve.h&gt;
+
+<a name="NW1B6DHA-4RQxsr-1-u2" href="#NWDD"><i>&lt;class <code>RegPartition</code>&gt;</i></a>
+
+<a name="NW1B6DHA-4RQxsr-1-u3" href="#NWDC"><i>&lt;class <code>DefUseAnalyzer</code>&gt;</i></a>
+
+<a name="NW1B6DHA-4RQxsr-1-u4" href="#NWDB"><i>&lt;class <code>Liveness</code>&gt;</i></a>
+
+#endif /* BVD_LIVENESS_H */
+</pre><p>
+<h2><a name=toc22>Mapping operands to bit-vector slots</a></h2>
+<a name="sec-operand-catalogs"><b>[*]</b></a>
+<p>
+Solvers of bit-vector data-flow problems need to associate an integer
+identifier with each item in the universe whose data flow they
+calculate.  As mentioned earlier, we call these unique integers
+<em>slots</em> because that is the term sometimes used for bit-vector
+positions.  In the liveness problem, the items of interest are operands,
+so the liveness solver needs a map from operands to slots.  The
+purpose of an <em>operand catalog</em> is to provide this map.
+<p>
+As the program is scanned during analysis, the catalog is used to assign
+slots to operands.  Later, as operands are revisited, the catalog provides
+efficient lookup of their slot numbers so that data-flow information can be
+read out of the slot sets produced by analysis.
+<p>
+
+<h3><a name=toc23><a name="NWDE">Class </a><code>RegSymCatalog</code></a></h3>
+<p>
+The <code>machine</code> library (see <em>The SUIF Machine Library</em> document)
+defines class <code>OpndCatalog</code> which provides a common abstract interface
+for operand catalogs.  One very useful concrete subclass of <code>OpndCatalog</code>
+implements a catalog for register and variable-symbol operands.  This
+class, called <code>RegSymCatalog</code> is heavily used in register allocation,
+scalar optimization, and instruction scheduling.
+<p>
+<pre><a name="NW2ENMUi-28VtTL-1" href="#NWDE"><dfn>&lt;class <code>RegSymCatalog</code>&gt;=</dfn></a> <b>(<a href="#NWDJ">U-&gt;</a>)</b>
+
+class RegSymCatalog : public OpndCatalog {
+  public:
+    typedef bool (*filter_f)(Opnd);
+
+    RegSymCatalog(bool record = false, filter_f = NULL,
+                  int hash_table_size = 1024);
+
+    virtual int size() const { return _next_slot; }
+
+    virtual bool enroll(Opnd, int *slot = NULL);
+    virtual bool lookup(Opnd, int *slot = NULL) const;
+
+<a name="NW2ENMUi-28VtTL-1-u1" href="#NWDF"><i>&lt;<code>RegSymCatalog</code> details&gt;</i></a>
+};
+</pre><p>
+
+<h5><a name=toc24>Constructing a <code>RegSymCatalog</code>.</a></h5>
+<p>
+The constructor for class <code>RegSymCatalog</code> declared above
+takes the following arguments:
+<p>
+<ul>
+<li>An optional flag indicating whether operands enrolled should be
+remembered so that the catalog can be printed.
+<li>An optional filter, a Boolean function taking an operand
+as argument.  If the filter is provided, the catalog ignores any
+operand for which the filter returns <code>false</code>.
+<li>An optional bucket count for the catalog's hash table.  This must
+be a power of two.  Overriding the default value may affect
+performance, but not the table's capacity.
+</ul>
+<p>
+
+
+<h3><a name=toc25><a name="NWDF">Implementation details</a></a></h3>
+<p>
+<h4><a name=toc26>Class <code>RegSymCatalog</code></a></h4>
+<p>
+The private part of <code>RegSymCatalog</code> declares the user-provided
+operand filter and the running slot count.
+<p>
+<pre><a name="NW2ENMUi-1S8VTM-1" href="#NWDF"><dfn>&lt;<code>RegSymCatalog</code> details&gt;=</dfn></a> <b>(<a href="#NWDE">&lt;-U</a>)</b> <b>[D<a href="#NWDG">-&gt;</a>]</b>
+    filter_f _filter;
+    int _next_slot;
+</pre><p>
+
+<a name="NWDG">It also records the hash map taking operands to slots, plus a virtual</a>
+method that extracts a unique integer key from any operand that can be
+entered in a <code>RegSymCatalog</code>.  (The key is not just a hash code; it must
+distinguish any two operands that are to have different catalog slots.)
+<p>
+<pre><a name="NW2ENMUi-1S8VTM-2" href="#NWDF"><dfn>&lt;<code>RegSymCatalog</code> details&gt;+=</dfn></a> <b>(<a href="#NWDE">&lt;-U</a>)</b> <b>[<a href="#NWDF">&lt;-</a>D<a href="#NWDH">-&gt;</a>]</b>
+
+    HashMap&lt;unsigned long, int&gt; _hash_map;
+    virtual unsigned long hash_map_key(Opnd) const;
+</pre><p>
+
+<a name="NWDH">Method </a><code>get_slot</code> is a helper for the public methods.
+<p>
+<pre><a name="NW2ENMUi-1S8VTM-3" href="#NWDF"><dfn>&lt;<code>RegSymCatalog</code> details&gt;+=</dfn></a> <b>(<a href="#NWDE">&lt;-U</a>)</b> <b>[<a href="#NWDG">&lt;-</a>D<a href="#NWDI">-&gt;</a>]</b>
+
+    virtual bool get_slot(Opnd, int*, bool);
+</pre><p>
+
+<a name="NWDI">Since there is a virtual method, the class should have a virtual destructor</a>
+as well.
+<p>
+<pre><a name="NW2ENMUi-1S8VTM-4" href="#NWDF"><dfn>&lt;<code>RegSymCatalog</code> details&gt;+=</dfn></a> <b>(<a href="#NWDE">&lt;-U</a>)</b> <b>[<a href="#NWDH">&lt;-</a>D]</b>
+
+    virtual ~RegSymCatalog() { }
+</pre><p>
+
+
+
+<h3><a name=toc27><a name="NWDJ">Header file for module </a><code>catalog</code></a></h3>
+<p>
+Classes <code>OpndCatalog</code> and <code>RegSymCatalog</code> are defined in module
+<code>catalog</code>, which has the following header file:
+<p>
+<pre><a name="NW2ENMUi-4SuQN4-1" href="#NWDJ"><dfn>&lt;bvd/catalog.h&gt;=</dfn></a>
+/* file &quot;bvd/catalog.h&quot; -- Maps from operands to slot sets */
+
+<a name="NW2ENMUi-4SuQN4-1-u1" href="#NWDO"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef BVD_OPND_CATALOG_H
+#define BVD_OPND_CATALOG_H
+
+#include &lt;machine/copyright.h&gt;
+   
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;bvd/catalog.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+<a name="NW2ENMUi-4SuQN4-1-u2" href="#NWDE"><i>&lt;class <code>RegSymCatalog</code>&gt;</i></a>
+
+#endif /* BVD_OPND_CATALOG_H */
+</pre><p>
+<h2><a name=toc28><a name="NWDK">Library initialization</a></a></h2>
+<p>
+Before you can start using the facilities of the BVD library, the
+library must initialize some parts of itself.  In SUIF, this is
+performed by defining an <code>init_</code><em>libname</em> routine.  The
+respective declarations are:
+<p>
+<pre><a name="NW1wzDzq-2yQnwg-2" href="#NWD5"><dfn>&lt;BVD library initialization&gt;+=</dfn></a> <b>(<a href="#NWoqTyD-e318W-1">&lt;-U</a> <a href="#NWDL">U-&gt;</a>)</b> <b>[<a href="#NWD5">&lt;-</a>D]</b>
+extern &quot;C&quot; void init_bvd(SuifEnv*);
+</pre><p>
+
+<a name="NWDL">The BVD library initialization header file has the following</a>
+simple layout:
+<p>
+<pre><a name="NW1wzDzq-bSP0i-1" href="#NWDL"><dfn>&lt;bvd/init.h&gt;=</dfn></a>
+/* file &quot;bvd/init.h&quot; */
+
+<a name="NW1wzDzq-bSP0i-1-u1" href="#NWDO"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef BVD_INIT_H
+#define BVD_INIT_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;bvd/init.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+<a name="NW1wzDzq-bSP0i-1-u2" href="#NWD5"><i>&lt;BVD library initialization&gt;</i></a>
+
+#endif /* BVD_INIT_H */
+</pre><p>
+
+<a name="NWDM">When you extend the library, you may need to add initialization and or</a>
+finalization actions to the corresponding implementation file
+<code>init.cpp</code>.
+<p><h2><a name=toc29><a name="NWDN">Header file for the BVD library</a></a></h2>
+<p>
+The following is the header file is for use by other libraries
+and passes that depend upon the BVD library.  It is
+never included in any implementation file within the
+<code>machsuif/bvd</code> directory.  We use comments to indicate
+dependences among the header files.
+<p>
+<pre><a name="NW1DjqYs-2HVp0n-1" href="#NWDN"><dfn>&lt;bvd/bvd.h&gt;=</dfn></a>
+/* file &quot;bvd/bvd.h&quot; */
+
+<a name="NW1DjqYs-2HVp0n-1-u1" href="#NWDO"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef BVD_BVD_H
+#define BVD_BVD_H
+
+#include &lt;machine/copyright.h&gt;
+
+<a name="NW1DjqYs-2HVp0n-1-u2" href="#NW1DjqYs-3iFB3J-1"><i>&lt;contents of <code>bvd.h</code>&gt;</i></a>
+
+#endif /* BVD_BVD_H */
+</pre><p>
+
+<pre><a name="NW1DjqYs-3iFB3J-1" href="#NW1DjqYs-3iFB3J-1"><dfn>&lt;contents of <code>bvd.h</code>&gt;=</dfn></a> <b>(<a href="#NWDN">&lt;-U</a>)</b>
+#include &lt;bvd/flow_fun.h&gt;
+#include &lt;bvd/catalog.h&gt;
+#include &lt;bvd/solve.h&gt;
+#include &lt;bvd/liveness.h&gt;
+#include &lt;bvd/reaching_defs.h&gt;
+#include &lt;bvd/init.h&gt;
+</pre><p>
+<h2><a name=toc30><a name="NWDO">Copyright</a></a></h2>
+All of the code is protected by the following copyright notice.
+<p>
+<pre><a name="NW4NUaGr-23xQrt-1" href="#NWDO"><dfn>&lt;Machine-SUIF copyright&gt;=</dfn></a> <b>(<a href="#NWoqTyD-e318W-1">&lt;-U</a> <a href="#NWDA">&lt;-U</a> <a href="#NW1B6DHA-4RQxsr-1">&lt;-U</a> <a href="#NWDJ">&lt;-U</a> <a href="#NWDL">&lt;-U</a> <a href="#NWDN">&lt;-U</a>)</b>
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard College
+
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the &quot;machine/copyright.h&quot; include file.
+*/
+</pre><p>
+
+
+<h2><a name=toc31>Acknowledgments</a></h2>
+<p>
+This work is supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225) and a NSF Young Investigator award (CCR-9457779).
+We also gratefully acknowledge the generous support of this research
+by Advanced Micro Devices, Digital Equipment, Hewlett-Packard,
+International Business Machines, Intel, and Microsoft.
+<p>
+
+<h2><a name=toc32>References</a></h2>
+<p>
+<a name="NWcite-bibdragon"><b>[1]</b></a>  A. Aho, R. Sethi, and J. Ullman. <em>Compilers:
+Principles, Techniques, and Tools.</em>  Addison-Wesley, 1986.
+<p>
+<a name="NWcite-bibcrafting"><b>[2]</b></a>  C. Fischer and R. LeBlanc.  <em>Crafting a
+Compiler.</em> Benjamin/Cummings, 1988.
+<p>
+<a name="NWcite-bibmachine"><b>[3]</b></a>  Glenn H. Holloway and Michael D. Smith.
+<em>The SUIF Machine Library.</em>
+The Machine SUIF documentation set, Harvard University,
+1998.
+<p>
+<a name="NWcite-bibcfg"><b>[4]</b></a>  Glenn H. Holloway and Michael D. Smith.
+<em>The Machine-SUIF Control Flow Graph Library.</em>
+The Machine SUIF documentation set, Harvard University,
+1998.
+<p>
+<a name="NWcite-bibmuchnick"><b><a name="NWDP">[5]</a></b></a>  S. Muchnick. <em>Advanced Compiler Design and
+Implementation.</em>  Morgan Kaufmann, 1997.
+<p>
+
+
+
+<!-- Making \end{document} a chunk by itself seems necessary for use of-->
+<!-- noweave -delay -x ..., even though the -x option suppresses the-->
+<!-- cross-reference stuff that would supposedly be dumped here.-->
+
+
+
+
+<ul>
+<li><a href="#NWD4"><i>&lt;<code>Bvd</code> details&gt;</i></a>: <a href="#NWD3">U1</a>, <a href="#NWD4">D2</a>
+<li><a href="#NWD7"><i>&lt;<code>FlowFun</code> details&gt;</i></a>: <a href="#NWD6">U1</a>, <a href="#NWD7">D2</a>
+<li><a href="#NWD8"><i>&lt;<code>FlowFun</code> inlines&gt;</i></a>: <a href="#NWD8">D1</a>, <a href="#NW3gAiyp-OO0lQ-2">D2</a>, <a href="#NW3gAiyp-OO0lQ-3">D3</a>, <a href="#NW3gAiyp-OO0lQ-4">D4</a>, <a href="#NW3gAiyp-OO0lQ-5">D5</a>, <a href="#NW3gAiyp-OO0lQ-6">D6</a>, <a href="#NWD9">D7</a>, <a href="#NWDA">U8</a>
+<li><a href="#NWDF"><i>&lt;<code>RegSymCatalog</code> details&gt;</i></a>: <a href="#NWDE">U1</a>, <a href="#NWDF">D2</a>, <a href="#NWDG">D3</a>, <a href="#NWDH">D4</a>, <a href="#NWDI">D5</a>
+<li><a href="#NWD5"><i>&lt;BVD library initialization&gt;</i></a>: <a href="#NWD5">D1</a>, <a href="#NWoqTyD-e318W-1">U2</a>, <a href="#NWDK">D3</a>, <a href="#NWDL">U4</a>
+<li><a href="#NWDN"><i>&lt;bvd/bvd.h&gt;</i></a>: <a href="#NWDN">D1</a>
+<li><a href="#NWDJ"><i>&lt;bvd/catalog.h&gt;</i></a>: <a href="#NWDJ">D1</a>
+<li><a href="#NWDA"><i>&lt;bvd/flow_fun.h&gt;</i></a>: <a href="#NWDA">D1</a>
+<li><a href="#NWDL"><i>&lt;bvd/init.h&gt;</i></a>: <a href="#NWDL">D1</a>
+<li><a href="#NW1B6DHA-4RQxsr-1"><i>&lt;bvd/liveness.h&gt;</i></a>: <a href="#NW1B6DHA-4RQxsr-1">D1</a>
+<li><a href="#NWoqTyD-e318W-1"><i>&lt;bvd/solve.h&gt;</i></a>: <a href="#NWoqTyD-e318W-1">D1</a>
+<li><a href="#NWD3"><i>&lt;class <code>Bvd</code>&gt;</i></a>: <a href="#NWD3">D1</a>, <a href="#NWoqTyD-e318W-1">U2</a>
+<li><a href="#NWDC"><i>&lt;class <code>DefUseAnalyzer</code>&gt;</i></a>: <a href="#NWDC">D1</a>, <a href="#NW1B6DHA-4RQxsr-1">U2</a>
+<li><a href="#NWD6"><i>&lt;class <code>FlowFun</code>&gt;</i></a>: <a href="#NWD6">D1</a>, <a href="#NWDA">U2</a>
+<li><a href="#NWDB"><i>&lt;class <code>Liveness</code>&gt;</i></a>: <a href="#NWDB">D1</a>, <a href="#NW1B6DHA-4RQxsr-1">U2</a>
+<li><a href="#NWDD"><i>&lt;class <code>RegPartition</code>&gt;</i></a>: <a href="#NWDD">D1</a>, <a href="#NW1B6DHA-4RQxsr-1">U2</a>
+<li><a href="#NWDE"><i>&lt;class <code>RegSymCatalog</code>&gt;</i></a>: <a href="#NWDE">D1</a>, <a href="#NWDJ">U2</a>
+<li><a href="#NW1DjqYs-3iFB3J-1"><i>&lt;contents of <code>bvd.h</code>&gt;</i></a>: <a href="#NWDN">U1</a>, <a href="#NW1DjqYs-3iFB3J-1">D2</a>
+<li><a href="#NWDO"><i>&lt;Machine-SUIF copyright&gt;</i></a>: <a href="#NWoqTyD-e318W-1">U1</a>, <a href="#NWDA">U2</a>, <a href="#NW1B6DHA-4RQxsr-1">U3</a>, <a href="#NWDJ">U4</a>, <a href="#NWDL">U5</a>, <a href="#NWDN">U6</a>, <a href="#NWDO">D7</a>
+</ul>
+</body></html>
+

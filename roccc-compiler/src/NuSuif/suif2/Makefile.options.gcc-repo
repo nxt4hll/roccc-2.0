@@ -1,0 +1,43 @@
+#       The following variables may be defined in this file. They should be defined here
+#       rather than elsewhere if needed
+#
+#       COMPILER_SPECIFIC_CFLAGS          flags to use for a C compile
+#       COMPILER_SPECIFIC_CXXFLAGS        flags to use for a C++ compile
+#       CC                                      name to use for C compiler
+#       CXX                                     name to use for C++ compiler
+#               These both default to $(COMPILER_NAME). They can be overriden by the CC_OVERRIDE
+#               and CXX_OVERRIDE variables. This is handled in the main make file. These override
+#               variables are not usually defined.
+#       DEPSFLAG                                flag to make compiler generate dependency info
+#               Defaults to -M
+#       SHARED_LIB_FLAGS                        extra flags for use when generating a shared library
+#               Often, this is something like -shared
+#       LIB_CLOSURE_GEN                         a command that must be run to generate closure for
+#                                               a shared library. This does such things as instantiate
+#                                               templates. If not defined, there is no such command.
+#
+#
+#
+#
+#   Note:  We have turned off the ``unused'' warnings from g++ because
+#       when this warning is enabled, it generates warning messages
+#       for any function declared ``inline'' that is not used.  That
+#       causes warnings for most cases of ``inline'' functions
+#       declared in header files though there is nothing at all wrong
+#       with such code.  Other warnings are not used because system
+#       header files often trigger them or because code that we think
+#       is valid and commonly used in SUIF triggers them.  For
+#       example, comparing an unsigned to see if it is less than
+#       zero.  We have lots of code that does this because we want the
+#       same code to work whether certain typedef'ed types are signed
+#       or unsigned integers.
+#
+COMPILER_SPECIFIC_CFLAGS =	-g -Wall
+#	PGI: For old gcc, the ANTIQUE_CPP flag is required. This is used to enable some workarounds
+#	in the source code
+COMPILER_SPECIFIC_CXXFLAGS =	-g -pedantic -Wchar-subscripts -Wcomment -Wformat -Wimplicit -Wreturn-type -Wswitch -Wtrigraphs -Wreorder -Wpointer-arith -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs -DINLINE_ALL_TEMPLATES -frepo -DGCC_REPO_BUG_WORK_AROUND -DSUIF_STRIPPED_HEADERS -DANTIQUE_CPP
+CC =			gcc
+CXX =			g++
+DEPSFLAG =		-M
+SHARED_LIB_FLAGS =	-shared
+LIB_CLOSURE_GEN =	$(CXX) $(CXXFLAGS) -o

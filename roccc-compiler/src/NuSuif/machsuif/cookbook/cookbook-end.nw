@@ -1,0 +1,31 @@
+\section{Acknowledgments}
+
+This work was supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).  We also gratefully
+acknowledge the generous support of this research by Advanced Micro
+Devices, Compaq, Digital Equipment, Hewlett-Packard, International
+Business Machines, Intel, and Microsoft.
+
+
+\appendix
+
+\section{Copyright}
+All of our code is protected by the following copyright notice.
+
+<<Machine-SUIF copyright>>=
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard College
+
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the "machine/copyright.h" include file.
+*/
+@
+
+
+% Make \end{document} a chunk by itself to allow cross-reference info
+% to be dumped in before it (noweave -delay).
+@
+\end{document}

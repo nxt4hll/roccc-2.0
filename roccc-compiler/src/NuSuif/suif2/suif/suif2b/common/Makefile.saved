@@ -1,0 +1,10 @@
+TARGET = common
+SRCS = MString.cpp macro.cpp text_util.cpp
+OBJS = MString.o macro.o text_util.o
+HEADERS = MString.h macro.h text_util.h simple_stack.h
+EXPORTS = MString.h macro.h text_util.h simple_stack.h
+all:            lib
+install-bin:    install-lib
+
+include $(SUIFHOME)/src/suif/Makefile.std
+

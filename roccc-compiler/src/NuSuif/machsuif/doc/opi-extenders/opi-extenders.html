@@ -1,0 +1,1354 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>An Extender's Guide to the </title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+
+           <!-- Omit \clearpage for new source file-->
+<p>
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>An Extender's Guide to the <br>Optimization Programming Interface and Target Descriptions</a></h1>
+<address><em>Release version 2.02.07.15</em> <br><br>Glenn Holloway and Michael D. Smith <br>{holloway,smith}@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+
+The optimization programming interface (OPI) is a programming
+interface for use in writing portable analyses and optimizations that
+work on code represented at or near the machine level.  This document
+describes the structure of the OPI with respect to the libraries that
+implement it, and it presents several examples of how you can extend
+the OPI by adding new data structures and/or functions.  It also
+discusses the implementation and extension of the target libraries.
+<p>
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">Structure of the OPI</a></li>
+<li><a href="#toc5">New Operand Kinds</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc6">Substrate extensions.</a></li>
+      <li><a href="#toc7">New address expressions.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc8">Custom Notes</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc9">Substrate extensions.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc10">New Instructions</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc11">Storage considerations.</a></li>
+      <li><a href="#toc12">Target dependence.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc13">New Execution Bodies</a></li>
+<li><a href="#toc14">Target Libraries and the Context Object</a></li>
+  <ul compact>
+  <li><a href="#toc15">Development of a target library</a></li>
+  <li><a href="#toc16">The target context</a></li>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc17">Building and working with the_context.</a></li>
+      <li><a href="#toc18">Multiple inheritance as an implementation technology.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc19">Target Library Extension</a></li>
+  <ul compact>
+  <li><a href="#toc20">Opcode extensions</a></li>
+  <li><a href="#toc21">Extension contexts</a></li>
+  <li><a href="#toc22">Extension of target-description objects</a></li>
+  <li><a href="#toc23">Library initialization</a></li>
+  </ul>
+<li><a href="#toc24">Summary</a></li>
+<li><a href="#toc25">Acknowledgments</a></li>
+<li><a href="#toc26">References</a></li>
+<li><a href="#toc27">SUIF's Hoof Specification</a></li>
+<li><a href="#toc28">Header-File Inclusion and Library Initialization</a></li>
+  <ul compact>
+    <ul compact>
+      <ul compact>
+      <li><a href="#toc29">Library-exports header file.</a></li>
+      <li><a href="#toc30">Header inclusions in other source files.</a></li>
+      <li><a href="#toc31">Library initialization.</a></li>
+      <li><a href="#toc32">Link specification.</a></li>
+      <li><a href="#toc33">Substrate-boundary library.</a></li>
+      </ul>
+    </ul>
+  </ul>
+<li><a href="#toc34">More Naming Conventions</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+The optimization programming interface (OPI) is a set of standardized
+data structures (that represent the code being optimized and the
+characteristics of the compilation target) and functions (that create,
+inspect, and manipulate those data structures).  It allows you to
+express machine-dependent optimization algorithms in a readable and
+reusable form.  By eliminating specific references to the underlying
+compilation system (called the <em>substrate</em>) and current
+compilation target, optimizations based on the OPI are easy to
+re-target and port.  This document describes the structure of the OPI
+with respect to the libraries that implement it, and it serves as a
+reference manual for those interested in extending the OPI.
+<p>
+The OPI is not a complete compilation infrastructure.  It is designed
+to be implemented on a substrate that takes care of things like
+intermediate-file I/O and pipelining of compiler passes.  Its role is
+to segregate algorithms from the details of the current substrate on
+which they happen to run and machine to which they happen to target.
+<p>
+We assume that you have read the document entitled ``A User's Guide to
+the Optimization Programming Interface'' and are familiar with purpose
+of the data structures and functions described there.  When extending
+the OPI, we ask that you follow the concise and consistent naming
+convention presented in that document so that the algorithms written
+using your OPI extensions are easy to understand, maintain, and debug.
+<p>
+In general, we extend the OPI by adding new functions based on the
+existing OPI data types or by adding new OPI data types and a few key
+associated functions.  As this document illustrates, we often extend
+the OPI in a carefully choreographed manner so that we do not disturb
+or have to recompile the existing code base.  You simply build new
+dynamically linked libraries that implement the new functionality.  In
+this manner, we can distribute to you new implementations of our
+source directories and not cause you to have to re-implement any of
+your extension code.
+<p>
+Though the OPI hides the details of the underlying substrate, a person
+interested in extending the OPI often has to know something about the
+substrate.  Whenever possible, we have tried to define extension
+mechanisms that limit your exposure to the substrate.  We also, as you
+will see in this document, use our extension mechanism in defining
+several parts of our Machine-SUIF implementation of the OPI.  We don't
+think it is fair to ask you to use an extension mechanism if we
+aren't willing to use it ourselves.  If you are using a different
+implementation of the OPI, you will want to adapt these examples
+accordingly.
+<p>
+The rest of this document is organized as follows:
+Section&nbsp;<a href="#sec-structure">[-&gt;]</a> presents the overall structure of the code
+base implementing the OPI and describes how this code base is split
+into a hierarchy of libraries.
+Sections&nbsp;<a href="#sec-newopnd">[-&gt;]</a>-<a href="#sec-newexobj">[-&gt;]</a> describe example
+extensions associated with several different IR objects.  Whenever we
+extend the OPI, we can classify that extension as <em>dependent</em> or
+<em>independent</em> of the compilation target.
+Section&nbsp;<a href="#sec-contexts">[-&gt;]</a> discusses the development of a new target
+library and the concept of target-specific contexts.
+Section&nbsp;<a href="#sec-x86-ppro">[-&gt;]</a> shows you how you can use contexts to
+extend an existing target library while adding and overriding only
+those target-specific functions that are new or changed.  We conclude
+in Section&nbsp;<a href="#sec-summary">[-&gt;]</a>.
+<p>
+
+<h2><a name=toc4>Structure of the OPI</a></h2>
+<a name="sec-structure"><b>[*]</b></a>
+<p>
+The OPI consists of data structures built directly on top of substrate
+data structures and data structures implementing functionality not
+available in the substrate.  You manipulate these data structures
+using class methods or plain old functions.  For the purposes of
+adding new functionality to the OPI, you simply define a new base
+class or function in what we refer to as an <em>interface</em> library.
+The Machine-SUIF Machine, Control Flow Graph, and Bit-Vector Dataflow
+libraries are examples of interface libraries.  Analysis and
+optimization passes based on the OPI refer only to the definitions in
+these interface libraries.
+<p>
+If the new functionality is independent of the compilation target, the
+implementation of that functionality appears directly in the <code>.cpp</code>
+files of the interface library.  On the other hand, if the new
+functionality depends upon the particulars of the compilation target,
+each target library (e.g., the <code>alpha</code> or <code>x86</code> library) includes
+code to provide the appropriate functionality.
+Section&nbsp;<a href="#sec-newinstr">[-&gt;]</a> provides examples of both kinds.
+<p>
+If the compiler system implementing the OPI targets only a single
+machine, the single target library may directly specify the
+implementation of these target-dependent classes and functions.  In a
+compiler like Machine SUIF, we support multiple different targets, and
+thus the connection of the multiple target-dependent classes and
+functions to the OPI interfaces is a bit more tricky.
+Section&nbsp;<a href="#sec-contexts">[-&gt;]</a> describes how this connection is
+accomplished.
+<p>
+
+<h2><a name=toc5>New Operand Kinds</a></h2>
+<a name="sec-newopnd"><b>[*]</b></a>
+<p>
+Since operands are a key component of any machine-level IR, one would
+expect that the addition of a new kind of operand would require the
+generation of new data structures in the underlying substrate.  In
+general, this is true, and in a moment, we provide an outline of what
+is involved in this tedious process.  We do not however provide a
+lengthy explanation since we do not believe that this is something
+that a large percentage of our users will want to do.  The OPI,
+especially under Machine SUIF, already comes with a fairly extensive
+set of atomic operand kinds.
+<p>
+On the other hand, we do see a need for our users to be able to define
+new kinds of address expressions, and thus most of this section
+describes a pair of simple mechanisms for supporting new
+address-expression operands.  Extending the OPI to support these new
+address expressions is straightforward and does not require any
+knowledge of the underlying substrate.
+<p>
+
+<h5><a name=toc6>Substrate extensions.</a></h5>
+<p>
+In general, the way you would add new operand kinds to the OPI depends
+greatly upon the underlying substrate and the implementation of the
+<code>Opnd</code> class.  In Machine SUIF, the class <code>Opnd</code> simply wraps a
+pointer to an object of the SUIF class <code>IrOpnd</code>.  To define a new
+kind of operand, you would write a hoof specification for a new
+operand class derived from the abstract class <code>IrOpnd</code>, as is done
+for all of the atomic operand kinds currently available.
+(Appendix&nbsp;<a href="#app-hoof">[-&gt;]</a> discusses hoof and its relationship to SUIF.)
+You would then provide OPI functions to create, identify, and access
+the components of this new class.  If instances of this class were
+immutable, you would want to implement an OPI class like
+<code>AddrExpOpnd</code>, which is a derived class of <code>Opnd</code>.
+<p>
+
+<h5><a name=toc7>New address expressions.</a></h5>
+<p>
+Aw we stated in <em>The OPI User's Guide</em>&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibopiuser">bibopiuser</a>]</b>,
+address-expression operands are implemented as specializations of the
+base class <code>AddrExpOpnd</code>, which is itself a derived class of
+<code>Opnd</code>.  If you so desired, you could implement a new kind of
+address expression simply by constructing an instance of the base
+<a name="NWD2">class </a><code>AddrExpOpnd</code> and using its sequence methods to inspect and
+manipulate the suboperands of your new address expression.  We do not
+however recommend this approach.
+<p>
+Instead, we recommend that you derive a subclass of <code>AddrExpOpnd</code>
+and define public methods in this subclass that provide more
+descriptive names for the suboperands.  The class <code>BaseDispOpnd</code>
+is an example of this approach.
+<p>
+<pre><a name="NW4A4imC-SyK7s-1" href="#NWD2"><dfn>&lt;class <code>BaseDispOpnd</code>&gt;=</dfn></a>
+class BaseDispOpnd : public AddrExpOpnd {
+  public:
+    BaseDispOpnd(Opnd base, Opnd disp, TypeId deref_type = 0);
+    BaseDispOpnd(const Opnd&amp;);
+    BaseDispOpnd(Opnd&amp;);
+
+    Opnd get_base() const;
+    void set_base(Opnd);
+    Opnd get_disp() const;
+    void set_disp(Opnd);
+};
+
+bool is_base_disp(Opnd);
+</pre><p>
+
+<code>BaseDispOpnd</code> defines an address expression with exactly two
+suboperands: the register or variable-symbol base and the integer
+immediate displacement.  The only other declaration that you need to
+add to the OPI to begin programming with this new operand kind is the
+prototype for the predicate function <code>is_base_disp</code>.  This OPI
+function distinguishes base-plus-displacement operands from the other
+kinds of operands in the OPI.
+<p>
+Notice that the class <code>BaseDispOpnd</code> does not add any new storage.
+All of the necessary storage for this address expression is provided
+<a name="NWD3">by the base class </a><code>AddrExpOpnd</code>, which gets its storage from the
+SUIF class <code>OpndAddrExp</code> via the creator function <code>opnd_addr_exp</code>.
+You don't have to understand exactly how this storage is allocated to
+build a new operand kind like <code>BaseDispOpnd</code>.  Just understand that
+the <code>src</code> sequence in <code>AddrExpOpnd</code> provides the storage for your
+custom class, and that your custom class hides how (in this case)
+<code>base</code> and <code>disp</code> map onto the suboperands of an instance of
+<code>AddrExpOpnd</code>.
+<p>
+<pre><a name="NW4A4imC-1qJwBm-1" href="#NWD3"><dfn>&lt;<code>BaseDispOpnd</code> implementation&gt;=</dfn></a>
+bool
+is_base_disp(Opnd opnd)
+{
+    return get_kind(opnd) == opnd::BASE_DISP;
+}
+
+BaseDispOpnd::BaseDispOpnd(Opnd base, Opnd disp, TypeId deref_type = 0)
+    : AddrExpOpnd(opnd::BASE_DISP, deref_type)
+{
+    set_src(0, base);
+    set_src(1, disp);
+}
+
+BaseDispOpnd::BaseDispOpnd(const Opnd &amp;opnd) :
+    AddrExpOpnd(is_base_disp(opnd) ? opnd : opnd_null())
+{ }
+
+BaseDispOpnd::BaseDispOpnd(Opnd &amp;opnd) :
+    AddrExpOpnd(is_base_disp(opnd) ? opnd : opnd_null())
+{ }
+
+Opnd
+BaseDispOpnd::get_base() const
+{
+    return get_src(0);
+}
+
+void
+BaseDispOpnd::set_base(Opnd opnd)
+{
+    set_src(0, opnd);
+}
+
+Opnd
+BaseDispOpnd::get_disp() const
+{
+    return get_src(1);
+}
+
+void
+BaseDispOpnd::set_disp(Opnd opnd)
+{
+    set_src(1, opnd);
+}
+</pre><p>
+
+Because we do not define any new storage when declaring a new
+specialization of <code>AddrExpOpnd</code> and an <code>AddrExpOpnd</code> is the exact
+same size as an <code>Opnd</code>, we can pass around or store an instance of
+<code>BaseDispOpnd</code> (or any other specialization of <code>AddrExpOpnd</code>) as
+an <code>Opnd</code>.  This invariant is important because OPI functions like
+<code>set_src(Instr *mi, int pos, Opnd o)</code>, which replace the source
+operand at location <code>pos</code> in an instruction's source operand
+sequence with the operand <code>o</code>, do not have a variant that takes a
+<code>BaseDispOpnd</code>.  We provide (and need) only a variant that takes an
+<code>Opnd</code>.  You don't have to change any existing OPI functions
+involving operands when you add a new operand kind.
+<p>
+This storage constraint invariant also enables us to provide trivial
+constructors from an <code>Opnd</code> to a <code>BaseDispOpnd</code>.  You should
+provide similar constructors in your custom class.  The following
+example shows why this is important.  Suppose you wanted to operate on
+the 0th operand of an instruction <code>instr</code>, but only if it were a
+base-plus-displacement address expression.  You could write code
+something like the following:
+<p>
+<pre>
+    Opnd opnd = get_src(instr, 0);
+    if (BaseDispOpnd bdo = opnd) {
+        Opnd base = bdo.get_base();
+        // ...
+    }
+</pre>
+
+This code works because you can build a <code>BaseDispOpnd</code> from
+an <code>Opnd</code> if the original operand was actually of type
+<code>BaseDispOpnd</code>.  If not, the copy constructor returns a
+null operand.  A null operand, if evaluated in a Boolean
+context, evaluates to false.  All other operands evaluate
+true.
+<p>
+
+<h2><a name=toc8>Custom Notes</a></h2>
+<a name="sec-newnote"><b>[*]</b></a>
+<p>
+If you want to add a new annotation to the OPI, you should first check
+to see if the value sequence associated with an existing annotation
+satisfies your needs.  For example, if you need a new kind of flag
+annotation, you simply define a new <code>NoteKey</code> and use the existing
+creator function <code>note_flag</code>.  Similarly, you can simply use the
+value sequence produced by <code>OneNote&lt;ValueType&gt;</code> or
+<code><a name="NWD4">ListNote&lt;ValueType&gt;</a></code> for new singleton or list annotations.
+<p>
+Life gets more interesting if you want to define a new kind of custom
+annotation, but not all that much more difficult.  In fact, the steps
+involved in the design of a new custom annotation exactly parallel the
+steps involved in the design of a new address-expression operand
+(presented in the previous section).  The class <code>LineNote</code> serves
+as an example.
+<p>
+<pre><a name="NW4A4imC-302t0R-1" href="#NWD4"><dfn>&lt;class <code>LineNote</code>&gt;=</dfn></a>
+class LineNote : public Note {
+ public:
+    LineNote() : Note(note_list_any()) { }
+    LineNote(const LineNote &amp;other) : Note(other) { }
+    LineNote(const Note &amp;note) : Note(note) { }
+
+    int get_line() const        { return _get_c_long(0); }
+    void set_line(int line)     { _replace(0, line); }
+    IdString get_file() const   { return _get_string(1); }
+    void set_file(IdString file){ _replace(1, file); }
+};
+</pre><p>
+
+<code>LineNote</code> is a derived class of <code>Note</code>, and as in the case with
+derived classes of <code>Opnd</code>, the custom classes of <code>Note</code> do not add
+any new storage.  They get all of the storage they need from the base
+class.  This allows us to use the type <code>Note</code> for IR components of a
+more derived type; we do not have to extend any existing OPI functions
+involving the class <code>Note</code> when adding a new custom class.  And, it
+makes the definition of copy constructors from IR components of type
+<code>Note</code> trivial, as shown in <code><a href="#NWD4"><i>&lt;class <code>LineNote</code>&gt;</i></a></code>.
+<p>
+The underlying storage for the base class is provided by the function
+<code>note_list_any</code>.  This function is used only by extenders; it should
+never appear in the code for analyses or optimizations.  This function
+produces a special kind of list annotation with a potentially
+heterogenous value sequence.  In particular, each value in the
+sequence can be one of the following types: <code>long</code>, <code>Integer</code>,
+<code>IdString</code>, or <code>IrObject*</code>.
+<p>
+As in the case of a new address-expression operand, we define methods
+of the new custom annotation class that reflect the meaning of each
+sequence value.  The base class <code>Note</code> provides protected sequence
+methods that allow you to inspect and change individual values as well
+as manipulate the sequence itself.  In the <code>LineNote</code> example above,
+we have defined two sequence values: a line value of type <code>int</code> and
+a file name value of type <code>IdString</code>.  The line value happens to
+occupy the 0th location of the value sequence, and it is accessed
+using the protected method <code>Note::_get_c_long</code>.  We use this
+particular method because we know the type of the value stored in the
+0th location.  We can make similar statements about the file name
+value and methods.  Please see <em>The OPI User's
+Guide</em>&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibopiuser">bibopiuser</a>]</b> for a discussion of how to program with
+custom annotations.
+<p>
+<h5><a name=toc9>Substrate extensions.</a></h5>
+<p>
+You can also add new kinds of annotations by creating new data
+structures in the underlying substrate.  As with operands, we do not
+expect that you'll need to do this very often (if at all).  If you do
+need something that cannot be satisfied with custom annotations, we
+suggest that you review the documentation that came with your
+<code>machine</code> library.  It will explain how the base class <code>Note</code> was
+constructed on top of the substrate data structures.  You can use this
+as a model for your new kind of annotation.
+<p>
+
+<h2><a name=toc10>New Instructions</a></h2>
+<a name="sec-newinstr"><b>[*]</b></a>
+<p>
+All machine instructions are of type <code>Instr*</code>.  In the OPI, we
+carefully hide the implementation of the <code>Instr</code> class so that
+analyses and optimizations written using the OPI are not dependent
+upon any particular implementation of it.  As we have stated
+previously, this means that you can completely change the
+implementation of the class <code>Instr</code>, and as long as your new
+implementation adheres to the OPI, you will not have to rewrite any
+existing optimizations.  This organization provides you with a lot of
+freedom; you can completely restructure the <code>Instr</code> class since any
+changes you make are hidden behind the OPI's functional interface.
+<p>
+In general, there are two basic questions that you must ask when
+considering support for a new kind of instruction:
+<p>
+<ol>
+
+<li>Does the class <code>Instr</code> or any of its existing derived classes
+contain enough of the right kinds of storage to act as the container
+class for your new instruction kind?
+<p>
+<li>Will the identification or manipulation of an instance of your
+new instruction kind require target-specific information?
+<p>
+</ol>
+
+<h5><a name=toc11>Storage considerations.</a></h5>
+<p>
+To support a new instruction kind, some IR data structure in the
+system must contain enough storage to describe all of the instruction
+components.  This issue is obviously dependent upon the particular
+implementation of the OPI that you're using.  For an implementation
+like Machine SUIF, you will probably not need to make any changes to
+<code>Instr</code> or its derived classes.  We provide just a few very general
+derived classes; each of which is capable of describing a wide range
+of instructions.
+<p>
+For example, the class <code>InstrAlm</code> <b>[</b>This class is not in the
+OPI.  It is simply how we have currently chosen to implement the part
+of the OPI that supports for instructions.<b>]</b>  is capable of describing
+any arithmetic, logical, or memory instruction consisting of zero,
+one, or more source (``argument'') or destination (``result'')
+operands.  You can even use this class to implement support for an
+architecture with predicated instructions.  You could choose to
+implement a predicated add instruction by defining the first source
+operand of every instruction as the input predicate.  Optimization
+passes not concerned with the difference between the input predicate
+and the rest of the source operands continue to use the sequence
+functions <code>get_src</code> and <code>set_src</code>, while those specifically
+tailored for predicated architectures could use a set of sequence
+functions that treated the first source operand specially.
+<p>
+Once you have identified (or defined) an appropriate storage container
+for your new instruction kind, you next must provide a way for the OPI
+user to create new instances of your instruction kind.  We refer to
+functions in the OPI that create new instances of objects as
+``creation functions'', or simply <em>creators</em>.  A machine
+instruction creator takes an opcode and possibly some operands or
+other instruction components, and it produces a machine instruction.
+<p>
+Continuing with our predication example, if you choose to use the
+<code>InstrAlm</code> class as your storage for predicated instructions, you
+could simply use the existing <code>new_instr_alm</code> creator functions for
+your new instruction kind.  For convenience, you may decide to
+implement a new creator function that distinguishes the input
+predicate from the rest of the source operands.  The following
+illustrates one possible way to do this:
+<p>
+<pre>
+    Instr*
+    new_instr_predicated_alm(Opnd dst, int opcode, Opnd predicate,
+                             Opnd src1, Opnd src2)
+    {
+        Instr *mi;
+        mi = new_instr_alm(dst, opcode, predicate, src1);
+        set_src(mi, 2, src2);
+        return mi;
+    }
+</pre>
+
+For more information about support for machine instructions and
+instruction creators, we refer you to <em>The Machine-SUIF Machine
+Library</em> document&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibmachine">bibmachine</a>]</b>.
+<p>
+
+<h5><a name=toc12>Target dependence.</a></h5>
+<p>
+Once you have a data structure capable of describing your new
+instruction kind and a mechanism to create an instance, you need to
+define OPI functions to inspect and potentially manipulate the
+instruction's components.  Often, you can reuse existing OPI functions
+for this purpose, as we did above in our discussion of instruction
+creators.  The new issue that we want to raise here is one of
+target dependence.  This issue is best illustrated using a simple
+<a name="NWD5">example from Machine SUIF.</a>
+<p>
+The OPI provides instruction predicates--Boolean functions that
+return true if an instruction is a particular kind of instruction.
+The functions <code>is_mbr</code> and <code>is_cmove</code> are two example predicates.
+The former identifies multi-way branches, while the latter identifies
+conditional moves.  Under Machine SUIF, the implementation of the
+former is target independent, while the later is target dependent.
+<p>
+<pre><a name="NW4A4imC-1chgjL-1" href="#NWD5"><dfn>&lt;function <code>is_mbr</code>&gt;=</dfn></a>
+bool
+is_mbr(Instr *instr)
+{
+    return has_note(instr, k_instr_mbr_tgts);
+}
+
+</pre><pre><a name="NW4A4imC-3R7e1j-1" href="#NW4A4imC-3R7e1j-1"><dfn>&lt;function <code>is_cmove</code>&gt;=</dfn></a>
+bool
+is_cmove(Instr *instr)
+{
+    return dynamic_cast&lt;MachineContext*&gt;(the_context)-&gt;is_cmove(instr);
+}
+
+</pre><p>
+
+The function <code>is_mbr</code> determines whether an instruction is a multi-way
+branch by testing for the existence of an annotation that appears only
+on multi-way branches.  In Machine SUIF, this annotation must appear
+on all multi-way branches and is independent of the target.
+<p>
+The function <code>is_cmove</code> returns true if the instruction is a
+conditional move.  We explain the implementation of this function in
+Section&nbsp;<a href="#sec-contexts">[-&gt;]</a>.  Here, we simply state that this function
+looks up the correct implementation of this predicate in the target
+<code>Context</code>, which was loaded based on the target annotation during
+the call <code>focus(FileBlock*)</code> in <code>do_file_block</code> in the pass's file
+<code>suif_pass.cpp</code>.
+<p>
+Other implementations of the OPI may handle these issues in a
+different manner.
+<p>
+
+<h2><a name=toc13>New Execution Bodies</a></h2>
+<a name="sec-newexobj"><b>[*]</b></a>
+<p>
+Every now and then, you may find that you need to extend the system
+with a new kind of <code>AnyBody</code>.  An <code>AnyBody</code> is an
+<code>IrObject</code> that can be used as the body of an <code>OptUnit</code>.  An
+<code>InstrList</code> is an example of an <code>AnyBody</code>.  In this
+section, we review the major steps involved in building a library for
+a new kind of <code>AnyBody</code>.  In particular, we describe our
+implementation of the <code>Cfg</code>, a derived class of <code>AnyBody</code>,
+and the structure of the control-flow graph (CFG) library.
+<p>
+The file <code>cfg/cfg.h</code> lists all of the important header files in the
+CFG library. <b>[</b>Please note that not all of the declarations in the
+<code>cfg</code> header files are OPI-visible functions and data structures.<b>]</b> 
+This is the header file that users of your new functionality include
+in their analysis and optimization passes.  This section discusses the
+implementation of the CFG library and not just in its OPI interface.
+<p>
+The following list briefly describes each of the header files included
+in <code>cfg.h</code>.  For a detailed discussion of the contents of these
+files, we refer you to the Machine-SUIF CFG library document.
+<p>
+<ul>
+
+<li><code>cfg_ir.h</code> and <code>cfg_ir_factory.h</code> define new hoof-generated
+(i.e., SUIF-substrate-specific) classes and other data
+structures.  This is where class <code>Cfg</code> and <code>CfgNode</code>
+are declared since they are extensions of data structures
+in the SUIF substrate.
+<p>
+<li><code>graph.h</code> defines the set of OPI functions available for
+creating, inspecting, and manipulating the graph that is
+the CFG.
+<p>
+<li><code>node.h</code> defines the set of OPI functions available for
+creating, inspecting, and manipulating a CFG node and its
+edges and contents.
+<p>
+<li><code>util.h</code> contains a number of OPI helper functions that
+do not fall neatly into either <code>graph.h</code> or <code>node.h</code>.
+<p>
+<li><code>init.h</code> lists the parts of the CFG library that you
+must initialize before you can start using its facilities.
+<p>
+</ul>
+
+To define a new <code>AnyBody</code>, you would create one or more
+substrate classes and one or more creator functions, as done in
+<code>cfg_ir.hoof</code>.  You would also write an appropriate set of
+initialization routines as we have done in <code>init.h</code> and <code>init.cpp</code>
+for the SUIF substrate.  The content of the remaining header files is
+specific to the kind of <code>AnyBody</code> you define.  There is one
+piece of these header files that is important to include in any
+<code>AnyBody</code>, and that piece deals with the issue of conversion
+from one <code>AnyBody</code> to another.
+<p>
+The CFG library provides a creator function <code>new_cfg</code> that takes an
+<code>InstrList</code> and produces a <code>Cfg</code>.  The Machine Library defines a
+function <code>to_instr_list</code> that takes an <code>AnyBody</code> and produces an
+<code>InstrList</code>.  The class <code>AnyBody</code> is the base class for
+<code>InstrList</code>, <code>Cfg</code>, and other new <code>OptUnit</code> body types.  It is
+an abstract class defining the method <code>to_instr_list</code>, which we use
+to implement the OPI function <code>to_instr_list</code>.  In plain English,
+<code>InstrList</code> is the default form of an <code>OptUnit</code> body, and as such,
+we make it easy for you to provide a pair of converters between the
+new <code>AnyBody</code> and <code>InstrList</code>.
+<p>
+Given a pointer to the body of an <code>OptUnit</code>, you can dispatch based
+on the type of the body by using the <code>is_a&lt;BodyType&gt;</code> template
+predicate function, where <code>BodyType</code> is the derived type of the
+<code>AnyBody</code> you are interested in.  For example, the following
+code ensures that the body of an <code>OptUnit</code> is a <code>Cfg</code>.
+<p>
+<pre>
+    OptUnit *unit;
+    AnyBody *orig_body = get_body(unit);
+    if (!is_a&lt;Cfg&gt;(orig_body)) {
+        // conversion
+        InstrList *instrlist = to_instr_list(orig_body);
+        Cfg *cfg = new_cfg(instrlist);
+
+        // replace original body with new cfg
+        copy_notes(orig_body, cfg);
+        set_body(unit, cfg);
+
+        // clean up
+        delete instrlist; delete orig_body;
+    }
+</pre>
+
+In order for the code above to work within a Machine-SUIF pass, you
+must have linked the pass with the library corresponding to the type
+of the <code>orig_body</code> and called that library's initialization
+function.  This approach is unacceptable for a system where a new
+<code>AnyBody</code> may be defined and used long after an optimization pass is
+written.  
+<p>
+As such, we define two converter passes with each kind of <code>AnyBody</code>
+we define.  In the CFG library, we define a pass <code>il2cfg</code> that
+converts <code>OptUnit</code> bodies in <code>InstrList</code> form to <code>Cfg</code> form, and
+a pass <code>cfg2il</code> that performs the opposite conversion.  Each
+optimization pass then simply verifies that the input <code>OptUnit</code> body
+is in the expected form; it is the responsibility of the person
+stringing the passes together to insert converter passes where
+necessary.
+<p>
+
+<h2><a name=toc14>Target Libraries and the Context Object</a></h2>
+<a name="sec-contexts"><b>[*]</b></a>
+<p>
+A <em>target library</em> implements all target-dependent OPI functions
+and initializes all target-dependent OPI data structures.  The
+<code>alpha</code> and <code>x86</code> libraries distributed with Machine SUIF are
+examples of target libraries.  In some compilers, you specify the
+target library when the compiler is compiled.  In Machine SUIF, the
+target is not specified until the compiler is run.  Machine SUIF
+dynamically loads the required target library when it runs.
+<p>
+This section briefly describes the structure of a target library and
+the method by which we support the dynamic linking of target libraries
+in Machine SUIF.  The key to this process is the <code>Context</code> data
+structure.  In Section&nbsp;<a href="#sec-x86-ppro">[-&gt;]</a>, we show how this data
+structure also supports architectural investigations by allowing you
+to reuse large portions of an existing target library and override
+only those portions you need.
+<p>
+
+<h3><a name=toc15>Development of a target library</a></h3>
+<p>
+A target library contains <code>enum</code> definitions, target functions, and
+target descriptions.  A target library also includes initialization
+code that the underlying substrate calls before using any of the
+target library's facilities (e.g., see the <code>init</code> modules in
+the Machine-SUIF <code>alpha</code> library).
+<p>
+The most important <code>enum</code> is probably the opcode enumeration.  With
+two exceptions, the opcode of a machine instruction is meaningful only
+when interpreted with respect to a target machine.  The exceptions are
+<code>opcode_null</code> and <code>opcode_label</code>, which are the opcodes used for
+the target-independent null or label instructions, respectively.  The
+first target-specific opcode number therefore has the value <i>2</i>.  The
+particular numbers used for the target-specific opcodes are not
+dictated by the target instruction set architecture; they are
+arbitrarily assigned small integers, useful for accessing instruction
+properties by table lookup.  The same integer that represents <code>mov</code>
+in an <i>x</i>86 instruction may be used for <code>addq</code> in an Alpha
+instruction.
+<p>
+For each target-dependent OPI function, a target library must
+provide a function with the same prototype.  For example,
+the OPI function
+<p>
+<pre>
+    bool is_cmove(Instr*);
+</pre>
+
+is implemented for the Alpha platform by the <code>alpha</code> library
+function
+<p>
+<pre>
+    bool is_cmove_alpha(Instr*);
+</pre>
+
+Similarly, for each OPI class that encapsulates a piece of the target
+description, the target library must provide a specialization of that
+class.  For example, the <code>x86</code> library declares <code>RegInfoX86</code> as a
+subclass of the OPI class <code>RegInfo</code>.  For a detailed description of
+the purpose of the function <code>is_cmove</code> and the class <code>RegInfo</code>, we
+refer you to <em>The Machine-SUIF Machine Library</em>
+document&nbsp;<b>[cite&nbsp;<a href="#NWcite-bibmachine">bibmachine</a>]</b>.
+<p>
+As illustrated above, our naming convention appends the library name
+to the end of an OPI function to obtain the name for that function's
+target-dependent implementation and to the end of an OPI class to
+obtain the name for that class's target-dependent specialization.
+Machine SUIF however does not use these names to bind an OPI
+definition to its target-specific implementation.  That is the task of
+the <code>Context</code> object, as explained in the next section.
+<p>
+
+<h3><a name=toc16>The target context</a></h3>
+<p>
+A <em>context</em> gathers all the items that characterize the target
+machine into one record.  The context data structure is a powerful
+tool for OPI extenders.  OPI programmers, on the other hand, don't
+directly access the context data structure.  It is constructed
+automatically during the (non-OPI) call to <code>focus(FileBlock*)</code>.  OPI
+programmers access target characteristics through global functions and
+through the data structures that they return.  Function
+<code>target_regs</code>, which returns a <code>RegInfo</code> pointer, is typical.  The
+<code><a href="#NW4A4imC-3R7e1j-1"><i>&lt;function <code>is_cmove</code>&gt;</i></a></code> shown earlier is another example.
+<p>
+We begin with a description of how contexts work in a system like
+Machine SUIF and thus how you use them to provide support for a new
+target.  We then explain the reasons why we chose this
+design.
+<p>
+
+<h5><a name=toc17>Building and working with <code>the_context</code>.</a></h5>
+<p>
+Let's begin with a look at the implementation of
+<code><a href="#NW4A4imC-3R7e1j-1"><i>&lt;function <code>is_cmove</code>&gt;</i></a></code> in greater detail.
+This function is declared and
+defined in the <code>machine</code> library, the main interface library in
+<a name="NWD6">Machine SUIF.  It dynamically casts the global variable</a>
+<code>the_context</code> to <code>MachineContext*</code> and makes an <code>is_cmove</code>
+method call.
+<p>
+Digging deeper, we see that the declared type of <code>the_context</code> is
+<code>Context*</code>.  The class <code>Context</code>, however, is just an empty base
+class, as shown below.  The key feature of this type is that it is
+known to everyone, machine dependent and independent.
+<p>
+<pre><a name="NW4A4imC-nKzAs-1" href="#NWD6"><dfn>&lt;class <code>Context</code>&gt;=</dfn></a>
+class Context {
+  public:
+    Context() { }
+    virtual ~Context() { }
+};
+</pre><p>
+
+The <code>is_cmove</code> method is actually declared in a different <em>interface</em> class, called <code>MachineContext</code>.  (The <code>target_regs</code>
+method is declared here too.)  Interface classes are declared in
+interface libraries along with their OPI functions.  
+<p>
+It is important to note that interface classes are not subclasses of
+<code>Context</code>.  Each interface class is simply a chunk of interface that
+target libraries use when composing an actual context instance that is
+right for the target in question.  The method of composition is
+<a name="NWD7">multiple inheritance.  So while the declared type of </a><code>the_context</code>
+is <code>Context*</code>, it points to an object whose class inherits not only
+from <code>Context</code>, but also from several interface
+classes. <b>[</b>Context-interface classes are named for the
+libraries that define them: <code>MachineContext</code> is defined in the
+<code>machine</code> library, <code>SuifVmContext</code> in the <code>suifvm</code> library, and
+so on.<b>]</b>   The context object for the <code>alpha</code> library is declared as
+follows:
+<p>
+<pre><a name="NW4A4imC-2kcr6e-1" href="#NWD7"><dfn>&lt;class <code>AlphaContext</code>&gt;=</dfn></a>
+class AlphaContext : public virtual Context,
+                     public virtual MachineContextAlpha,
+                     public virtual SuifVmContextAlpha
+{ };
+
+#endif /* ALPHA_CONTEXT_H */
+</pre><p>
+
+The actual interface classes used in the declaration of
+<code>AlphaContext</code> are derived classes of the base interface classes
+found in the interface libraries.  To reiterate, the <code>machine</code>
+library is an interface library; the context interface that it defines
+is <code>MachineContext</code>.  The <code>alpha</code> library is an implementation
+library; the context class that it defines realizes a number of
+context interfaces, including <code>MachineContext</code> (through the
+derived class <code>MachineContextAlpha</code>). <b>[</b>The <code>suifvm</code> library is
+exceptional; it plays both roles.  It introduces the
+machine-independent <code>SuifVmContext</code>, but it also defines a concrete
+context that is specific to the SUIFvm target.<b>]</b>   The implementation
+of <code>MachineContextAlpha::is_cmove</code> simply invokes the target-specific
+function <code>is_cmove_alpha</code>.
+<p>
+The <code>init.cpp</code> file in the target library contains the last piece of
+this puzzle.  The library's initialization code takes responsibility
+for generating the concrete-context pointer that gets stored in
+<code>the_context</code> by registering a function in
+<code>the_context_creator_registry</code> map.  For the <code>alpha</code> library, this
+context-creator function invokes the <code>AlphaContext</code> constructor to
+create a new concrete-context object.
+<p>
+
+<h5><a name=toc18>Multiple inheritance as an implementation technology.</a></h5>
+<p>
+So why not call the methods of <code>the_context</code> directly?  For one
+thing, it's shorter to write calls on global functions, and these
+things occur quite frequently.  More importantly, the context is not
+needed in some optimization settings, such as run-time optimization.
+So for portability, code written against the OPI should be almost
+``context free''.  In other words, we use object-oriented techniques
+to support the extensibility goals of Machine SUIF, but hide this
+technology behind an OPI based largely on functions for portability.
+<p>
+Ok, but why are concrete contexts in Machine SUIF built using multiple
+inheritance?  Because it allows more flexibility in combining
+libraries than traditional linear inheritance.  To see why, consider
+the following argument.  The interface libraries used by an
+optimization pass are known statically.  Its author chooses only those
+that the pass needs.  The target library used by the pass, however, is
+chosen and linked dynamically, based on the target associated with the
+file being compiled.  How then can there be enough agreement between
+the context class known when the pass is compiled and the one
+generated when the target-specific library is linked in?  If contexts
+are derived linearly, then the statically-known class cannot (in
+general) skip a level of derivation and still be compatible with the
+dynamically-generated context object.
+<p>
+Multiple inheritance from independent context-interface classes, together
+with dynamic casting based on run-time type information (RTTI), solves this
+problem cleanly.  A target library creates a context that contains the
+union of all the information needed by passes that will use it.  A given
+pass then accesses only those parts of the context that concern it.
+<p>
+
+<h2><a name=toc19>Target Library Extension</a></h2>
+<a name="sec-x86-ppro"><b>[*]</b></a>
+<p>
+Though it is not difficult to build a target library from scratch, you
+don't want to do this for multiple different revisions of the same
+instruction set architecture (ISA), and you certainly don't want to do
+this for different implementations of the same ISA.  As such, we
+provide you with the ability to refine an existing target library.
+This approach is especially advantageous for experimenting with new
+architectural features (e.g., new instructions or new register-file
+properties).
+<p>
+This section describes the implementation of the <code>x86_ppro</code> target
+library.  This library is a refinement of the <code>x86</code> target library;
+it adds support for instructions defined in the Pentium and Pentium
+Pro.  We begin with an illustration of how to extend the opcode
+enumeration.  The new instructions require us to override the
+implementations of the OPI functions <code>target_printer</code>, <code>is_cmove</code>,
+and <code>target_code_gen</code> from the <code>x86</code> library.  We conclude with a
+review of the library's initialization code.
+<p>
+
+<h3><a name=toc20><a name="NWD8">Opcode extensions</a></a></h3>
+<p>
+The Intel Pentium and Pentium Pro microprocessors add several new
+instructions to the x86 ISA.  To extend the opcode enumeration defined
+in the <code>x86</code> target library, we number the new opcodes starting from
+one beyond the value of the C preprocessor variable
+<code>LAST_X86_OPCODE</code>.  We define 47 new opcodes, of which
+<code>WRMSR</code> is the last.
+<p>
+<pre><a name="NW4A4imC-zi7d2-1" href="#NWD8"><dfn>&lt;opcode <code>WRMSR</code>&gt;=</dfn></a>
+const int WRMSR    = LAST_X86_OPCODE + 47;
+
+#undef LAST_X86_OPCODE
+#define LAST_X86_OPCODE x86::WRMSR
+
+</pre><p>
+
+To allow for extensions of this extension library, we re-define
+<code>LAST_X86_OPCODE</code> to the value of this constant.
+<p>
+The file <code>opcodes.cpp</code> extends two target-specific tables
+<code>x86_opcode_names</code> and <code>x86_invert_table</code> that associate a string name
+and the complementary branch condition (if any) with each opcode.
+Since the Pentium Pro does not add any new conditional branches, the
+function <code>init_x86_ppro_invert_table</code> sets each new table entry to
+an invalid opcode value.  These routines are invoked in the
+library initialization <code><a href="#NWDD"><i>&lt;function <code>init_x86_ppro</code>&gt;</i></a></code>.
+<p>
+
+<h3><a name=toc21>Extension contexts</a></h3>
+<p>
+The inclusion of the new instructions requires us to extend the
+<code>x86</code> printer class, <code>PrinterX86</code>, and override the OPI function
+<code>target_printer</code>.  Some of these instructions are conditional moves,
+and thus we want to override the <code>x86</code> implementation of the OPI
+function <code>is_cmove</code>.  Finally, we would like to take advantage of
+the new floating-point compare operations that allow us to directly
+<a name="NWD9">update the </a><code>eflags</code> register.  This means that we would like to
+override the OPI function <code>target_code_gen</code> that provides us with a
+code generator from SUIFvm instructions to instructions of the
+target architecture.  The next subsection presents a recipe for
+extending the target-description objects.  In this subsection, we show
+how you can combine these extensions with pieces from the <code>x86</code>
+library to produce an <code>X86PProContext</code> object that invokes the
+appropriate OPI functions.
+<p>
+<pre><a name="NW4A4imC-3q6XgK-1" href="#NWD9"><dfn>&lt;class <code>X86PProContext</code>&gt;=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b>
+class X86PProContext : public virtual Context,
+                       public virtual MachineContextX86PPro,
+                       public virtual SuifVmContextX86PPro
+{ };
+
+
+
+#endif /* X86_PPRO_CONTEXT_H */
+</pre><p>
+
+<a name="NWDA">Like the </a><code>X86Context</code>, <code>X86PProContext</code> inherits from <code>Context</code>
+and derived classes of <code>MachineContext</code> and <code>SuifVmContext</code>.  As
+shown below, the derived classes are just specializations of the
+<code>x86</code> versions of these interface classes.  The specializations
+simply override the methods corresponding to the OPI functions that
+we wish to override.
+<p>
+<pre><a name="NW4A4imC-3GBZk2-1" href="#NWDA"><dfn>&lt;class <code>MachineContextX86PPro</code>&gt;=</dfn></a>
+class MachineContextX86PPro : public MachineContextX86 {
+  public:
+    Printer* target_printer() const;
+
+    bool is_cmove(Instr*) const;
+};
+
+<a name="NW4A4imC-3GBZk2-1-u1" href="#NWD9"><i>&lt;class <code>X86PProContext</code>&gt;</i></a>
+</pre><pre><a name="NW4A4imC-1BCfsC-1" href="#NW4A4imC-1BCfsC-1"><dfn>&lt;class <code>SuifVmContextX86PPro</code>&gt;=</dfn></a>
+class SuifVmContextX86PPro : public SuifVmContextX86 {
+  public:
+    CodeGen* target_code_gen() const;
+};
+
+</pre><p>
+
+<a name="NWDB">The implementations of the </a><code>target_printer</code> and <code>target_code_gen</code>
+methods either build a new instance of a <code>PrinterX86PPro</code> or
+<code>CodeGenX86PPro</code> object, respectively, or return cached versions
+of the appropriate object.  The implementation of the <code>is_cmove</code>
+method is shown below:
+<p>
+<pre><a name="NW4A4imC-3tf8xg-1" href="#NWDB"><dfn>&lt;<code>MachineContextX86PPro::is_cmove</code>&gt;=</dfn></a>
+bool
+MachineContextX86PPro::is_cmove(Instr *mi) const
+{
+    return (is_cmove_x86_ppro(mi) || is_cmove_x86(mi));
+}
+</pre><p>
+
+Notice that the implementation assumes that the target-specific
+functions are independent.  The function <code>is_cmove_x86_ppro</code> does
+not re-implement any of the functionality implemented by
+<code>is_cmove_x86</code>; it identifies only those new instructions that are
+conditional moves and relies on code in the <code>x86</code> library to deal
+with previously-defined instructions.  As discussed next, we adhere to
+this kind of an approach for extending even the most complicated of
+target-specific objects.
+<p>
+
+<h3><a name=toc22>Extension of target-description objects</a></h3>
+<p>
+OPI functions like <code>target_printer</code> and <code>target_code_gen</code> return
+pointers to class objects that describe or produce target-specific
+<a name="NWDC">information.  Since all of these objects are extended in the same</a>
+basic way, we focus on extensions of the <code>Printer</code> class here.  The
+<code>x86_ppro</code> library also contains code demonstrating how you could
+extend the <code>CodeGen</code> class.
+<p>
+All of the new <code>x86_ppro</code> instructions are classified as <code>alm</code>
+instructions, and thus the class <code>PrinterX86PPro</code> simply has to
+override the method <code>print_instr_alm</code> of <code>PrinterX86</code>.
+<p>
+<pre><a name="NW4A4imC-2wZMyq-1" href="#NWDC"><dfn>&lt;class <code>PrinterX86PPro</code>&gt;=</dfn></a>
+class PrinterX86PPro : public PrinterX86 {
+  protected:
+    virtual void print_instr_alm(Instr*);
+
+  public:
+    PrinterX86PPro();
+};
+
+
+
+#endif /* X86_PPRO_PRINTER_H */
+</pre><p>
+
+The constructor for this class extends target-specific table
+<code>print_instr_table</code> with a pointer to the appropriate print method
+for each new opcode.  The public method <code>print_instr_alm</code> first
+checks to see if the opcode of the instruction to print is one of our
+new opcodes or not.  If it is, we specify how to print the instruction
+in the implementation of this method.  If it is not, the routine
+<a name="NWDD">simply invokes the base class method </a><code>PrinterX86::print_instr_alm</code>.
+<p>
+
+<h3><a name=toc23>Library initialization</a></h3>
+<p>
+The module <code>init.cpp</code> contains the library initializations that the
+underlying substrate must perform before it or any of the optimization
+passes can use the <code>x86_ppro</code> target library's facilities.
+<p>
+<pre><a name="NW4A4imC-3W5S6e-1" href="#NWDD"><dfn>&lt;function <code>init_x86_ppro</code>&gt;=</dfn></a>
+extern &quot;C&quot; void
+init_x86_ppro(SuifEnv *suif_env)
+{
+    static bool init_done = false;
+
+    if (init_done)
+        return;
+    init_done = true;
+
+    init_machine(suif_env);
+    init_suifvm(suif_env);
+    init_x86(suif_env);
+
+    k_x86_ppro = &quot;x86_ppro&quot;;
+
+    // initializations for opcode-indexed tables
+    init_x86_ppro_opcode_names();
+    init_x86_ppro_invert_table();
+
+    the_context_creator_registry[k_x86_ppro] = context_creator_x86_ppro;
+}
+</pre><p>
+
+The <code>x86_ppro</code> library requires the <code>machine</code>, <code>suifvm</code>, and
+<code>x86</code> libraries to be loaded.  The function <code>init_x86_ppro</code> then
+initializes a string constant and a few of the opcode-indexed tables.
+The target-description objects are not created until they are first
+needed.  Finally, the context-creator function for the <code>x86_ppro</code>
+context is registered with the system.  This function simply invokes
+the constructor for <code>X86PProContext</code>.
+<p>
+
+<h2><a name=toc24>Summary</a></h2>
+<a name="sec-summary"><b>[*]</b></a>
+<p>
+In this document, we have discussed many of the most common kinds of
+system extensions, and we have presented actual examples of these
+extension mechanisms in action in our distributed code.  This document
+is not meant to be an exhaustive listing.  However, it does illustrate
+the philosophy and general recipe behind our support for extensions
+(and improvements) to the OPI in general and Machine SUIF in
+particular.  For more details on the items presented here, we refer
+you to the library documents that came with your system.
+<p>
+
+<h2><a name=toc25>Acknowledgments</a></h2>
+<p>
+This work was supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).  We also gratefully
+acknowledge the generous support of this research by Advanced Micro
+Devices, Compaq, Digital Equipment, Hewlett-Packard, International
+Business Machines, Intel, and Microsoft.
+<p>
+
+<h2><a name=toc26>References</a></h2>
+<p>
+<a name="NWcite-bibmachine"><b>[1]</b></a>  G. Holloway and M. D. Smith.  <em>The Machine-SUIF
+Machine Library.</em>  The Machine-SUIF documentation set, Harvard University, 2000.
+<p>
+<a name="NWcite-bibopiuser"><b>[2]</b></a>  G. Holloway and M. D. Smith.  <em>A User's Guide
+to the Optimization Programming Interface.</em>  The Machine-SUIF
+documentation set, Harvard University, 2000.
+<p>
+
+
+
+
+<h2><a name=toc27>SUIF's Hoof Specification</a></h2>
+<a name="app-hoof"><b>[*]</b></a>
+<p>
+The SUIF group at Stanford uses a notation called <em>hoof
+specification</em> to describe the structure of the C++ classes that
+represent the SUIF IR and the relationships between those classes.
+The C++ IR data types are generated automatically from hoof
+specifications.  Users learn what methods are created from the hoof
+descriptions, and they program in terms of those methods.  To give you
+a flavor, here is a partial excerpt from the <code>machine_ir.hoof</code>
+specification in the <code>machsuif2/machine</code> directory:
+<p>
+<pre>
+    abstract IrOpnd : SymbolTableObject {
+        virtual int kind;
+        virtual Type* reference type;
+    };
+
+    concrete OpndVar : IrOpnd {
+        VariableSymbol* reference var;
+
+      public:
+        int   get_kind() const { return opnd::VAR; }
+        Type* get_type() const { return _var-&gt;get_type(); }
+    };
+</pre>
+
+This declares two hoof classes: <code>IrOpnd</code> and <code>OpndVar</code>.
+<code>IrOpnd</code> is abstract in the C++ sense: it has no instances of its
+own; rather, all of its instances are instances of subclasses.  It
+also has no fields that are strictly its own, but it has two
+``virtual'' fields: an integer defining the operand kind and a
+reference to a <code>Type</code> object.  These virtual fields indicate that
+the C++ class produced from this Hoof specification should contain
+four virtual methods: <code>get_kind</code>, <code>set_kind</code>, <code>get_type</code>, and
+<code>set_type</code>.  The implementation of these virtual methods is left to
+the subclasses of <code>IrOpnd</code>.
+<p>
+<code>OpndVar</code> is a concrete subclass of <code>IrOpnd</code>.  In addition to the
+fields defined by <code>IrOpnd</code>, <code>OpndVar</code> declares a field that refers
+to a <code>VariableSymbol</code>.  This field consumes real storage in an
+instance of <code>OpndVar</code>.  This declaration also produces methods that
+allow a user of an <code>OpndVar</code> object to get and set class variable
+<code>var</code>.  Finally, the hoof specification of <code>OpndVar</code> specifies the
+implementation of the virtual methods <code>get_kind</code> and <code>get_type</code>.
+Since variable-symbol operands are atomic in the OPI, we do not need
+to provide any implementations of the set methods.
+<p>
+Please see the Stanford SUIF documentation set for further information
+concerning hoof specifications and the development of new SUIF
+classes.
+<p>
+
+<h2><a name=toc28>Header-File Inclusion and Library Initialization</a></h2>
+<a name="app-include"><b>[*]</b></a>
+<p>
+When extending Machine SUIF, you may want to follow the conventions for
+header-file inclusion and library initialization that we have used in
+building the system.
+<p>
+The first guiding principle is that each source file should record its own
+explicit dependences by <code>#include</code>-ing appropriate header files.  And it
+should never have to cater for the dependences of files that it includes.
+Similarly, each library or pass should call the initialization function for
+any library that it depends on, and not rely on knowledge that one library
+may initialize another.
+<p>
+A second principle is that the exports of a library should be encapsulated
+in a single header file for the library, so that no client needs to be
+aware of the internal structure of a library that it depends on.
+<p>
+<h5><a name=toc29>Library-exports header file.</a></h5>
+<p>
+For example, clients of the CFG library use this directive:
+<p>
+<pre>
+#include &lt;cfg/cfg.h&gt;
+</pre>
+
+Note that we use angle brackets, rather than quotation marks, to delimit
+the file path.  This is not essential, but it acts as a reminder that all
+header files are installed under <code>$NCIHOME/include</code>, and it helps to
+prevent ambiguities arising because different C++ implementations have
+different rules for deciding where to search for headers included in
+headers.
+<p>
+<a name="NWDE">The path for a library-exports header file always has the above form, i.e.,</a>
+it uses the library name as both a directory and as the stem of the file
+name.
+<p>
+A library header file contains only <code>#include</code> directives.  The header
+files that they inject declare the exports of the library.  Take the header
+file for the BVD library for example:
+<p>
+<pre><a name="NW4A4imC-3iFB3J-1" href="#NWDE"><dfn>&lt;contents of <code>bvd.h</code>&gt;=</dfn></a>
+#include &lt;bvd/flow_fun.h&gt;
+#include &lt;bvd/catalog.h&gt;
+#include &lt;bvd/solve.h&gt;
+#include &lt;bvd/liveness.h&gt;
+#include &lt;bvd/reaching_defs.h&gt;
+#include &lt;bvd/init.h&gt;
+</pre><p>
+
+There's no need to include header files from other libraries (such as CFG)
+in <code>bvd.h</code> because any such dependences are handled within the local
+headers themselves.  (E.g., <code>solve.h</code> includes <code>cfg.h</code>.)
+<p>
+<h5><a name=toc30>Header inclusions in other source files.</a></h5>
+<p>
+Each <code>.h</code> and <code>.cpp</code> file implementing a library or pass <code>#include</code>s
+all the header files that the compiler needs to see to compile it properly.
+When it needs exports of (another) library, it includes the exports header
+of that library, using the angle-bracket notation shown in the examples
+above.  But a <code>.cpp</code> file within a library never includes that library's
+own exports header.  Instead it includes just the local headers that it
+needs, using the <code>&lt;...&gt;</code> notation and the directory qualifier, just like
+in the <code>.h</code> files.
+<p>
+<h5><a name=toc31>Library initialization.</a></h5>
+<p>
+The rule for deciding which library initialization routines (those named
+<code>init_</code><em>library</em>) to invoke when initializing a library or pass
+parallels the rule for header-file inclusion.  If there's a need to
+explicitly <code>#include</code> the exports header of a library, then you should
+explicitly invoke its <code>init_</code><em>library</em> routine, and otherwise not.
+<p>
+<h5><a name=toc32>Link specification.</a></h5>
+<p>
+It would be nice if the library search list submitted to the linker,
+represented in a <code>Makefile</code> by using a <code>LIBS</code> definition, could exactly
+parallel the other explicit mentions of a library.  Implementing that seems
+more trouble than it's worth, however.  So we just let the linker tell us
+via error messages what implicitly-required libraries to include in each
+<code>LIBS</code> list.
+<p>
+<h5><a name=toc33>Substrate-boundary library.</a></h5>
+<p>
+The <code>machine</code> library is special in that it serves as a boundary layer
+between Machine SUIF and the base SUIF substrate.  In general, all
+dependences on base SUIF are captured in <code>machine/machine.h</code> and in an
+additional header file called <code>machine/pass.h</code> that each pass should
+include in its ``SUIF wrapper'' implementation files.  Likewise, the
+<code>init_machine</code> function that sets up the <code>machine</code> library also takes
+care of initializing libraries imported from base SUIF.
+<p>
+
+<h2><a name=toc34>More Naming Conventions</a></h2>
+<a name="app-naming-conventions"><b>[*]</b></a>
+<p>
+The <em>OPI User's Guide</em> describes the conventions used in forming OPI
+identifiers.  The Machine SUIF implementation observes those conventions,
+and it adds some that did not come up in specifying the OPI.
+<p>
+When you extend the system, you often need to make up new enumeration
+identifiers.  New opcodes, new architectural registers, and new kinds of
+instrumentation all call for new enumeration symbols.  For these symbols,
+which may have wide visibility and get a lot of use, we use upper-case
+identifiers, articulated with underscores.  To avoid name collisions, we
+limited use of C++ namespaces, and we use the name of the current library
+to name such namespaces themselves.
+<p>
+For example, the enumeration literals for opcodes in the Alpha architecture
+have names like <code>ADDQ</code> and <code>MOV</code>, and they are defined in namespace
+<code>alpha</code>.  In code that uses the Alpha library, the programmer can choose
+to qualify names explcitly, as in <code>alpha::MOV</code>, or to open the namespace
+with directive
+<p>
+<pre>
+   using namespace alpha;
+</pre>
+
+<a name="NWDF">This is not to say that we put every enumeration type definition into a</a>
+namespace.  Where local constant names seem helpful for the clarity of the
+code, we use ordinary <code>const</code> or <code>enum</code> declarations.  We usually
+follow the long-standing C convention of upper-case symbols to distinguish
+constants from variables.
+<p>
+<!-- Make \end{document} a chunk by itself to allow cross-reference info-->
+<!-- to be dumped in before it (noweave -delay).-->
+
+
+
+
+<ul>
+<li><a href="#NWD3"><i>&lt;<code>BaseDispOpnd</code> implementation&gt;</i></a>: <a href="#NWD3">D1</a>
+<li><a href="#NWDB"><i>&lt;<code>MachineContextX86PPro::is_cmove</code>&gt;</i></a>: <a href="#NWDB">D1</a>
+<li><a href="#NWD7"><i>&lt;class <code>AlphaContext</code>&gt;</i></a>: <a href="#NWD7">D1</a>
+<li><a href="#NWD2"><i>&lt;class <code>BaseDispOpnd</code>&gt;</i></a>: <a href="#NWD2">D1</a>
+<li><a href="#NWD6"><i>&lt;class <code>Context</code>&gt;</i></a>: <a href="#NWD6">D1</a>
+<li><a href="#NWD4"><i>&lt;class <code>LineNote</code>&gt;</i></a>: <a href="#NWD4">D1</a>
+<li><a href="#NWDA"><i>&lt;class <code>MachineContextX86PPro</code>&gt;</i></a>: <a href="#NWDA">D1</a>
+<li><a href="#NWDC"><i>&lt;class <code>PrinterX86PPro</code>&gt;</i></a>: <a href="#NWDC">D1</a>
+<li><a href="#NW4A4imC-1BCfsC-1"><i>&lt;class <code>SuifVmContextX86PPro</code>&gt;</i></a>: <a href="#NW4A4imC-1BCfsC-1">D1</a>
+<li><a href="#NWD9"><i>&lt;class <code>X86PProContext</code>&gt;</i></a>: <a href="#NWD9">D1</a>, <a href="#NWDA">U2</a>
+<li><a href="#NWDE"><i>&lt;contents of <code>bvd.h</code>&gt;</i></a>: <a href="#NWDE">D1</a>
+<li><a href="#NWDD"><i>&lt;function <code>init_x86_ppro</code>&gt;</i></a>: <a href="#NWDD">D1</a>
+<li><a href="#NW4A4imC-3R7e1j-1"><i>&lt;function <code>is_cmove</code>&gt;</i></a>: <a href="#NW4A4imC-3R7e1j-1">D1</a>
+<li><a href="#NWD5"><i>&lt;function <code>is_mbr</code>&gt;</i></a>: <a href="#NWD5">D1</a>
+<li><a href="#NWD8"><i>&lt;opcode <code>WRMSR</code>&gt;</i></a>: <a href="#NWD8">D1</a>
+</ul>
+</body></html>
+

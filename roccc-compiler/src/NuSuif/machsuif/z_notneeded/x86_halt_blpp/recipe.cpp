@@ -1,0 +1,143 @@
+/* file "x86_halt_blpp/recipe.cpp" */
+
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the "machine/copyright.h" include file.
+*/
+
+#include <machine/copyright.h>
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma implementation "x86_halt_blpp/recipe.h"
+#endif
+
+#include <machine/machine.h>
+#include <cfg/cfg.h>
+#include <halt/halt.h>
+#include <halt_blpp/halt_blpp.h>
+#include <x86/x86.h>
+#include <x86_halt/x86_halt.h>
+
+#include <x86_halt_blpp/recipe.h>
+
+#ifdef USE_DMALLOC
+#include <dmalloc.h>
+#define new D_NEW
+#endif
+
+using namespace halt;
+
+void
+init_halt_blpp_recipes_x86()
+{
+    init_halt_recipes_x86();
+
+    halt_recipes_x86.resize(LAST_HALT_KIND + 1, NULL);
+
+    halt_recipes_x86[PATH_SUM_INIT] = new HaltRecipeX86PathSumInit;
+    halt_recipes_x86[PATH_SUM_INCR] = new HaltRecipeX86PathSumIncr;
+    halt_recipes_x86[PATH_SUM_READ] = new HaltRecipeX86PathSumRead;
+}
+
+/*
+ * Produce a variable-symbol operand representing the path-sum for the
+ * current procedure.  If the variable is not found in the local symbol
+ * table, then create it and enter it there.
+ */
+
+Opnd
+opnd_path_sum()
+{
+    VarSym *path_sum_var = lookup_local_var("__path_sum");
+
+    if (path_sum_var == NULL)
+	path_sum_var = new_named_var(type_u32, "__path_sum");
+
+    return opnd_var(path_sum_var);
+}
+
+/**
+ ** HaltRecipeX86* operator() implementations for Blpp kinds
+ **/
+
+void
+HaltRecipeX86PathSumInit::operator()
+    (HaltLabelNote, InstrHandle handle, CfgNode *block,
+     const NatSet*, const NatSet*)
+{
+    debug(2, "%s:HaltRecipeX86PathSumInit", __FILE__);
+
+    Instr *mi =
+	new_instr_alm(opnd_path_sum(), x86::MOV, opnd_immed(0, type_u32));
+    append(instr_pot[KIND], mi);
+
+    insert_instrs(AFTER, block, handle);
+}
+
+void
+HaltRecipeX86PathSumIncr::operator()
+    (HaltLabelNote note, InstrHandle handle, CfgNode *block,
+     const NatSet*, const NatSet*)
+{
+    debug(2, "%s:HaltRecipeX86PathSumIncr", __FILE__);
+
+    Opnd path_sum  = opnd_path_sum();
+    Opnd incr = opnd_immed(note.get_static_arg(0), type_s32);
+
+    Instr *mi = new_instr_alm(path_sum, x86::ADD, path_sum, incr);
+    append(instr_pot[KIND], mi);
+
+    insert_instrs(AFTER, block, handle);
+}
+
+void
+HaltRecipeX86PathSumRead::operator()
+    (HaltLabelNote note, InstrHandle handle, CfgNode *block,
+     const NatSet *before, const NatSet *after)
+{
+    debug(2, "%s:HaltRecipeX86PathSumRead", __FILE__);
+
+    Opnd path_sum  = opnd_path_sum();
+
+    long incr_value = note.get_static_arg(0);
+    if (incr_value != 0)
+    {
+	Opnd incr = opnd_immed(incr_value, type_s32);
+	Instr *mi = new_instr_alm(path_sum, x86::ADD, path_sum, incr);
+	append(instr_pot[KIND], mi);
+    }
+
+    // dynamic argument
+    args.push_back(opnd_path_sum());
+
+    // static arguments
+    args.push_back(opnd_immed(note.get_unique_id(), type_s32));
+    args.push_back(opnd_immed(note.get_static_arg(2), type_s32)); // proc id
+
+    // Save away the value to which restore_state will cause the
+    // path sum to be set.
+    next_path_sum = note.get_static_arg(1);
+
+    follow_recipe(PATH_SUM_READ, after);
+
+    insert_instrs(AFTER, block, handle);
+}
+
+/*
+ * Override the restore_state method to add a final instruction that
+ * reinitializes the path-sum register.
+ */
+void
+HaltRecipeX86PathSumRead::restore_state(NatSet *saved_reg_set)
+{
+    debug(2, "%s:restore_state", __FILE__);
+
+    HaltRecipeX86::restore_state(saved_reg_set);
+
+    Opnd init = opnd_immed(next_path_sum, type_u32);
+    Instr* mi = new_instr_alm(opnd_path_sum(), x86::MOV, init);
+    append(instr_pot[RESTORE], mi);
+}

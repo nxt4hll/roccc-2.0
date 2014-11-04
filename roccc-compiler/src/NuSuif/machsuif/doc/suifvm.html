@@ -1,0 +1,1105 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>The Machine-SUIF SUIFvm Library</title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+
+           <!-- Omit \clearpage for new source file-->
+<p>
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>The Machine-SUIF SUIFvm Library</a></h1>
+<address><em>Release version 2.02.07.15</em> <br><br>Glenn Holloway and Michael D. Smith <br>{holloway,smith}@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<p>
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+The SUIFvm architecture is a virtual machine used as an intermediate
+target in translation from SUIF 2 form to instructions for a real target
+machine.  In the Machine-SUIF system, all code generators for specific
+physical targets take their input in the form of SUIFvm code.  SUIFvm
+instruction lists also serve as an intermediate form for certain kinds
+of code optimization.
+<p>
+This library defines the SUIFvm instruction set and the class
+<code>CodeGen</code> that is the basis for Machine-SUIF code generation.
+<p>
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">The SUIFvm instruction set</a></li>
+<li><a href="#toc5">Opcode functions and data structures</a></li>
+  <ul compact>
+  <li><a href="#toc6">Target-specific data structures</a></li>
+  <li><a href="#toc7">OPI opcode functions</a></li>
+  <li><a href="#toc8">Header file for opcodes.h</a></li>
+  </ul>
+<li><a href="#toc9">Instr functions</a></li>
+<li><a href="#toc10">Printing SUIFvm code</a></li>
+<li><a href="#toc11">C-language printing</a></li>
+  <ul compact>
+  <li><a href="#toc12">Header file for module cprinter.h</a></li>
+  </ul>
+<li><a href="#toc13">Support for code generation</a></li>
+  <ul compact>
+  <li><a href="#toc14">Class CodeGen</a></li>
+    <ul compact>
+    <li><a href="#toc15">OPI details</a></li>
+    <li><a href="#toc16">Developing a target instance</a></li>
+    <li><a href="#toc17">Implementation details</a></li>
+    </ul>
+  <li><a href="#toc18">Header file for module CodeGen.h</a></li>
+  </ul>
+<li><a href="#toc19">The SUIFvm target-characterization context</a></li>
+  <ul compact>
+  <li><a href="#toc20">Class SuifVmContext</a></li>
+  <li><a href="#toc21">Class MachineContextSuifVm</a></li>
+  <li><a href="#toc22">Header file for contexts.h</a></li>
+  </ul>
+<li><a href="#toc23">SUIFvm library initialization</a></li>
+<li><a href="#toc24">Header file for the SUIFvm library</a></li>
+<li><a href="#toc25">Copyright</a></li>
+<li><a href="#toc26">Acknowledgments</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+The SUIFvm library both extends Machine SUIF with new interface
+functionality and defines a target architecture.  This duality makes
+the SUIFvm library unique within Machine SUIF.  This duality also
+makes the SUIFvm library a poor candidate for use as a template for
+your new interface or target libraries--you will almost certainly want
+to define a new library that either only adds new interface
+functionality or defines a new target architecture.
+<p>
+We begin with a description of the SUIFvm instruction set.
+Sections&nbsp;<a href="#sec-opcodes">[-&gt;]</a> through&nbsp;<a href="#sec-cprinting">[-&gt;]</a> then describe
+<a name="NWD2">the target-definition aspects of the SUIFvm library.</a>
+Section&nbsp;<a href="#sec-codegen">[-&gt;]</a> presents the interface functionality added
+by the SUIFvm library.  In particular, it describes the object that
+allows us to use SUIFvm as an intermediate target in translation from
+SUIF 2 form to instructions for a real target machine.  All of the
+existing code generators in Machine SUIF take their input in the form
+of SUIFvm code.  The remaining sections define the context and
+initialization code required by a combination interface/target
+library.
+<p><h2><a name=toc4>The SUIFvm instruction set</a></h2>
+<p>
+Here is a description of the SUIFvm instructions.  Readers familiar with
+SUIF 1 and <em>The SUIF Library Reference Manual</em> that documents it
+will recognize most of these descriptions.
+<p>
+<ul>
+<li><code>NOP</code>.   Do nothing at all.  All of the operands for these
+instructions should be null.
+<p>
+<li><code>LDA</code>.   Move the address (not the dereferenced value) specified
+by the source operand into the destination.
+<p>
+<li><code>LDC</code>.   Move a constant value (the source operand) into the
+destination.
+<p>
+<li><code>LOD</code>.  
+Load the value at the address contained in the source operand
+into the destination operand.
+<p>
+<li><code>STR</code>.  
+Store the value in the source operand at the address contained in
+the destination operand.
+<p>
+<li><code>MEMCPY</code>.  
+Memory to memory copy.  Load the value from the address in the
+source operand and store it at the address in the destination operand.
+<p>
+<li><code>MOV</code>.  
+Copy the value of the source operand to the destination operand.
+<p>
+<li><code>CVT</code>.  
+Convert the source operand to the destination type and put it in the
+destination operand.
+<p>
+<li><code>NEG</code>.  
+Negation.  Change the sign of the value in the source operand and
+put the result in the destination operand.
+<p>
+<li><code>ADD</code>.  
+Add the values in the first two source operands and put the
+result in the destination.
+<p>
+<li><code>SUB</code>.  
+Subtract the value in the second operand from the value in the
+first source and put the result in the destination.
+<p>
+<li><code>MUL</code>, <code>DIV</code>.  
+Multiply or divide the value in the first source operand by the value in
+the second operand and put the result in the destination.
+<p>
+<li><code>REM</code>, <code>MOD</code>.  
+Remainder and modulus.  These two instructions are very similar.
+Both divide the value in the first source operand by the value in the
+second operand to find the remainder or modulus.  The <code>rem</code>
+instruction is identical to the modulus operator in ANSI C.  That
+is, if either source operand is negative, the sign of the result is
+undefined and depends on the semantics of integer division.  The
+<code>mod</code> instruction is the same except that its result is always
+guaranteed to be positive.
+<p>
+<li><code>NOT</code>.  
+Bit-wise inversion.  Compute the one's complement negation of the
+value in the source operand and put the result in the destination.
+<p>
+<li><code>AND</code>, <code>IOR</code>, <code>XOR</code>.  
+Compute the bit-wise <code>and</code>, inclusive <code>or</code>, or exclusive <code>or</code> of the
+values in the first two source operands and put the result in the
+destination.
+<p>
+<li><code>ASR</code>, <code>LSR</code>.  
+Shift the value in the first source operand right by the amount
+specified in the second operand.  <code>asr</code> performs sign extension;
+<code>lsr</code> does not.
+<p>
+<li><code>LSL</code>.  
+Shift the value in the first source operand left by the amount
+specified in the second operand.
+<p>
+<li><code>MIN</code>, <code>MAX</code>.  
+Minimum and maximum.  The result value is the minimum or maximum,
+respectively, of the two source operands.
+<p>
+<li><code>ABS</code>.  
+Absolute value.  Compute the absolute value of the source operand.
+<p>
+<li><code>ROT</code>.  
+Rotate the value in the first source operand left or right by the amount
+specified in the second operand.  If the shift
+amount is positive, the value is rotated to the left (toward the
+most-significant bit); if it is negative, the value is rotated to
+the right.
+<p>
+<li><code>SEQ</code>, <code>SNE</code>, <code>SL</code>, <code>SLE</code>.  
+Comparison instructions.  If the first source operand is equal, not
+equal, less than, or less than or equal, respectively, to the second
+operand, assign the integer value one to the destination operand.
+Otherwise, set the destination operand to zero.  The source operands
+must be either the same integer or floating point type, or two
+(possibly different) pointer types.
+<p>
+<li><code>JMP</code>.  
+Unconditional jump to the <code>target</code> label.
+<p>
+<li><code>JMPI</code>.    Jump indirect. An unconditional jump to the
+computed address given in the source operand.  The <code>target</code>
+field is null.
+<p>
+<li><code>BTRUE</code>.  
+Branch if true.  If the source operand contains a true (non-zero)
+value, control is transferred to the code at the
+<code>target</code> label.  Otherwise, it continues with the next
+instruction in sequential order.  The source operand must have an
+integer type.
+<p>
+<li><code>BFALSE</code>.  
+Branch if false.  If the source operand contains a false (zero)
+value, control is transferred to the code at the
+<code>target</code> label.  Otherwise, it continues with the next instruction
+in sequential order.  The source operand must have an
+integer type.
+<p>
+<li><code>BEQ</code>,<code>BNE</code>,<code>BGE</code>,<code>BGT</code>,<code>BLE</code>,<code>BLT</code>.   
+Branch if conditional compare true.  The two source operands are
+compared according to the indicated condition.  If the result is
+true, control is transferred to the code at the
+<code>target</code> label.  Otherwise, it continues with the next
+instruction in sequential order.  The source operands must either have
+the same integer or floating-point type, or else two (possibly
+different) pointer types.
+<p>
+<li><code>MBR</code>.  
+Multi-way branch instruction.  Transfers control to one of several
+target labels depending on the value of the source operand,
+an integer.  The value of the source operand is compared with a
+set of constants to choose the target label.  If it matches one of
+these case constants, the instruction branches to the
+corresponding label. Otherwise, it branches to the default target
+label, which is the <code>target</code> field of the instruction.
+<p>
+The case constants and target labels are stored in an
+<code>instr_mbr_targets</code> annotation of type <code>MbrNote</code>.  (See the
+<em>Machine-SUIF Machine Library</em> document.)  The case constants
+are guaranteed to be an increasing, non-empty sequence of integers.
+<p>
+<li><code>CALL</code>.   Call instruction.  The called procedure is either
+specified in a non-null <code>target</code> field or through a non-null first
+source operand whose value is the address of the callee.  (But not
+both: either the target symbol or the first source must be null.)
+The remaining source operands express the arguments.  The destination
+operand gives the result location for a value-returning call;
+otherwise, it is null.
+<p>
+<li><code>RET</code>.  
+Return from a procedure.  Only the first source operand is used and it
+is optional.  If specified, it is the return value and may contain
+an operand of any type except array or function types.  If the
+procedure's function type has void return type, the operand must be
+null; otherwise the operand must not be null and must have the same
+type as the return type of the procedure.
+<p>
+
+<li><code>ANY</code>.  
+Generic instruction, with arbitrary sources and destinations.  It is expected
+that one or more annotations will specify the exact operation and possibly
+its semantics.
+<p>
+<li><code>MRK</code>.  
+A pseudo-instruction marking a position in the program.  Used to
+hold miscellaneous annotations such as line numbers.
+<p>
+</ul>
+
+
+<h2><a name=toc5>Opcode functions and data structures</a></h2>
+<a name="sec-opcodes"><b><a name="NWD3">[*]</a></b></a>
+<p>
+This section defines the OPI functions and data structures associated
+with the SUIFvm opcodes.  
+<p>
+<h3><a name=toc6>Target-specific data structures</a></h3>
+<p>
+We start with the extensible opcode enumeration.
+<p>
+<pre><a name="NWJafVk-1ZQ2Y2-1" href="#NWD3"><dfn>&lt;SUIFvm opcodes&gt;=</dfn></a> <b>(<a href="#NWD7">U-&gt;</a>)</b>
+namespace suifvm {
+enum {                  // SUIFvm opcodes
+    NOP = 2,
+    CVT, LDA, LDC,
+    ADD, SUB, NEG,
+    MUL, DIV, REM, MOD,
+    ABS, MIN, MAX,
+    NOT, AND, IOR, XOR,
+    ASR, LSL, LSR, ROT,
+    MOV, LOD, STR, MEMCPY,
+    SEQ, SNE, SL, SLE,
+    BTRUE, BFALSE,
+    BEQ, BNE, BGE, BGT, BLE, BLT,
+    JMP, JMPI, MBR, CAL, RET,
+    ANY, MRK
+};
+} // namespace suifvm
+
+#define LAST_SUIFVM_OPCODE suifvm::MRK
+</pre><p>
+
+<a name="NWD4">The </a><code>suifvm_opcode_names</code> table is the extensible map from
+a SUIFvm opcode to its name.  The <code>suifvm_cnames</code> table is the
+extensible map from a SUIFvm opcode to a C-language
+operator.  You can use the methods of the <code>Vector</code> template class
+along with a redefinition of <code>LAST_SUIFVM_OPCODE</code> to extend the
+SUIFvm instruction space.
+<p>
+<pre><a name="NWJafVk-3q7tvf-1" href="#NWD4"><dfn>&lt;SUIFvm opcode vectors&gt;=</dfn></a> <b>(<a href="#NWD7">U-&gt;</a>)</b> <b>[D<a href="#NWD5">-&gt;</a>]</b>
+extern Vector&lt;char*&gt; suifvm_opcode_names;
+extern Vector&lt;char*&gt; suifvm_cnames;
+</pre><p>
+
+<a name="NWD5">We initialize these vectors using the following functions, invoked</a>
+in this library's initialization routine.
+<p>
+<pre><a name="NWJafVk-3q7tvf-2" href="#NWD4"><dfn>&lt;SUIFvm opcode vectors&gt;+=</dfn></a> <b>(<a href="#NWD7">U-&gt;</a>)</b> <b>[<a href="#NWD4">&lt;-</a>D]</b>
+void init_suifvm_opcode_names();
+void init_suifvm_cnames();
+</pre><p>
+
+
+<h3><a name=toc7><a name="NWD6">OPI opcode functions</a></a></h3>
+<p>
+We provide the typical set of opcode functions.
+<p>
+<pre><a name="NWJafVk-2Hvzxd-1" href="#NWD6"><dfn>&lt;SUIFvm opcode OPI functions&gt;=</dfn></a> <b>(<a href="#NWD7">U-&gt;</a>)</b>
+bool target_implements_suifvm(int opc);
+char *opcode_name_suifvm(int opc);
+
+int opcode_line_suifvm();
+int opcode_ubr_suifvm();
+int opcode_move_suifvm(TypeId);
+int opcode_load_suifvm(TypeId);
+int opcode_store_suifvm(TypeId);
+
+int opcode_cbr_inverse_suifvm(int opc);
+</pre><p>
+
+
+<h3><a name=toc8><a name="NWD7">Header file for </a><code>opcodes.h</code></a></h3>
+<p>
+<pre><a name="NWJafVk-Lt6Pf-1" href="#NWD7"><dfn>&lt;suifvm/opcodes.h&gt;=</dfn></a>
+/* file &quot;suifvm/opcodes.h&quot; */
+
+<a name="NWJafVk-Lt6Pf-1-u1" href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef SUIFVM_OPCODES_H
+#define SUIFVM_OPCODES_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;suifvm/opcodes.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+<a name="NWJafVk-Lt6Pf-1-u2" href="#NWD3"><i>&lt;SUIFvm opcodes&gt;</i></a>
+
+<a name="NWJafVk-Lt6Pf-1-u3" href="#NWD4"><i>&lt;SUIFvm opcode vectors&gt;</i></a>
+
+<a name="NWJafVk-Lt6Pf-1-u4" href="#NWD6"><i>&lt;SUIFvm opcode OPI functions&gt;</i></a>
+
+#endif /* SUIFVM_OPCODES_H */
+</pre><p>
+<h2><a name=toc9><code><a name="NWD8">Instr</a></code> functions</a></h2>
+<p>
+The functions provided in this header file implement the instruction
+predicates of the OPI for the SUIFvm target.
+<p>
+<pre><a name="NW1RYwlD-2kyhCP-1" href="#NWD8"><dfn>&lt;suifvm/instr.h&gt;=</dfn></a>
+/* file &quot;suifvm/instr.h&quot; */
+
+<a name="NW1RYwlD-2kyhCP-1-u1" href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef SUIFVM_INSTR_H
+#define SUIFVM_INSTR_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;suifvm/instr.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+bool is_ldc_suifvm(Instr*);
+bool is_move_suifvm(Instr*);
+bool is_cmove_suifvm(Instr*);
+bool is_line_suifvm(Instr*);
+
+bool is_ubr_suifvm(Instr*);
+bool is_cbr_suifvm(Instr*);
+bool is_call_suifvm(Instr*);
+bool is_return_suifvm(Instr*);
+bool is_binary_exp_suifvm(Instr*);
+bool is_unary_exp_suifvm(Instr*);
+bool is_commutative_suifvm(Instr*);
+bool reads_memory_suifvm(Instr*);
+bool writes_memory_suifvm(Instr*);
+bool is_builtin_suifvm(Instr*);
+
+#endif /* SUIFVM_INSTR_H */
+</pre><p>
+<h2><a name=toc10>Printing SUIFvm code</a></h2>
+<p>
+<a name="NWD9">Recall that class </a><code>Printer</code> provides the specifics for printing
+machine code in the correct assembly-language form for a particular
+architecture.  For the SUIFvm architecture, there is no well-defined
+ASCII assembly form, but printing code in this style is often helpful
+for debugging.  When creating a <code>Printer</code> subclass for a real target,
+you should not use <code>PrinterSuifVm</code> as a model.  Use the <code>Printer</code>
+object in the Alpha library, for example, as a guide.
+<p>
+<pre><a name="NW48Cng4-1MMItP-1" href="#NWD9"><dfn>&lt;class <code>PrinterSuifVm</code>&gt;=</dfn></a> <b>(<a href="#NW48Cng4-2qj20r-1">U-&gt;</a>)</b>
+class PrinterSuifVm : public Printer {
+  protected:
+    virtual void print_instr_alm(Instr*);
+    virtual void print_instr_cti(Instr*);
+    virtual void print_instr_dot(Instr*);
+    virtual void print_instr_label(Instr*);
+    virtual void print_instr_user_defd(Instr*) { }
+
+    virtual void print_opcode(Instr*);
+    virtual void print_sym_disp(Opnd addr_sym, Opnd disp);
+    virtual void print_address_exp(Opnd addr_exp);
+
+    virtual char* size_directive(TypeId);
+    virtual void process_value_block(ValueBlock*);
+
+    // local variables used in print_var_def and its helpers
+    char *cur_directive;
+    int cur_opnd_cnt;
+
+  public:
+    PrinterSuifVm();
+
+    virtual void start_comment() { fprintf(out, &quot;\t# &quot;); }
+
+    virtual void print_instr(Instr*);
+    virtual void print_opnd(Opnd);
+
+    virtual void print_extern_decl(VarSym*);
+    virtual void print_file_decl(int fnum, IdString fnam);
+    virtual void print_var_def(VarSym*);
+
+    virtual void print_global_decl(FileBlock*);
+    virtual void print_proc_begin(ProcDef*);
+    virtual void print_proc_decl(ProcSym*) { }
+    virtual void print_proc_entry(ProcDef*, int file_no_for_1st_line);
+    virtual void print_proc_end(ProcDef*);
+};
+</pre><p>
+
+
+<pre><a name="NW48Cng4-2qj20r-1" href="#NW48Cng4-2qj20r-1"><dfn>&lt;suifvm/printer.h&gt;=</dfn></a>
+/* file &quot;suifvm/printer.h&quot; */
+
+<a name="NW48Cng4-2qj20r-1-u1" href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef SUIFVM_PRINTER_H
+#define SUIFVM_PRINTER_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;suifvm/printer.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+<a name="NW48Cng4-2qj20r-1-u2" href="#NWD9"><i>&lt;class <code>PrinterSuifVm</code>&gt;</i></a>
+
+#endif /* SUIFVM_PRINTER_H */
+</pre><p>
+<h2><a name=toc11>C-language printing</a></h2>
+<a name="sec-cprinting"><b>[*]</b></a>
+<p>
+<a name="NWDA">Class </a><code>CPrinterSuifVm</code>, which refines <code>CPrinter</code>, is the analogue of
+<code>PrinterSuifVm</code> for generating C output files instead of assembly
+language.  The methods that it overrides are those for printing SUIFvm
+instructions and global directives.
+ <b>[</b>At present, the only global directive is a <code>#include</code> which
+introduces a few useful abbreviations.<b>]</b> 
+<p>
+
+<pre><a name="NW2CyJMi-1zapAN-1" href="#NWDA"><dfn>&lt;class <code>CPrinterSuifVm</code>&gt;=</dfn></a> <b>(<a href="#NWDD">U-&gt;</a>)</b>
+class CPrinterSuifVm : public CPrinter {
+  public:
+    CPrinterSuifVm();
+    virtual ~CPrinterSuifVm() { delete [] print_instr_table; }
+
+    virtual void print_instr(Instr *mi);
+    virtual void print_global_decl(FileBlock *fb);
+
+<a name="NW2CyJMi-1zapAN-1-u1" href="#NWDB"><i>&lt;<code>CPrinterSuifVm</code> protected parts&gt;</i></a>
+};
+</pre><p>
+
+<a name="NWDB">The printing method for a particular instruction is selected from a</a>
+dispatch table that is indexed by opcode.  The following methods
+are used as elements in that table.
+<p>
+<pre><a name="NW2CyJMi-3Sk4QT-1" href="#NWDB"><dfn>&lt;<code>CPrinterSuifVm</code> protected parts&gt;=</dfn></a> <b>(<a href="#NWDA">&lt;-U</a>)</b> <b>[D<a href="#NWDC">-&gt;</a>]</b>
+  protected:
+    virtual void print_instr_alm(Instr *);
+    virtual void print_instr_cti(Instr *);
+    virtual void print_instr_dot(Instr *);
+    virtual void print_instr_mbr(Instr *);
+    virtual void print_instr_cal(Instr *);
+</pre><p>
+
+<a name="NWDC">These other methods defined at this level:</a>
+<p>
+<pre><a name="NW2CyJMi-3Sk4QT-2" href="#NWDB"><dfn>&lt;<code>CPrinterSuifVm</code> protected parts&gt;+=</dfn></a> <b>(<a href="#NWDA">&lt;-U</a>)</b> <b>[<a href="#NWDB">&lt;-</a>D]</b>
+
+    virtual void print_instr_user_defd(Instr *) { }
+    virtual void print_opcode(Instr *mi);
+    virtual void print_addr_binop(Instr *mi);
+</pre><p>
+
+<code>print_user_defd</code> allows further derivation from this class: it deals
+with opcodes that are out of range for the target.
+<p>
+
+<code><a name="NWDD">print_opcode</a></code> simply prints the opcode of an instruction in C syntax,
+and <code>print_add_binop</code> prints an address as a binary expression.
+<p>
+
+<h3><a name=toc12>Header file for module <code>cprinter.h</code></a></h3>
+<p>
+The interface file has the following layout:
+<p>
+<pre><a name="NW2CyJMi-4C8DJE-1" href="#NWDD"><dfn>&lt;suifvm/c_printer.h&gt;=</dfn></a>
+/* file &quot;suifvm/c_printer.h&quot; */
+
+<a name="NW2CyJMi-4C8DJE-1-u1" href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef SUIFVM_CPRINTER_H
+#define SUIFVM_CPRINTER_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;suifvm/cprinter.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+<a name="NW2CyJMi-4C8DJE-1-u2" href="#NWDA"><i>&lt;class <code>CPrinterSuifVm</code>&gt;</i></a>
+
+#endif /* SUIFVM_CPRINTER_H */
+</pre><p>
+<h2><a name=toc13>Support for code generation</a></h2>
+<a name="sec-codegen"><b>[*]</b></a>
+<p>
+<a name="NWDE">This section describes a class called </a><code>CodeGen</code> that supports translation
+of SUIFvm instructions to target-specific code.  A target-specific instance
+of <code>CodeGen</code> is used by our <code>gen</code> pass to control its dispatch to
+code-generation methods for each kind of SUIFvm instruction.
+<p>
+An OPI user gets access to a target-specific <code>CodeGen</code> object
+by using the following OPI function.
+<p>
+<pre><a name="NW3KE9Hx-1YugNk-1" href="#NWDE"><dfn>&lt;function <code>target_code_gen</code>&gt;=</dfn></a> <b>(<a href="#NWDI">U-&gt;</a>)</b>
+CodeGen* target_code_gen();
+</pre><p>
+
+This is a target-specific function whose implementation is obtained
+from the like-named method of the class <code>SuifVmContext</code>, described
+in the next section.
+<p>
+
+<h3><a name=toc14>Class <code>CodeGen</code></a></h3>
+<p>
+We present three views of the <code>CodeGen</code> class.  Those readers
+interested in the OPI methods for code generation to an existing
+target should read only the first subsection.  The second subsection
+<a name="NWDF">contains information relevant to those readers interested in defining</a>
+a <code>CodeGen</code> object for a new target.  The last subsection describes
+details of our implementation.
+<p>
+
+<h4><a name=toc15>OPI details</a></h4>
+<p>
+The following class defines a <code>CodeGen</code> object:
+<p>
+<pre><a name="NW3KE9Hx-4EYx7Y-1" href="#NWDF"><dfn>&lt;class <code>CodeGen</code>&gt;=</dfn></a> <b>(<a href="#NWDI">U-&gt;</a>)</b>
+class CodeGen {
+  public:
+    virtual ~CodeGen() { }
+    virtual void init(OptUnit *unit);   // must be called 1st!
+    virtual void massage_unit(OptUnit *unit) { }
+    virtual void finish(OptUnit *unit); // must be called last!
+
+    void translate_instr(OptUnit *unit, Instr*, InstrList *receiver);
+    void translate_list(OptUnit *unit, InstrList *in_place);
+
+    void emit(Instr*);
+
+<a name="NW3KE9Hx-4EYx7Y-1-u1" href="#NWDH"><i>&lt;<code>CodeGen</code> private parts&gt;</i></a>
+
+<a name="NW3KE9Hx-4EYx7Y-1-u2" href="#NWDG"><i>&lt;<code>CodeGen</code> protected parts&gt;</i></a>
+};
+</pre><p>
+
+Code generation is always done with respect to some
+<code>OptUnit</code>.  When your optimization pass starts working on
+a new <code>OptUnit</code>, you must call <code>init</code> to initialize the
+code generator for this <code>OptUnit</code>.  When your
+optimization pass is done with an <code>OptUnit</code> where you did
+some code generation, you must call <code>finish</code>.  Under the current
+implementation, you must call <code>finish</code> if you called <code>init</code>, even if
+you did not call any other method of <code>CodeGen</code>.
+<p>
+The <code>massage_unit</code> method exists as a hook to make the code
+generation of an entire optimization unit easier.  This hook allows us
+to massage the semantics of a SUIFvm optimization unit into something
+closer to the semantics of an optimization unit on the target.  We used to use
+this hook in the Digital Alpha code generator, for example, to change
+the prototype of calls to functions that return structures.  This call
+is not guaranteed to be idempotent, so please be careful how you use
+it.
+<p>
+Between calls to <code>init</code> and <code>finish</code>, you can translate SUIFvm
+instructions into target instructions using the <code>translate_instr</code> or
+<code>translate_list</code> methods, which translate a single SUIFvm
+instruction or a list of SUIFvm instructions into one or more target
+instructions.
+<p>
+
+<h4><a name=toc16>Developing a target instance</a></h4>
+<p>
+You develop a <code>CodeGen</code> object for a specific target (or class of
+targets) by creating a derived class of <code>CodeGen</code>.  The
+<code>CodeGenAlpha</code> class found in the <code>alpha</code> library is
+an example of such a derived class.
+<p>
+<a name="NWDG">The derived class needs to define several methods that translate</a>
+SUIFvm instructions to instructions of the target machine.  The rest
+of this section describes this process in detail.  During this
+discussion, we will make reference to the protected parts of the
+<code>CodeGen</code> class.  The majority of the protected data members in the
+base class exist here simply because they are common to all derived
+classes of <code>CodeGen</code>.
+<p>
+<pre><a name="NW3KE9Hx-2Oy0fZ-1" href="#NWDG"><dfn>&lt;<code>CodeGen</code> protected parts&gt;=</dfn></a> <b>(<a href="#NWDF">&lt;-U</a>)</b>
+  protected:
+    virtual void translate_null(Instr*) = 0;
+    virtual void translate_nop(Instr*) = 0;
+    virtual void translate_cvt(Instr*) = 0;
+    virtual void translate_lda(Instr*) = 0;
+    virtual void translate_ldc(Instr*) = 0;
+    virtual void translate_add(Instr*) = 0;
+    virtual void translate_sub(Instr*) = 0;
+    virtual void translate_neg(Instr*) = 0;
+    virtual void translate_mul(Instr*) = 0;
+    virtual void translate_div(Instr*) = 0;
+    virtual void translate_rem(Instr*) = 0;
+    virtual void translate_mod(Instr*) = 0;
+    virtual void translate_abs(Instr*) = 0;
+    virtual void translate_min(Instr*) = 0;
+    virtual void translate_max(Instr*) = 0;
+    virtual void translate_not(Instr*) = 0;
+    virtual void translate_and(Instr*) = 0;
+    virtual void translate_ior(Instr*) = 0;
+    virtual void translate_xor(Instr*) = 0;
+    virtual void translate_asr(Instr*) = 0;
+    virtual void translate_lsl(Instr*) = 0;
+    virtual void translate_lsr(Instr*) = 0;
+    virtual void translate_rot(Instr*) = 0;
+    virtual void translate_mov(Instr*) = 0;
+    virtual void translate_lod(Instr*) = 0;
+    virtual void translate_str(Instr*) = 0;
+    virtual void translate_memcpy(Instr*) = 0;
+    virtual void translate_seq(Instr*) = 0;
+    virtual void translate_sne(Instr*) = 0;
+    virtual void translate_sl(Instr*) = 0;
+    virtual void translate_sle(Instr*) = 0;
+    virtual void translate_btrue(Instr*) = 0;
+    virtual void translate_bfalse(Instr*) = 0;
+    virtual void translate_beq(Instr*) = 0;
+    virtual void translate_bne(Instr*) = 0;
+    virtual void translate_bge(Instr*) = 0;
+    virtual void translate_bgt(Instr*) = 0;
+    virtual void translate_ble(Instr*) = 0;
+    virtual void translate_blt(Instr*) = 0;
+    virtual void translate_jmp(Instr*) = 0;
+    virtual void translate_jmpi(Instr*) = 0;
+    virtual void translate_mbr(Instr*) = 0;
+    virtual void translate_cal(Instr*) = 0;
+    virtual void translate_ret(Instr*) = 0;
+    virtual void translate_any(Instr*) = 0;
+    virtual void translate_mrk(Instr*) = 0;
+
+    InstrList *receiver;                // client-provided output list
+    Note line_note;                     // prevailing source-line annotation
+
+    // convenient variables
+    OptUnit *cur_unit;                  // defined by init()
+    const char *cur_unit_name;          // name of current procedure
+    CProcedureType *cur_unit_type;      // type of current procedure
+
+    // variables that direct CodeGen
+    bool report_int_overflow, report_int_divideby0;
+
+    // working variables from cur_unit's stack_frame_info annotation
+    bool is_leaf;
+    bool is_varargs;
+    int max_arg_area;
+
+    virtual void transfer_params(OptUnit*, bool is_varargs) = 0;
+    
+    CodeGen() { }
+</pre><p>
+
+We start our discussion with the methods that are required to appear
+in any derived class.  The derived class must define a constructor.
+You may also find it useful to redefine the virtual <code>init</code>,
+<code>massage_unit</code>, and <code>finish</code> methods.  In the case of <code>init</code> and
+<code>finish</code>, you should always have your implementation of these
+methods include a call to the base class <code>init</code> or <code>finish</code>
+method.  The base class methods contain operations that you still want
+to perform, e.g. the base-class <code>init</code> method will set many of the
+variables declared in <code><a href="#NWDG"><i>&lt;<code>CodeGen</code> protected parts&gt;</i></a></code>.  For
+example, the base class <code>init</code> method initializes the data members
+dependent upon the current <code>OptUnit</code>.
+<p>
+Each <code>translate_</code><em>opcode</em> method is a pure virtual method.  Each
+target library derives a subclass of <code>CodeGen</code> that implements these
+methods.  Each implementation maps a SUIFvm instruction to one or more
+instructions in the target architecture.  A translation function takes
+a single parameter: a pointer to an <code>Instr</code>.  The instruction is
+assumed to be the SUIFvm instruction that you want to translate.  The
+translated instructions are placed in an <code>InstrList</code> called
+<code>receiver</code>.
+<p>
+This class contains one other pure virtual method, <code>transfer_params</code>
+<a name="NWDH">that the target library must define.  It is invoked at the entry of a</a>
+procedure to create a sequence of instructions that connects the call
+linkage conventions with the parameter symbols.
+<p>
+
+<h4><a name=toc17>Implementation details</a></h4>
+<p>
+The following defines the private portion of the <code>CodeGen</code> class:
+<p>
+<pre><a name="NW3KE9Hx-1z1C3w-1" href="#NWDH"><dfn>&lt;<code>CodeGen</code> private parts&gt;=</dfn></a> <b>(<a href="#NWDF">&lt;-U</a>)</b>
+  private:
+    void translate_mi(Instr*);
+</pre><p>
+
+<a name="NWDI">The </a><code>translate_mi</code> routine simply does the work common among all
+of the public <code>translate_*</code> methods.
+<p>
+
+<h3><a name=toc18>Header file for module <code>CodeGen.h</code></a></h3>
+<p>
+The interface file has the following layout:
+<p>
+<pre><a name="NW3KE9Hx-1kgaDR-1" href="#NWDI"><dfn>&lt;suifvm/code_gen.h&gt;=</dfn></a>
+/* file &quot;suifvm/code_gen.h&quot; */
+
+<a name="NW3KE9Hx-1kgaDR-1-u1" href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef SUIFVM_CODE_GEN_H
+#define SUIFVM_CODE_GEN_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;suifvm/code_gen.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+<a name="NW3KE9Hx-1kgaDR-1-u2" href="#NWDF"><i>&lt;class <code>CodeGen</code>&gt;</i></a>
+
+<a name="NW3KE9Hx-1kgaDR-1-u3" href="#NWDE"><i>&lt;function <code>target_code_gen</code>&gt;</i></a>
+
+#endif /* SUIFVM_CODE_GEN_H */
+</pre><p>
+<h2><a name=toc19>The SUIFvm target-characterization context</a></h2>
+<p>
+This section begins with the declaration of the new interface context
+<code>SuifVmContext</code>.  Any target library that supports code generation
+from SUIFvm needs to include a specialization of this context class
+in its context class declaration.
+<p>
+<a name="NWDJ">The other context class defined in this section is a refinement of the</a>
+<code>MachineContext</code> class for use of <code>suifvm</code> as a target machine.
+<p>
+
+<h3><a name=toc20>Class <code>SuifVmContext</code></a></h3>
+<p>
+The <code>SuifVmContext</code> class has only a single method.  It allows us
+to get access to the target code generator object.
+<p>
+<pre><a name="NW14HCqf-1YCdzZ-1" href="#NWDJ"><dfn>&lt;class <code>SuifVmContext</code>&gt;=</dfn></a> <b>(<a href="#NWDT">U-&gt;</a>)</b>
+class SuifVmContext {
+  public:
+    SuifVmContext();
+    virtual ~SuifVmContext();
+
+    virtual CodeGen* target_code_gen() const = 0;
+
+  protected:
+    <a name="NW14HCqf-1YCdzZ-1-u1" href="#NW14HCqf-3vkRen-1"><i>&lt;<code>SuifVmContext</code> protected matter&gt;</i></a>
+};
+</pre><p>
+
+<pre><a name="NW14HCqf-3vkRen-1" href="#NW14HCqf-3vkRen-1"><dfn>&lt;<code>SuifVmContext</code> protected matter&gt;=</dfn></a> <b>(<a href="#NWDJ">&lt;-U</a>)</b>
+    mutable CodeGen *cached_code_gen;
+</pre><p>
+
+
+<h3><a name=toc21><a name="NWDK">Class </a><code>MachineContextSuifVm</code></a></h3>
+<p>
+As a target, SUIFvm defines implementations for only the OPI functions
+defined in the Machine-SUIF <code>machine</code> library.
+<p>
+<pre><a name="NW14HCqf-3MEBYZ-1" href="#NWDK"><dfn>&lt;class <code>MachineContextSuifVm</code>&gt;=</dfn></a> <b>(<a href="#NWDT">U-&gt;</a>)</b>
+class MachineContextSuifVm
+      : public virtual Context, public virtual MachineContext {
+  public:
+    MachineContextSuifVm() { }
+    virtual ~MachineContextSuifVm() { }
+
+    <a name="NW14HCqf-3MEBYZ-1-u1" href="#NWDL"><i>&lt;<code>MachineContextSuifVm</code> generic-pointer method&gt;</i></a>
+
+    <a name="NW14HCqf-3MEBYZ-1-u2" href="#NWDM"><i>&lt;<code>MachineContextSuifVm</code> printer methods&gt;</i></a>
+
+    <a name="NW14HCqf-3MEBYZ-1-u3" href="#NWDO"><i>&lt;<code>MachineContextSuifVm</code> code-finalizer method&gt;</i></a>
+
+    <a name="NW14HCqf-3MEBYZ-1-u4" href="#NWDP"><i>&lt;<code>MachineContextSuifVm</code> instruction-predicate methods&gt;</i></a>
+
+    <a name="NW14HCqf-3MEBYZ-1-u5" href="#NWDQ"><i>&lt;<code>MachineContextSuifVm</code> opcode-generator methods&gt;</i></a>
+
+    <a name="NW14HCqf-3MEBYZ-1-u6" href="#NWDR"><i>&lt;<code>MachineContextSuifVm</code> opcode query methods&gt;</i></a>
+
+    <a name="NW14HCqf-3MEBYZ-1-u7" href="#NWDS"><i>&lt;<code>MachineContextSuifVm</code> register query method&gt;</i></a>
+};
+</pre><p>
+
+<a name="NWDL">The target's generic-pointer type, which corresponds to </a><code>type_addr</code>
+in the <code>machine</code> library, is fetched by:
+<p>
+<pre><a name="NW14HCqf-yAQI8-1" href="#NWDL"><dfn>&lt;<code>MachineContextSuifVm</code> generic-pointer method&gt;=</dfn></a> <b>(<a href="#NWDK">&lt;-U</a>)</b>
+    TypeId type_addr() const;
+</pre><p>
+
+<a name="NWDM">The target's </a><code>Printer</code> pointer, which corresponds to global variable
+<code>target_printer</code> in the <code>machine</code> library, is fetched by:
+<p>
+<pre><a name="NW14HCqf-u0YMh-1" href="#NWDM"><dfn>&lt;<code>MachineContextSuifVm</code> printer methods&gt;=</dfn></a> <b>(<a href="#NWDK">&lt;-U</a>)</b> <b>[D<a href="#NWDN">-&gt;</a>]</b>
+    Printer* target_printer() const;
+</pre><p>
+
+<a name="NWDN">Similarly for the </a><code>CPrinter</code> pointer, which corresponds to global
+variable <code>target_c_printer</code> in the <code>machine</code> library:
+<p>
+<pre><a name="NW14HCqf-u0YMh-2" href="#NWDM"><dfn>&lt;<code>MachineContextSuifVm</code> printer methods&gt;+=</dfn></a> <b>(<a href="#NWDK">&lt;-U</a>)</b> <b>[<a href="#NWDM">&lt;-</a>D]</b>
+    CPrinter* target_c_printer() const;
+</pre><p>
+
+<a name="NWDO">The target's </a><code>CodeFin</code> generator, which corresponds to global function
+<code>target_code_fin</code>, should never be called, because code finalization is
+not meaningful for the SUIFvm target.
+<p>
+<pre><a name="NW14HCqf-r4qhr-1" href="#NWDO"><dfn>&lt;<code>MachineContextSuifVm</code> code-finalizer method&gt;=</dfn></a> <b>(<a href="#NWDK">&lt;-U</a>)</b>
+    CodeFin* target_code_fin() const { claim(false); return NULL; }
+</pre><p>
+
+<a name="NWDP">The target-specific instruction predicates can be used through</a>
+like-named methods of the <code>Context</code> class.
+<p>
+<pre><a name="NW14HCqf-3XCzK-1" href="#NWDP"><dfn>&lt;<code>MachineContextSuifVm</code> instruction-predicate methods&gt;=</dfn></a> <b>(<a href="#NWDK">&lt;-U</a>)</b>
+    bool is_ldc(Instr*) const;
+    bool is_move(Instr*) const;
+    bool is_cmove(Instr*) const;
+    bool is_line(Instr*) const;
+    bool is_ubr(Instr*) const;
+    bool is_cbr(Instr*) const;
+    bool is_call(Instr*) const;
+    bool is_return(Instr*) const;
+    bool is_binary_exp(Instr*) const;
+    bool is_unary_exp(Instr*) const;
+    bool is_commutative(Instr*) const;
+    bool is_two_opnd(Instr*) const;
+    bool reads_memory(Instr*) const;
+    bool writes_memory(Instr*) const;
+    bool is_builtin(Instr*) const;
+</pre><p>
+
+<a name="NWDQ">The target-specific opcode generators can be used via like-named methods of</a>
+the <code>Context</code> class.
+<p>
+<pre><a name="NW14HCqf-4YmJLr-1" href="#NWDQ"><dfn>&lt;<code>MachineContextSuifVm</code> opcode-generator methods&gt;=</dfn></a> <b>(<a href="#NWDK">&lt;-U</a>)</b>
+    int opcode_line() const;
+    int opcode_ubr() const;
+    int opcode_move(TypeId) const;
+    int opcode_load(TypeId) const;
+    int opcode_store(TypeId) const;
+    int opcode_cbr_inverse(int cbr_opcode) const;
+</pre><p>
+
+<a name="NWDR">The functions asking target-specific questions about opcodes can be used</a>
+via like-named <code>Context</code> methods.
+<p>
+<pre><a name="NW14HCqf-3WcZ1A-1" href="#NWDR"><dfn>&lt;<code>MachineContextSuifVm</code> opcode query methods&gt;=</dfn></a> <b>(<a href="#NWDK">&lt;-U</a>)</b>
+    bool target_implements(int opcode) const;
+    char* opcode_name(int opcode) const;
+</pre><p>
+
+<a name="NWDS">SUIFvm has no registers, so we implement selected</a>
+<code>reg_...</code> methods of class <code>MachineContext</code> to give null results.
+<p>
+<pre><a name="NW14HCqf-2SwCTf-1" href="#NWDS"><dfn>&lt;<code>MachineContextSuifVm</code> register query method&gt;=</dfn></a> <b>(<a href="#NWDK">&lt;-U</a>)</b>
+    int reg_count() const
+        { return 0; }
+    const NatSet* reg_allocables(bool maximals = false) const
+        { static NatSetSparse empty; return &amp;empty; }
+    const NatSet* reg_caller_saves(bool maximals = false) const
+        { static NatSetSparse empty; return &amp;empty; }
+    const NatSet* reg_callee_saves(bool maximals = false) const
+        { static NatSetSparse empty; return &amp;empty; }
+</pre><p>
+
+
+<h3><a name=toc22><a name="NWDT">Header file for </a><code>contexts.h</code></a></h3>
+<p>
+<pre><a name="NW14HCqf-2L1Xtu-1" href="#NWDT"><dfn>&lt;suifvm/contexts.h&gt;=</dfn></a>
+/* file &quot;suifvm/contexts.h&quot; */
+
+<a name="NW14HCqf-2L1Xtu-1-u1" href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef SUIFVM_CONTEXT_H
+#define SUIFVM_CONTEXT_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;suifvm/contexts.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+#include &lt;suifvm/suifvm.h&gt;
+
+<a name="NW14HCqf-2L1Xtu-1-u2" href="#NWDJ"><i>&lt;class <code>SuifVmContext</code>&gt;</i></a>
+
+<a name="NW14HCqf-2L1Xtu-1-u3" href="#NWDK"><i>&lt;class <code>MachineContextSuifVm</code>&gt;</i></a>
+
+#endif /* SUIFVM_CONTEXT_H */
+</pre><p>
+<h2><a name=toc23><a name="NWDU">SUIFvm library initialization</a></a></h2>
+<p>
+The header file <code>init.h</code> defines the initialization routine for the
+<code>suifvm</code> library and the string constant used to indicate use of
+this library as the current machine target.
+<p>
+<pre><a name="NW1wzDzq-1UOzXs-1" href="#NWDU"><dfn>&lt;suifvm/init.h&gt;=</dfn></a>
+/* file &quot;suifvm/init.h&quot; */
+
+<a name="NW1wzDzq-1UOzXs-1-u1" href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef SUIFVM_INIT_H
+#define SUIFVM_INIT_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;suifvm/init.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+
+extern &quot;C&quot; void init_suifvm(SuifEnv* suif_env);
+
+extern IdString k_suifvm;
+
+#endif /* SUIFVM_INIT_H */
+</pre><p>
+<h2><a name=toc24><a name="NWDV">Header file for the SUIFvm library</a></a></h2>
+<p>
+Any OPI passes that use the OPI interface extensions defined by the
+<code>suifvm</code> library should include the following header file.  Since
+this library is also a target library, any library that extends SUIFvm
+as a target machine should also include this header file.
+<p>
+<pre><a name="NWNOxxu-2gS8Bg-1" href="#NWDV"><dfn>&lt;suifvm/suifvm.h&gt;=</dfn></a>
+/* file &quot;suifvm/suifvm.h&quot; */
+
+<a name="NWNOxxu-2gS8Bg-1-u1" href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef SUIFVM_SUIFVM_H
+#define SUIFVM_SUIFVM_H
+
+#include &lt;machine/copyright.h&gt;
+
+#include &lt;suifvm/init.h&gt;
+#include &lt;suifvm/opcodes.h&gt;
+#include &lt;suifvm/instr.h&gt;
+#include &lt;suifvm/code_gen.h&gt;
+#include &lt;suifvm/printer.h&gt;
+#include &lt;suifvm/c_printer.h&gt;
+#include &lt;suifvm/contexts.h&gt;
+
+#endif /* SUIFVM_SUIFVM_H */
+</pre><p>
+
+<a name="NWDW">The header files in the </a><code>suifvm</code> library depend only on the
+<code>machine</code> library.
+<p><h2><a name=toc25><a name="NWDX">Copyright</a></a></h2>
+All of the code is protected by the following copyright notice.
+<p>
+<pre><a name="NW4NUaGr-23xQrt-1" href="#NWDX"><dfn>&lt;Machine-SUIF copyright&gt;=</dfn></a> <b>(<a href="#NWD7">&lt;-U</a> <a href="#NWD8">U-&gt;</a> <a href="#NW48Cng4-2qj20r-1">&lt;-U</a> <a href="#NWDD">U-&gt;</a> <a href="#NWDI">&lt;-U</a> <a href="#NWDT">&lt;-U</a> <a href="#NWDU">&lt;-U</a> <a href="#NWDV">&lt;-U</a>)</b>
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard College
+
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the &quot;machine/copyright.h&quot; include file.
+*/
+</pre><p>
+
+
+<h2><a name=toc26>Acknowledgments</a></h2>
+<p>
+<a name="NWDY">This work was supported in part by an DARPA/NSF infrastructure grant</a>
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).  We also gratefully
+acknowledge the generous support of this research by Advanced Micro
+Devices, Compaq, Digital Equipment, Hewlett-Packard, International
+Business Machines, Intel, and Microsoft.
+<p>
+<!-- Make \end{document} a chunk by itself to allow cross-reference info-->
+<!-- to be dumped in before it (noweave -delay).-->
+
+
+
+
+<ul>
+<li><a href="#NWDH"><i>&lt;<code>CodeGen</code> private parts&gt;</i></a>: <a href="#NWDF">U1</a>, <a href="#NWDH">D2</a>
+<li><a href="#NWDG"><i>&lt;<code>CodeGen</code> protected parts&gt;</i></a>: <a href="#NWDF">U1</a>, <a href="#NWDG">D2</a>
+<li><a href="#NWDB"><i>&lt;<code>CPrinterSuifVm</code> protected parts&gt;</i></a>: <a href="#NWDA">U1</a>, <a href="#NWDB">D2</a>, <a href="#NWDC">D3</a>
+<li><a href="#NWDO"><i>&lt;<code>MachineContextSuifVm</code> code-finalizer method&gt;</i></a>: <a href="#NWDK">U1</a>, <a href="#NWDO">D2</a>
+<li><a href="#NWDL"><i>&lt;<code>MachineContextSuifVm</code> generic-pointer method&gt;</i></a>: <a href="#NWDK">U1</a>, <a href="#NWDL">D2</a>
+<li><a href="#NWDP"><i>&lt;<code>MachineContextSuifVm</code> instruction-predicate methods&gt;</i></a>: <a href="#NWDK">U1</a>, <a href="#NWDP">D2</a>
+<li><a href="#NWDR"><i>&lt;<code>MachineContextSuifVm</code> opcode query methods&gt;</i></a>: <a href="#NWDK">U1</a>, <a href="#NWDR">D2</a>
+<li><a href="#NWDQ"><i>&lt;<code>MachineContextSuifVm</code> opcode-generator methods&gt;</i></a>: <a href="#NWDK">U1</a>, <a href="#NWDQ">D2</a>
+<li><a href="#NWDM"><i>&lt;<code>MachineContextSuifVm</code> printer methods&gt;</i></a>: <a href="#NWDK">U1</a>, <a href="#NWDM">D2</a>, <a href="#NWDN">D3</a>
+<li><a href="#NWDS"><i>&lt;<code>MachineContextSuifVm</code> register query method&gt;</i></a>: <a href="#NWDK">U1</a>, <a href="#NWDS">D2</a>
+<li><a href="#NW14HCqf-3vkRen-1"><i>&lt;<code>SuifVmContext</code> protected matter&gt;</i></a>: <a href="#NWDJ">U1</a>, <a href="#NW14HCqf-3vkRen-1">D2</a>
+<li><a href="#NWDF"><i>&lt;class <code>CodeGen</code>&gt;</i></a>: <a href="#NWDF">D1</a>, <a href="#NWDI">U2</a>
+<li><a href="#NWDA"><i>&lt;class <code>CPrinterSuifVm</code>&gt;</i></a>: <a href="#NWDA">D1</a>, <a href="#NWDD">U2</a>
+<li><a href="#NWDK"><i>&lt;class <code>MachineContextSuifVm</code>&gt;</i></a>: <a href="#NWDK">D1</a>, <a href="#NWDT">U2</a>
+<li><a href="#NWD9"><i>&lt;class <code>PrinterSuifVm</code>&gt;</i></a>: <a href="#NWD9">D1</a>, <a href="#NW48Cng4-2qj20r-1">U2</a>
+<li><a href="#NWDJ"><i>&lt;class <code>SuifVmContext</code>&gt;</i></a>: <a href="#NWDJ">D1</a>, <a href="#NWDT">U2</a>
+<li><a href="#NWDE"><i>&lt;function <code>target_code_gen</code>&gt;</i></a>: <a href="#NWDE">D1</a>, <a href="#NWDI">U2</a>
+<li><a href="#NWDX"><i>&lt;Machine-SUIF copyright&gt;</i></a>: <a href="#NWD7">U1</a>, <a href="#NWD8">U2</a>, <a href="#NW48Cng4-2qj20r-1">U3</a>, <a href="#NWDD">U4</a>, <a href="#NWDI">U5</a>, <a href="#NWDT">U6</a>, <a href="#NWDU">U7</a>, <a href="#NWDV">U8</a>, <a href="#NWDX">D9</a>
+<li><a href="#NWD6"><i>&lt;SUIFvm opcode OPI functions&gt;</i></a>: <a href="#NWD6">D1</a>, <a href="#NWD7">U2</a>
+<li><a href="#NWD4"><i>&lt;SUIFvm opcode vectors&gt;</i></a>: <a href="#NWD4">D1</a>, <a href="#NWD5">D2</a>, <a href="#NWD7">U3</a>
+<li><a href="#NWD3"><i>&lt;SUIFvm opcodes&gt;</i></a>: <a href="#NWD3">D1</a>, <a href="#NWD7">U2</a>
+<li><a href="#NWDD"><i>&lt;suifvm/c_printer.h&gt;</i></a>: <a href="#NWDD">D1</a>
+<li><a href="#NWDI"><i>&lt;suifvm/code_gen.h&gt;</i></a>: <a href="#NWDI">D1</a>
+<li><a href="#NWDT"><i>&lt;suifvm/contexts.h&gt;</i></a>: <a href="#NWDT">D1</a>
+<li><a href="#NWDU"><i>&lt;suifvm/init.h&gt;</i></a>: <a href="#NWDU">D1</a>
+<li><a href="#NWD8"><i>&lt;suifvm/instr.h&gt;</i></a>: <a href="#NWD8">D1</a>
+<li><a href="#NWD7"><i>&lt;suifvm/opcodes.h&gt;</i></a>: <a href="#NWD7">D1</a>
+<li><a href="#NW48Cng4-2qj20r-1"><i>&lt;suifvm/printer.h&gt;</i></a>: <a href="#NW48Cng4-2qj20r-1">D1</a>
+<li><a href="#NWDV"><i>&lt;suifvm/suifvm.h&gt;</i></a>: <a href="#NWDV">D1</a>
+</ul>
+</body></html>
+

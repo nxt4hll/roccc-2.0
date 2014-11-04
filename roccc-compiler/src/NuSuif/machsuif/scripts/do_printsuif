@@ -1,0 +1,69 @@
+#!/bin/sh -f
+
+# Print a SUIF intermediate file in readable form.
+#
+# Command line options:
+#
+#  -raw	 	Use the lowest-level printing style (hex addresses
+#		instead of symbolic tags and minimal formatting).
+#  -machine	Assume the input contains Machine-SUIF IR.
+#  -cfg		Assume the input contains Machine-SUIF CFG IR.
+
+
+requiresuifprinter="require suifprinter;"
+requiremachine=""
+requirecfg=""
+printcmd="print_suif"
+
+infile=""
+
+usage() {
+   echo "Usage: $0 [-raw] [-machine] [-cfg] INPUTFILE"
+   exit 1;
+}
+
+for arg
+do
+    case x"$arg" in
+      x-raw)
+	requiresuifprinter=""
+	printcmd="print";;
+      x-machine)
+	requiremachine="require machine;";;
+      x-cfg)
+	requirecfg="require cfg;";;
+      x-*) 
+	echo "Bad option $arg" 
+	usage;;
+      x*)
+        case x$infile in
+	  x)  infile="$arg";;
+	  x*) usage;;
+	esac;;
+    esac
+done
+
+me=`basename $0`
+tmp=/tmp/$me$$
+
+status=1
+trap "rm -f $tmp; exit \$status;" 0 1 2 3 15
+
+if [ -z "$infile" ]
+then
+    usage
+fi
+   
+cat <<EOF > $tmp
+require cfenodes; $requiresuifprinter $requiremachine $requirecfg
+load $infile
+$printcmd
+EOF
+
+echo suifdriver -f $tmp
+suifdriver -f $tmp
+status=$?
+if [ $status != 0 ]
+   then echo "$0 failed"
+   exit						# trap handler cleans up
+fi

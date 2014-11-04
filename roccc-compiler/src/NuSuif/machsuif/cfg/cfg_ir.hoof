@@ -1,0 +1,119 @@
+# file "cfg_ir.hoof"
+#
+#    Copyright (c) 2000 The President and Fellows of Harvard College
+#
+#    All rights reserved.
+#
+#    This software is provided under the terms described in
+#    the "machine/copyright.h" include file.
+
+
+#include "machine/machine_ir.hoof"
+
+module cfg_ir {
+
+    include <bit_vector/bit_vector.h>;
+    include <machine/machine.h>;
+
+    import basicnodes;
+    import machine;
+
+concrete Cfg : AnyBody {
+    list<CfgNode* owner> nodes;
+    CfgNode* reference entry_node;
+    CfgNode* reference exit_node;
+
+    list<LabelSym* reference> noted_labels;
+
+    bool keep_layout;
+    bool break_at_call;
+    bool break_at_instr;
+    int synch_levels_size default { 0 };
+    int asynch_levels_size default { 0 };
+    int IP_interface_type default { -1 };
+
+    CPP_DECLARE
+      public:
+	list<CfgNode*>& nodes() { return _nodes; }
+	InstrList* to_instr_list();
+	list<LabelSym*>& noted_labels() { return _noted_labels; }
+    CPP_DECLARE
+    CPP_BODY
+        extern InstrList* cfg_to_instr_list(Cfg*);
+        InstrList*
+        Cfg::to_instr_list()
+        {
+            return cfg_to_instr_list(this);
+        }
+    CPP_BODY
+};
+
+concrete CfgNode : ScopedObject {
+    int number;
+    Instr* reference cti;
+    list<Instr* owner> instrs;
+    list<CfgNode* reference> preds;
+    list<CfgNode* reference> succs;
+    CfgNode* reference layout_pred;
+    CfgNode* reference layout_succ;
+    IInteger exc_succs; 
+    IInteger imp_succs;
+
+    int nDFTopLevel default { -1 };	
+    int nDFBottomLevel default {  -1 };	
+    int nLatchTopLevel default { -1 };
+    int nLatchBottomLevel default { -1 };
+    int nLoopType default { -1 };
+
+    int vr_loop_counter1 default { -1 };
+    int vr_loop_counter2 default { -1 };
+
+    bool is_isolated_hard_pipe_node default { false };
+    bool is_isolated_hard_mux_node default { false };
+    bool is_asynch_node default { false };
+    bool is_kernel_loopnode default { false };
+
+    int  int_label_of_hardnode_pred_node default { -1 };	   
+    int  int_label_of_hardnode_pred_then_node default { -1 };
+    int  int_label_of_hardnode_pred_else_node default { -1 };
+    int  int_label_of_hardnode_succ_then_node default { -1 };
+    int  int_label_of_hardnode_succ_else_node default { -1 };
+    int  int_label_of_hardnode_succ_node default { -1 };   
+
+    int  int_label_of_hardnode_associated_upper_mux_node default { -1 };
+    int  int_label_of_hardnode_associated_upper_pipe_node default { -1 };
+    int  int_label_of_hardnode_associated_lower_mux_node default { -1 };
+    int  int_label_of_hardnode_associated_lower_pipe_node default { -1 };
+
+    CPP_DECLARE
+      public:
+	list<Instr*>& instrs() { return _instrs; }
+	list<CfgNode*>& succs() { return _succs; }
+	list<CfgNode*>& preds() { return _preds; }
+
+	list<Opnd> TheInputSignalList;	   
+	list<Opnd> TheOutputSignalList;		
+
+	CfgNode*  hardnode_pred_node;	   
+	CfgNode*  hardnode_pred_then_node;
+	CfgNode*  hardnode_pred_else_node;
+	CfgNode*  hardnode_succ_node;   
+	CfgNode*  hardnode_associated_mux_node;
+	CfgNode*  hardnode_assiciated_pipe_node;
+
+
+	list<LString> TheLibList;
+	list<LString> TheComponentNameList;
+	list<LString> TheEntityPortList;
+	list<LString> TheSignalDeclareList;
+	list<LString> TheMainProcessResetList;
+	list<LString> TheMainProcessAssignmentList;
+	list<LString> TheCombinationalLogicList;
+	list<LString> TheMuxInstrProcessList;
+	LString TheSelectSignalProcess;
+
+	IInteger& exc_succs() { return _exc_succs; }
+	IInteger& imp_succs() { return _imp_succs; }
+    CPP_DECLARE
+};
+}

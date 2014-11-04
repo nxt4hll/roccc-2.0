@@ -1,0 +1,29 @@
+COMPILER_SPECIFIC_CFLAGS =  -Wall
+#COMPILER_SPECIFIC_CXXFLAGS = -Wall -Wno-invalid-offsetof
+#COMPILER_SPECIFIC_CXXFLAGS =  # -pedantic -Wchar-subscripts -Wcomment -Wformat -Wimplicit -Wreturn-type -Wswitch -Wtrigraphs -Wreorder -Wpointer-arith -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs -DINLINE_ALL_TEMPLATES -DSUIF_STRIPPED_HEADERS
+#CC =			gcc
+#CXX =			g++
+DEPSFLAG =		-M -MM 
+# -MM option to only include local and not system headers
+
+
+
+# This is required only for gcc >= 2.95 to compile
+# the suifbrowser.  for gcc < 2.95, it is an invalid flag.
+# The install should determine whether it's needed.  
+# Until install handles it, gcc 2.95 user should manually comment it in.
+X11_SPECIAL_FLAGS = -fpermissive
+
+#PURIFY = purify -cache-dir=$(HOME)/purify-cache -chain-length="10"
+#PURIFY = quantify -cache-dir=$(HOME)/quantify-cache
+
+ifneq (,$(findstring solaris2,$(MACHINE)))
+ifeq (sun_procompiler,$(COMPILER_NAME))
+SHARED_LIB_FLAGS =        -G -xs
+else
+SHARED_LIB_FLAGS =        -G
+SYS_LIBS = $(GCC_SOLARIS_SYS_LIBS) 
+endif
+endif
+
+# COMPILER_SPECIFIC_CXXFLAGS += -DSUIF_NAMESPACE=SUIF

@@ -1,0 +1,53 @@
+This is the current version of smgn and the code to generate output as it currently stands.
+
+To build, do a make all:
+
+The programs are:
+
+smgn <option> <grammar> <source> <macros> 
+=========================================
+
+
+
+Read a grammar. Parse source using grammar, then use macros to generate an output file. For example
+
+	smgn suif.grm pygx.hoof pyg.mac
+
+	options are:
+		-p  print the syntax tree that is fed to the macro processor as parameters
+
+
+BUGS:
+	1/ The get_file_text routine gives a warning on MSDOS because of brain dead library routines
+	   that fail to calculate the length of a file correctly (its a CR/LF thing)
+
+	2/ The parser is brain-dead. 
+
+		i)	There is no concept of a reserved word, so identifier will match anything
+			that could be an identifier. (this would be easy to fix)
+
+			(identifier is a special terminal that reads in identifiers. It is written
+		        as a non-terminal (<identifier>) in the grammar.
+
+		ii)	The backtracking is half-hearted. Once a non-terminal in a production has been
+			matched, if the production subsequently fails to match, the whole production
+			fails without going back and trying other productions for already matched
+			non-terminals (this would be easy to fix)
+
+		iii)	All forms of left recursion (including hiddent left recusion - <x> ::= <y> <x>
+			where x elides, causes the parser to go into an infinite recursion until you 
+			run out of stack space.
+
+reorder  <input file> <output file>
+===================================
+
+Reorders the input file so that all file sections (with //=== file: ) are in alphabetical order. Needed
+for comparison purposes with old generated code.
+
+
+splitup <input file> 
+=================================
+
+Generates single .h and .cc files from the combined sources. The sources refer to all kinds of files
+and there is a version of splitup called splitter that will generate multiple files, but the includes
+are not known to work right when this is done.

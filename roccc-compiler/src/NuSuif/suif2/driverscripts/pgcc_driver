@@ -1,0 +1,116 @@
+#!/bin/sh -f
+
+usage() {
+   echo "Usage: $0 [-f tmp] [-keep] [-Ddefine] file(s).c"
+   exit 1;
+}
+
+keep=0
+
+prog=program
+
+defines=""
+
+tmpfile=drv.sh
+
+while [ ! -z $1 ];
+  do case x"$1" in 
+    x-D*)  defines="$args $1"
+      shift ;;
+    x-f)  shift
+      if [ -z $1 ] 
+         then usage; fi
+      tmpfile=$1
+      shift ;;
+    x-p)  shift
+      if [ -z $1 ] 
+          then usage; fi
+      prog=$1
+      shift;;
+    x-keep) keep=1
+      shift;;
+    x-*) 
+      echo "Bad option $1"; 
+      usage;;
+    *) break;;
+  esac
+done
+
+if [ -z $1 ] 
+    then usage; fi
+if [ $# -eq 1 ]
+    then if [ $prog = "program" ]
+       then prog=`basename $1 .c`
+    fi
+fi
+
+INCL="-I/usr/local/include -I/usr/lib/gcc-lib/i386-redhat-linux/egcs-2.91.66/include -I/usr/include"
+#INCL="-I/usr/pgi/linux86/include/CC -I/usr/local/include -I/usr/i486-linux/include -I/usr/lib/gcc-lib/i686-unknown-linux/2.7.2.3.f.1/include -I/usr/include -I/usr/src/linux-2.0.34/include/linux"
+
+PGFLAGS="-D__PGI -D__linux86 -D__signed__=signed -D__inline__= -Dunix -Di386 -Dlinux -D__unix__ -D__i386__ -D__linux__ -D__unix -D__i386 -D__linux -D__NO_MATH_INLINES --c -q $INCL"
+
+
+echo LD_LIBRARY_PATH=$LD_LIBRARY_PATH
+base=`basename $1 .c`
+echo pgcpp1 ${defines} ${PGFLAGS} -o ${base}.cil $1
+pgcpp1 ${defines} ${PGFLAGS} -o ${base}.cil $1
+if [ $? != 0 ]
+   then echo "FAILED: pgcpp1 $defines ${PGFLAGS} -o ${base}.cil $1"
+   exit 1
+fi
+echo suifint ${base}.cil ${base}.suif
+suifint ${base}.cil ${base}.suif
+if [ $? != 0 ]
+   then echo "FAILED: suifint ${base}.cil ${base}.suif"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then echo rm -f $base.cil
+  rm -f $base.cil
+fi
+
+cat <<EOF > $tmpfile
+import basicnodes
+import suifnodes
+import cfenodes
+import s2c
+load ${base}.suif
+import transforms
+# dismantle_c_for_statements
+# dismantle_while_statements
+# dismantle_do_while_statements
+#pipeline {
+rename_colliding_symbols
+#}
+save $base.s2
+s2c -D ARCH=${ARCH} ${base}_gen.c
+
+#import suifprinter
+#suifPrint
+EOF
+
+echo suifdriver -f $tmpfile
+suifdriver -f $tmpfile
+if [ $? != 0 ]
+   then echo "FAILED: suifdriver -f $tmpfile"
+   exit 1
+fi
+if [ $keep -eq 0 ]
+  then echo rm -f $base.suif $base.s2
+  rm -f $base.suif $base.s2
+fi
+
+#echo s2c $base.s2s1 $base.s2s1.c
+#s2c $base.s2s1 $base.s2s1.c
+
+#echo cc -o $base.s2s1.exe $base.s2s1.c main.c
+#cc -o $base.s2s1.exe $base.s2s1.c main.c
+
+#echo cc -o $base.s2.exe $base.s2.c main.c
+#cc -o $base.s2.exe $base.s2.c main.c
+#cat <<EOF | gdb suifdriver
+#run -f drv.sh
+#where
+#EOF
+
+

@@ -1,0 +1,114 @@
+\section{Ex1 -- A Simple Pass}
+
+The first example in our cookbook simply reads in an Machine-SUIF
+intermediate representation (IR) file and prints the name of each
+procedure in this file.  The main purpose of this example is to
+illustrate the source file structure of a Machine-SUIF pass and
+the nesting of an OPI-pass object within a SUIF-pass object.
+
+\paragraph{File structure.}
+
+There are five source files in the directory [[ex1]], not including
+the [[Makefile]].  The files [[ex1.h]] and [[ex1.cpp]] define the
+OPI pass.  Except for the SUIF copyright include, these two files
+are what we call ``substrate independent''; they do not make any
+explicit references to SUIF data structures or functions.
+
+To build a pass that will run under SUIF, we add the three source files
+starting with the prefix [[suif_]].  The file [[suif_main.cpp]] is used
+to build the stand-alone program called [[do_ex1]].  To adapt this
+source file for your pass, use a text editor to change all instances of
+[[ex1]] to the name of your pass.
+
+The files [[suif_pass.h]] and [[suif_pass.cpp]] define the SUIF pass
+built as the dynamically loadable library [[libex1.so]].  Adapting
+these files to your purpose again requires changing [[ex1]] to your pass
+name throughout.  When copying the file
+[[ex1/suif_pass.cpp]], you may also need to change the list of include
+files and the list of [[init_<library>]] calls at the end of
+[[init_ex1]].  Our [[ex1]] pass requires only the Machine-SUIF
+[[machine]] library.  A pass like [[peep]] requires this library along
+with the Machine-SUIF [[cfg]] and [[bvd]] libraries.  In summary,
+[[suif_pass.cpp]] should include and initialize the full set of
+libraries required by your pass.  (Don't forget to list these same
+libraries on the [[LIBS]] line in the [[Makefile]].)
+
+For further information about the contents of the SUIF files, please
+see Appendix A in our {\em OPI User's Guide}.
+
+
+\paragraph{Inputs and outputs.}
+
+In addition to whatever command line options you define, the command line
+of a Machine-SUIF pass may end with 1 or 2 file names.  The processing
+of a pass's inputs and outputs adheres to the following rules:
+
+\begin{enumerate}
+
+\item If you do not specify any file names on the command line, the
+pass assumes that this is an in-memory pass and that it will receive
+an already-constructed [[file_set_block]] containing the input files.
+
+\item If you specify only a single file name on the command line, the
+pass uses the existence or absence of a [[file_set_block]] to determine
+if the file represents an input or output.
+
+\begin{itemize}
+
+\item If the pass receives an already-constructed [[file_set_block]],
+then the file name on the command line is used as the output file.
+
+\item If no [[file_set_block]] exists when this pass starts, the file
+name on the command line is assumed to be an input file, and the
+output IR file is left in a newly-created [[file_set_block]].  This
+option is useful when your pass starts a string of in-memory
+optimization passes, or when the pass simply analyzes an IR file and
+does not change the IR in any way.  This is what [[do_ex1]] does.
+
+\end{itemize}
+
+\item If you specify two file names on the command line, the pass
+assumes that the first file name is the input file and the second is
+where the optimized IR is to be written when the pass completes.
+
+\end{enumerate}
+
+If you want your pass to process more than one input file in a single
+command, you must use the scripting feature in SUIF to [[load]]
+multiple files into a single [[file_set_block]] and then run your pass
+in in-memory mode.  Please note that SUIF does not allow you to
+specify multiple output files.  When you [[save]] the
+[[file_set_block]] containing multiple files, you can specify only a
+single file name.
+
+With respect to our example pass [[ex1]], once you have compiled [[ex1]]
+to create [[do_ex1]], you can run this pass on any Machine-SUIF IR file
+by typing, for example:
+
+\begin{verbatim}
+    do_ex1 wc.svm
+\end{verbatim}
+
+\noindent
+Here [[wc.svm]] is the output of [[do_s2m]] for the UNIX benchmark
+[[wc]].  Please remember to setup your environment variables as
+described in the Machine-SUIF overview document before compiling or
+running any Machine-SUIF pass.
+
+
+\paragraph{The OPI pass.}
+
+Given that [[ex1]] is such a simple pass, the declaration of
+class [[Ex1]] is nothing more than the OPI pass interface described
+in our {\em OPI User's Guide}.
+
+<<class [[Ex1]]>>=
+@
+
+All of the work of the optimization pass occurs in [[do_opt_unit]].
+Under Machine SUIF, an [[OptUnit]] is a SUIF [[ProcedureDefinition]].
+Thus, we just grab the name of the procedure from the procedure
+symbol and print it.
+
+<<[[Ex1::do_opt_unit]]>>=
+@

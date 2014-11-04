@@ -1,0 +1,574 @@
+<!-- this file was generated automatically by noweave; better not edit it-->
+<html><head><title>The Machine-SUIF Control Flow Analysis Library</title></head><body>
+
+<p>
+<!-- Give the l2h (LaTeX to HTML) filter some hints-->
+
+
+
+
+<!-- Adjust dimensions before setting \pagestyle: it looks at-->
+<!-- some of them-->
+
+
+
+
+
+
+
+
+
+
+<p>
+<!-- Replace some noweb.sty definitions to improve page breaks-->
+
+
+           <!-- Omit \clearpage for new source file-->
+<p>
+<!-- Was =\@highpenalty (>9999 disallows-->
+<!-- ... _any_ break in code)-->
+<!-- Use \nwcodepenalty ...--><!-- ... instead of \@highpenalty-->
+    <!-- Use \goodbreak ...-->
+               <!-- ... instead of \filbreak-->
+<p>
+
+<h1><a name=toc1>The Machine-SUIF Control Flow Analysis Library</a></h1>
+<address><em>Release version 2.02.07.15</em> <br><br>Glenn Holloway and Michael D. Smith <br>{holloway,smith}@eecs.harvard.edu <br>Division of Engineering and Applied Sciences <br>Harvard University</address>
+<p>
+
+<!--title goes here-->
+
+<p>
+<h2><a name=toc2>Abstract</a></h2><blockquote>
+The Machine-SUIF control flow analysis (CFA) library builds on the
+control flow graph (CFG) library.  It currently provides dominator
+analysis and natural-loop analysis.  The <code>DominanceInfo</code> class
+computes dominator sets, the dominator tree, and dominance frontiers in
+either the forward or reverse graphs.  Given dominance information, the
+<code>NaturalLoopInfo</code> class finds natural loops, computes the loop depth
+of each CFG node, and provides predicates that identify loop boundaries.
+<p>
+</blockquote>
+
+<hr><p>
+<tableofcontents>
+<ul compact>
+<li><a href="#toc2">Abstract</a></li>
+<li><a href="#toc3">Introduction</a></li>
+<li><a href="#toc4">Dominator Analysis</a></li>
+  <ul compact>
+  <li><a href="#toc5">Class DominanceInfo</a></li>
+  <li><a href="#toc6">Implementation</a></li>
+  <li><a href="#toc7">Header file for module dom.h</a></li>
+  </ul>
+<li><a href="#toc8">Natural loop analysis</a></li>
+  <ul compact>
+  <li><a href="#toc9">Class NaturalLoopInfo</a></li>
+  <li><a href="#toc10">Implementation</a></li>
+  <li><a href="#toc11">Header file for module loop.h</a></li>
+  </ul>
+<li><a href="#toc12">Library Boilerplate</a></li>
+  <ul compact>
+  <li><a href="#toc13">Initialization and finalization</a></li>
+  <li><a href="#toc14">Header file for the CFA library</a></li>
+  </ul>
+<li><a href="#toc15">Copyright</a></li>
+<li><a href="#toc16">Summary</a></li>
+<li><a href="#toc17">Acknowledgments</a></li>
+<li><a href="#toc18">References</a></li>
+</ul>
+</tableofcontents>
+<p>
+<!-- Start a new chunk to cause noweb to put source filename in heading-->
+
+
+
+<hr>
+<h2><a name=toc3>Introduction</a></h2>
+<p>
+<a name="NWD2">The Machine-SUIF control flow analysis (CFA) library builds on the</a>
+control flow graph (CFG) library.  It currently provides dominator
+analysis and natural loop analysis.  The <code>DominanceInfo</code> class,
+described in Section&nbsp;<a href="#sec-dominance-info">[-&gt;]</a>, computes dominator sets,
+the dominator tree, and dominance frontiers in either the forward or
+reverse graphs.  Given dominance information, the <code>NaturalLoopInfo</code>
+class, described in Section&nbsp;<a href="#sec-natural-loop-info">[-&gt;]</a>, finds natural
+loops, computes the loop depth of each CFG node, and provides predicates
+that identify loop boundaries.
+<p><h2><a name=toc4>Dominator Analysis</a></h2>
+<a name="sec-dominance-info"><b>[*]</b></a>
+<p>
+<h3><a name=toc5>Class <code>DominanceInfo</code></a></h3>
+<p>
+Class <code>DominanceInfo</code> can compute and cache dominance information
+about a CFG.  For each node <i>n</i>, it can produce:
+<p>
+<ul>
+<li>the immediate dominator of <i>n</i>;
+<li>the set of dominators of <i>n</i>; and
+<li>the dominance frontier of <i>n</i>.
+</ul>
+<p>
+It can analyze the CFG either in the forward or the reverse direction.
+Forward analysis views each edge as oriented ``normally'', i.e., in the
+direction of control flow, and it starts from the entry node.  Reverse
+analysis views each edge as reversed, and it starts from the exit node.
+By using the reverse graph, methods of <code>DominanceInfo</code> can produce
+for each node <i>n</i>:
+<p>
+<ul>
+<li>the immediate postdominator of <i>n</i>;
+<li><a name="NWD3">the set of postdominators of </a><i>n</i>; and
+<li>the reverse dominance frontier of <i>n</i>.
+</ul>
+<p>
+Because only some of the possible information is needed in a typical
+application, everything is computed on demand.  You call a
+<code>find_</code>...method to perform each analysis, then use other methods
+to access the results.
+<p>
+<pre><a name="NW1Rq26v-1Ht0ho-1" href="#NWD3"><dfn>&lt;class <code>DominanceInfo</code>&gt;=</dfn></a> <b>(<a href="#NWD5">U-&gt;</a>)</b>
+class DominanceInfo {
+  public:
+    DominanceInfo(Cfg *graph);
+    virtual ~DominanceInfo();
+
+    Cfg *graph() const { return _graph; }
+
+    // Perform control-flow analysis
+    void find_dominators();
+    void find_postdominators();
+    void find_dom_frontier();
+    void find_reverse_dom_frontier();
+
+    // Access analysis results
+    bool dominates(int n_dominator, int n_dominatee) const;
+    bool dominates(CfgNode *dominator, CfgNode *dominatee) const;
+    bool postdominates(int n_dominator, int n_dominatee) const;
+    bool postdominates(CfgNode *dominator, CfgNode *dominatee) const;
+    const NatSet *dominators(int n) const;
+    const NatSet *dominators(CfgNode *n) const;
+    const NatSet *postdominators(int n) const;
+    const NatSet *postdominators(CfgNode *n) const;
+    CfgNode *immed_dom(int n) const;
+    CfgNode *immed_dom(CfgNode *n) const;
+    CfgNode *immed_postdom(int n) const;
+    CfgNode *immed_postdom(CfgNode *n) const;
+    const NatSet *dom_frontier(int n) const;
+    const NatSet *dom_frontier(CfgNode *n) const;
+    const NatSet *reverse_dom_frontier(int n) const;
+    const NatSet *reverse_dom_frontier(CfgNode *n) const;
+
+    void print(FILE * = stdout) const;
+
+<a name="NW1Rq26v-1Ht0ho-1-u1" href="#NWD4"><i>&lt;<code>DominanceInfo</code> protected parts&gt;</i></a>
+};
+</pre><p>
+
+When constructing a <code>DominanceInfo</code> object, supply a pointer to the
+CFG to be analyzed.  To recover this underlying CFG, use method
+<code>graph</code>.
+<p>
+To see the state of a <code>DominanceInfo</code> object during debugging, use
+the <code>print</code> method.  The information is indexed by the CFG node
+numbers.  Use the <code>print</code> method of the CFG to learn more about the nodes.
+<p>
+The remaining <code>DominanceInfo</code> methods are for generating or accessing
+analysis results.
+<p>
+Call <code>find_dominators</code> to compute the dominator relation in the
+forward graph.  Then access this information through the following
+methods.
+<p>
+<blockquote>
+<table><!-- alignment is p{.3\linewidth}@{\hspace*{2em}}p{.5\linewidth}--><!-- 2 columns--><tr><td align=left valign=top><code>immed_dom(</code><i>n</i><code>)</code>          </td><td align=left valign=top>Returns <code>NULL</code> if <i>n</i> is the entry
+node.  Otherwise, returns the
+immediate dominator of node <i>n</i>, i.e.,
+its parent in the dominator tree. </td></tr>
+<tr><td align=left valign=top><code>immed_dom(</code><i>i</i><code>)</code>          </td><td align=left valign=top>Returns <code>immed_dom(</code><i>n_i</i><code>)</code>,
+where <i>n_i</i> is the node with number
+<i>i</i>. </td></tr>
+<tr><td align=left valign=top><tt>dominates(<i>n1</i>, <i>n2</i>)</tt>     </td><td align=left valign=top>Returns <code>true</code> when node <i>n1</i>
+dominates node <i>n2</i>. </td></tr>
+<tr><td align=left valign=top><tt>dominates(<i>i1</i>, <i>i2</i>)</tt>     </td><td align=left valign=top>Returns <tt>dominates(<i>n_i1</i>, <i>n_i2</i>)</tt>,
+where <i>n_i1</i> (<i>n_i2</i>) is the node with
+number <i>i1</i> (<i>i2</i>). </td></tr>
+<tr><td align=left valign=top><code>dominators(</code><i>n</i><code>)</code>         </td><td align=left valign=top>Returns a set of node numbers
+representing the dominators of node
+<i>n</i>. </td></tr>
+<tr><td align=left valign=top><code>dominators(</code><i>i</i><code>)</code>         </td><td align=left valign=top>Returns <code>dominators(</code><i>n_i</i><code>)</code>,
+where <i>n_i</i> is the node with number
+<i>i</i>.
+</td></tr></table>
+</blockquote>
+<p>
+Call <code>find_postdominators</code> to compute the dominator relation in the
+reverse graph.  The results are available through methods exactly
+analogous to those just described:
+<p>
+<blockquote>
+<table><!-- alignment is p{.3\linewidth}@{\hspace*{2em}}p{.5\linewidth}--><!-- 2 columns--><tr><td align=left valign=top><code>immed_postdom(</code><i>n</i><code>)</code>      </td><td align=left valign=top>Returns <code>NULL</code> if <i>n</i> is the exit
+node.  Otherwise, returns the
+immediate postdominator of node
+<i>n</i>. </td></tr>
+<tr><td align=left valign=top><code>immed_postdom(</code><i>i</i><code>)</code>      </td><td align=left valign=top>Returns <code>immed_postdom(</code><i>n_i</i><code>)</code>,
+where <i>n_i</i> is the node with number
+<i>i</i>. </td></tr>
+<tr><td align=left valign=top><tt>postdominates(<i>n1</i>, <i>n2</i>)</tt> </td><td align=left valign=top>Returns <code>true</code> when node <i>n1</i>
+postdominates node <i>n2</i>. </td></tr>
+<tr><td align=left valign=top><tt>postdominates(<i>i1</i>, <i>i2</i>)</tt> </td><td align=left valign=top>Returns <tt>postdominates(<i>n_i1</i>, <i>n_i2</i>)</tt>,
+where <i>n_i1</i> (<i>n_i2</i>) is the node with
+number <i>i1</i> (<i>i2</i>). </td></tr>
+<tr><td align=left valign=top><code>postdominators(</code><i>n</i><code>)</code>     </td><td align=left valign=top>Returns a set of node numbers
+representing the postdominators of node
+<i>n</i>. </td></tr>
+<tr><td align=left valign=top><code>postdominators(</code><i>i</i><code>)</code>     </td><td align=left valign=top>Returns <code>postdominators(</code><i>n_i</i><code>)</code>,
+where <i>n_i</i> is the node with number
+<i>i</i>.
+</td></tr></table>
+</blockquote>
+<p>
+The <code>find_dom_frontier</code> and <code>find_reverse_dom_frontier</code> methods
+compute the dominance frontiers and postdominance frontiers of each node
+in the graph.  Access the results of the former through:
+<p>
+<blockquote>
+<table><!-- alignment is p{.3\linewidth}@{\hspace*{2em}}p{.5\linewidth}--><!-- 2 columns--><tr><td align=left valign=top><code>dom_frontier(</code><i>n</i><code>)</code>       </td><td align=left valign=top>Returns a set of node numbers
+representing the dominance frontier of
+node <i>n</i> in the forward flow graph. </td></tr>
+<tr><td align=left valign=top><code>dom_frontier(</code><i>i</i><code>)</code>       </td><td align=left valign=top>Returns <code>dom_frontier(</code><i>n_i</i><code>)</code>,
+where <i>n_i</i> is the node with number
+<i>i</i>.
+</td></tr></table>
+</blockquote>
+<p>
+Access the results of calling <code>find_reverse_dom_frontier</code> through the
+methods:
+<p>
+<blockquote>
+<table><!-- alignment is p{.3\linewidth}@{\hspace*{2em}}p{.5\linewidth}--><!-- 2 columns--><tr><td align=left valign=top><code>reverse_dom_frontier(</code><i>n</i><code>)</code> </td><td align=left valign=top>Returns a set of node numbers
+representing the dominance frontier of
+node <i>n</i> in the reverse flow graph. </td></tr>
+<tr><td align=left valign=top><code>reverse_dom_frontier(</code><i>i</i><code>)</code> </td><td align=left valign=top>Returns
+<code>reverse_dom_frontier(</code><i>n_i</i><code>)</code>,
+where <i>n_i</i> is the node with number
+<i>i</i>.
+</td></tr></table>
+</blockquote>
+<p>
+
+<h3><a name=toc6>Implementation</a></h3>
+<p>
+For finding dominator sets, we use an iterative algorithm similar to
+Algorithm 10.16 in Aho, Sethi, and Ullman <b>[cite&nbsp;<a href="#NWcite-bibdragon">bibdragon</a>]</b>.  In a future
+release, we expect to switch to the algorithm of Lengauer and Tarjan
+<b>[cite&nbsp;<a href="#NWcite-biblengauer">biblengauer</a>]</b>, which should be more efficient on most flow graphs.
+<p>
+The immediate dominator of a node <i>n</i> is obtained by choosing the strict
+dominator of <i>n</i> whose dominator set differs from that of <i>n</i> only by
+removal of <i>n</i>.
+<p>
+We compute dominance frontiers using the algorithm of Cytron <i>et al</i>
+<b>[cite&nbsp;<a href="#NWcite-bibcytron">bibcytron</a>]</b>.
+<p>
+The privy parts of class <code>DominanceInfo</code> include methods that
+produce: dominator sets for each node, immediate dominators for each
+<a name="NWD4">node, and the dominance-frontier set for each node.  These methods each</a>
+take a flag indicating whether to operate on the forward or the reverse
+graph (<code>true</code> means forward).
+<p>
+An instance of the class holds a pointer to the underlying CFG, as well
+as pointers that are either <code>NULL</code> (before the corresponding analysis
+has been performed) or point to an array of analysis results, with one
+entry per CFG node, in order of the node number.
+<p>
+<pre><a name="NW1Rq26v-3fDWdG-1" href="#NWD4"><dfn>&lt;<code>DominanceInfo</code> protected parts&gt;=</dfn></a> <b>(<a href="#NWD3">&lt;-U</a>)</b>
+  protected:
+    NatSetDense *do_dominators(bool forward) const;
+    CfgNode **do_immed_dominators(bool forward) const;
+    void do_dom_frontiers(CfgNode *, bool forward);
+
+  private:
+    Cfg *_graph;
+
+    NatSetDense *_doms;         // bit vector per node
+    NatSetDense *_pdoms;        // bit vector per node
+    CfgNode **_idom;            // node per node
+    CfgNode **_ipdom;           // node per node
+    NatSetDense *_df;           // bit vector per node
+    NatSetDense *_rdf;          // bit vector per node
+</pre><p>
+
+
+
+<h3><a name=toc7><a name="NWD5">Header file for module </a><code>dom.h</code></a></h3>
+<p>
+The <code>DominanceInfo</code> class is defined in module <code>dom</code>, which has
+the following header file.
+<p>
+<pre><a name="NW1Rq26v-34lhR2-1" href="#NWD5"><dfn>&lt;cfa/dom.h&gt;=</dfn></a>
+/* file &quot;cfa/dom.h&quot; -- Dominance Analysis */
+
+<a name="NW1Rq26v-34lhR2-1-u1" href="#NWDB"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef CFA_DOM_H
+#define CFA_DOM_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;cfa/dom.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+#include &lt;cfg/cfg.h&gt;
+
+<a name="NW1Rq26v-34lhR2-1-u2" href="#NWD3"><i>&lt;class <code>DominanceInfo</code>&gt;</i></a>
+
+#endif /* CFA_DOM_H */
+</pre><p>
+<h2><a name=toc8><a name="NWD6">Natural loop analysis</a></a></h2>
+<a name="sec-natural-loop-info"><b>[*]</b></a>
+<p>
+<h3><a name=toc9>Class <code>NaturalLoopInfo</code></a></h3>
+<p>
+Class <code>NaturalLoopInfo</code> computes and caches information about the
+natural loops in a CFG.
+<p>
+<pre><a name="NW1Ua212-4NnCSo-1" href="#NWD6"><dfn>&lt;class <code>NaturalLoopInfo</code>&gt;=</dfn></a> <b>(<a href="#NWD8">U-&gt;</a>)</b>
+class NaturalLoopInfo {
+  public:
+    NaturalLoopInfo(DominanceInfo *dom_info)
+        : _dom_info(dom_info), _depth(NULL), _loop(NULL) { }
+    virtual ~NaturalLoopInfo() { delete [] _depth; }
+
+    DominanceInfo *dom_info() const { return _dom_info; }
+
+    void find_natural_loops();
+
+    const NatSet* loop_at(int n) const;
+    const NatSet* loop_at(CfgNode *n) const;
+    int loop_depth(int n) const;
+    int loop_depth(CfgNode *n) const;
+    void set_loop_depth(CfgNode *n, int d);
+    void set_loop_depth(int n, int d);
+
+    bool is_loop_begin(int n) const;    // true if block is loop entry
+    bool is_loop_begin(CfgNode *cn) const;
+    bool is_loop_end(int n) const;      // true if block jumps to loop entry
+    bool is_loop_end(CfgNode *cn) const;
+    bool is_loop_exit(int n) const;     // true if block is a loop exit
+    bool is_loop_exit(CfgNode *cn) const;
+
+    void print(FILE* = stdout) const;
+
+<a name="NW1Ua212-4NnCSo-1-u1" href="#NWD7"><i>&lt;<code>NaturalLoopInfo</code> protected parts&gt;</i></a>
+};
+</pre><p>
+
+An instance of <code>NaturalLoopInfo</code> is constructed from a pointer to
+<code>DominanceInfo</code> because dominators are used for the loop analysis.
+You can recover the <code>DominanceInfo</code> object by using the <code>dom_info</code>
+method.
+<p>
+Like dominance analysis, natural loops are computed only on demand.
+Call <code>find_natural_loops</code> to run (or rerun) the analysis.  Before
+doing so, you must have called <code>find_dominators</code> on the underlying
+<code>DominanceInfo</code> structure.
+<p>
+The <code>loop_at()</code> method takes a node <i>n</i> (or its node number) and returns
+the set of node numbers comprising the natural loop with header <i>n</i>.  (If
+<i>n</i> is not a loop header, the result set is empty.)
+<p>
+The <code>loop_depth()</code> method returns the number of natural loops that
+contain a node.  This can be set using the <code>set_loop_depth()</code> methods,
+in case you need to override the results of <code>find_natural_loops()</code>.
+<p>
+The <code>is_loop_begin()</code> method returns <code>true</code> if the specified node
+dominates any of its predecessors.  The <code>is_loop_end()</code> method returns
+<code>true</code> if the specified node is dominated by any of its successors.
+And the <code>is_loop_exit()</code> method returns <code>true</code> if the specified node
+has any successor with a different loop depth.  Note that this may not
+be the right loop exit criterion to use in all cases.
+<p>
+
+<h3><a name=toc10>Implementation</a></h3>
+<p>
+For finding natural loops, we use a method based on Algorithm 10.1 in
+<a name="NWD7">Aho, Sethi, and Ullman </a><b>[cite&nbsp;<a href="#NWcite-bibdragon">bibdragon</a>]</b>.
+<p>
+An instance of <code>NaturalLoopInfo</code> stores the dominance information
+provided at its construction in its <code>_dom_info</code> field.  When a method
+needs the CFG, it goes though <code>_dom_info</code> to reach it.  An instance of
+<code>NaturalLoopInfo</code> also contains a pointer <code>_depth</code> that is
+<code>NULL</code> until <code>find_natural_loops</code> is called and thereafter points to
+an array of loop depths, one for each node in the CFG.
+<p>
+<pre><a name="NW1Ua212-2rsaiy-1" href="#NWD7"><dfn>&lt;<code>NaturalLoopInfo</code> protected parts&gt;=</dfn></a> <b>(<a href="#NWD6">&lt;-U</a>)</b>
+  private:
+    DominanceInfo *_dom_info;
+    int *_depth;                        // int per node
+    NatSetDense *_loop;                 // bit vector per node
+</pre><p>
+
+
+<h3><a name=toc11><a name="NWD8">Header file for module </a><code>loop.h</code></a></h3>
+<p>
+The <code>NaturalLoopInfo</code> class is defined in module <code>loop</code>, which has
+the following header file.
+<p>
+<pre><a name="NW1Ua212-XqEqF-1" href="#NWD8"><dfn>&lt;cfa/loop.h&gt;=</dfn></a>
+/* file &quot;cfa/loop.h&quot; -- Natural Loop Analysis */
+
+<a name="NW1Ua212-XqEqF-1-u1" href="#NWDB"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef CFA_LOOP_H
+#define CFA_LOOP_H
+
+#include &lt;machine/copyright.h&gt;
+
+#ifdef USE_PRAGMA_INTERFACE
+#pragma interface &quot;cfa/loop.h&quot;
+#endif
+
+#include &lt;machine/machine.h&gt;
+#include &lt;cfg/cfg.h&gt;
+#include &lt;cfa/dom.h&gt;
+
+<a name="NW1Ua212-XqEqF-1-u2" href="#NWD6"><i>&lt;class <code>NaturalLoopInfo</code>&gt;</i></a>
+
+#endif /* CFA_LOOP_H */
+</pre><p>
+<h2><a name=toc12><a name="NWD9">Library Boilerplate</a></a></h2>
+<p>
+<h3><a name=toc13>Initialization and finalization</a></h3>
+<p>
+Every SUIF library has a pair of routines for initialization and
+finalization.  For the CFA library, these are declared in the
+<code>cfa</code> module.
+<p>
+<pre><a name="NW11lNPE-3e5dMl-1" href="#NWD9"><dfn>&lt;cfa library initialization&gt;=</dfn></a> <b>(<a href="#NWDA">U-&gt;</a>)</b>
+extern &quot;C&quot; void init_cfa(SuifEnv* suif_env);
+</pre><p>
+
+<h3><a name=toc14><a name="NWDA">Header file for the CFA library</a></a></h3>
+<p>
+The following is the header file is for use by other libraries and
+passes that depend upon the CFA library.  It is never included in any
+implementation file within the <code>machsuif/cfa</code> directory.  We use
+comments to indicate dependences among the header files.
+<p>
+<pre><a name="NW11lNPE-43sOx1-1" href="#NWDA"><dfn>&lt;cfa/cfa.h&gt;=</dfn></a>
+/* file &quot;cfa/cfa.h&quot; */
+
+<a name="NW11lNPE-43sOx1-1-u1" href="#NWDB"><i>&lt;Machine-SUIF copyright&gt;</i></a>
+
+#ifndef CFA_CFA_H
+#define CFA_CFA_H
+
+#include &lt;machine/copyright.h&gt;
+
+#include &lt;cfa/dom.h&gt;
+#include &lt;cfa/loop.h&gt;
+
+<a name="NW11lNPE-43sOx1-1-u2" href="#NWD9"><i>&lt;cfa library initialization&gt;</i></a>
+
+#endif /* CFA_CFA_H */
+</pre><p>
+<h2><a name=toc15><a name="NWDB">Copyright</a></a></h2>
+All of the code is protected by the following copyright notice.
+<p>
+<pre><a name="NW4NUaGr-23xQrt-1" href="#NWDB"><dfn>&lt;Machine-SUIF copyright&gt;=</dfn></a> <b>(<a href="#NWD5">&lt;-U</a> <a href="#NWD8">&lt;-U</a> <a href="#NWDA">&lt;-U</a>)</b>
+/*
+    Copyright (c) 2000 The President and Fellows of Harvard College
+
+    All rights reserved.
+
+    This software is provided under the terms described in
+    the &quot;machine/copyright.h&quot; include file.
+*/
+</pre><p>
+
+
+<!-- \section{Summary and Availability}-->
+<h2><a name=toc16>Summary</a></h2>
+<a name="secSummary"><b>[*]</b></a>
+<p>
+The CFA library was originally part of the Machine-SUIF CFG library,
+which supports not only analysis of programs, but also CFG-level
+transformations, code layout, and fine-grained code motion.  At Harvard,
+the analysis facilities described in this document have been useful in
+transformation to SSA form, in dead code elimination, and in register
+allocation.  For Machine SUIF version 2, we segregated these analysis
+functions to make the basic CFG library simpler.
+<p>
+<!-- The Machine-SUIF CFA library is available as part of the Machine-SUIF-->
+<!-- distribution which can be found on-->
+<!-- \nwanchorto{http://www.eecs.harvard.edu/machsuif/}{our web site}.-->
+<!-- Questions, comments, and bug reports for this package should be e-mailed-->
+<!-- to <code>machsuif-bugs@eecs.harvard.edu</code>.  An alpha release of SUIF 2.0 is-->
+<!-- available from the-->
+<!-- \nwanchorto{http://suif.stanford.edu/suif/suif2.0/}{SUIF 2.0 home page}.-->
+
+
+<h2><a name=toc17>Acknowledgments</a></h2>
+<p>
+This document is heavily based on the CFG library in Machine SUIF
+version 1.1.2 that was done by Cliff Young.  Cliff traced the roots of
+this library all the way back to a CFG library that was written by Mike
+Smith (one of the co-authors of the current document).  A version of
+this original library was modified by Bob Wilson at Stanford.  Tony
+DeWitt brought the library to Harvard and helped Cliff to adapt the data
+structure constructors to the Machine-SUIF version 1.1.2 library.  Gang
+Chen wrote the loop analysis code, and Mike built the unified data-flow
+analysis routines.  Other members of the HUBE research group at Harvard
+contributed useful suggestions to the design.  Tim Callahan of Synopsis,
+Inc. and Berkeley helped to uncover and fix several bugs.
+<p>
+This work is supported in part by an DARPA/NSF infrastructure grant
+(NDA904-97-C-0225), a NSF Young Investigator award (CCR-9457779), and
+a NSF Research Infrastructure award (CDA-9401024).
+We also gratefully acknowledge the generous support of this research
+by Advanced Micro Devices, Compaq, Digital Equipment, Hewlett-Packard,
+International Business Machines, Intel, and Microsoft.
+<p>
+
+<h2><a name=toc18>References</a></h2>
+<p>
+<a name="NWcite-bibdragon"><b>[1]</b></a>  A. Aho, R. Sethi, and J. Ullman. <em>Compilers:
+Principles, Techniques, and Tools.</em>  Addison-Wesley, 1986.
+<p>
+<a name="NWcite-bibcytron"><b>[2]</b></a>  R. Cytron, J. Ferrante, B. Rosen, M. Wegman, and
+F. Zadeck.  Efficiently computing static single assignment form and the
+control dependence graph.  <em>ACM Trans. on Programming Languages and
+Systems</em>, pp. 451-490, October 1991.
+<p>
+<a name="NWcite-biblibcfg"><b>[3]</b></a>  Glenn Holloway and Michael D. Smith. <em>The
+Machine-SUIF Control Flow Graph Library.</em>  The Machine-SUIF compiler
+documentation set, Harvard University, 1998.
+<p>
+<a name="NWcite-biblengauer"><b><a name="NWDC">[4]</a></b></a>  T. Lengauer and R. E. Tarjan.  A fast algorithm
+for finding dominators in a flowgraph.  <em>ACM Trans. on Programming
+Languages and Systems</em>, pp. 121-141, July 1979.
+<p>
+
+
+<!-- Make \end{document} a chunk by itself to allow cross-reference info-->
+<!-- to be dumped in before it (noweave -delay).-->
+
+
+
+
+<ul>
+<li><a href="#NWD4"><i>&lt;<code>DominanceInfo</code> protected parts&gt;</i></a>: <a href="#NWD3">U1</a>, <a href="#NWD4">D2</a>
+<li><a href="#NWD7"><i>&lt;<code>NaturalLoopInfo</code> protected parts&gt;</i></a>: <a href="#NWD6">U1</a>, <a href="#NWD7">D2</a>
+<li><a href="#NWD9"><i>&lt;cfa library initialization&gt;</i></a>: <a href="#NWD9">D1</a>, <a href="#NWDA">U2</a>
+<li><a href="#NWDA"><i>&lt;cfa/cfa.h&gt;</i></a>: <a href="#NWDA">D1</a>
+<li><a href="#NWD5"><i>&lt;cfa/dom.h&gt;</i></a>: <a href="#NWD5">D1</a>
+<li><a href="#NWD8"><i>&lt;cfa/loop.h&gt;</i></a>: <a href="#NWD8">D1</a>
+<li><a href="#NWD3"><i>&lt;class <code>DominanceInfo</code>&gt;</i></a>: <a href="#NWD3">D1</a>, <a href="#NWD5">U2</a>
+<li><a href="#NWD6"><i>&lt;class <code>NaturalLoopInfo</code>&gt;</i></a>: <a href="#NWD6">D1</a>, <a href="#NWD8">U2</a>
+<li><a href="#NWDB"><i>&lt;Machine-SUIF copyright&gt;</i></a>: <a href="#NWD5">U1</a>, <a href="#NWD8">U2</a>, <a href="#NWDA">U3</a>, <a href="#NWDB">D4</a>
+</ul>
+</body></html>
+

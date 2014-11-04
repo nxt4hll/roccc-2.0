@@ -1,0 +1,13 @@
+#!/bin/csh -v
+suifdriver -f buildtest1.sc
+suifdriver -e 'import testpasses; testWalker'
+suifdriver -e 'import testpasses; testClone'
+#suifdriver -f test1
+#suifdriver -f test2
+#suifdriver -f test3
+#suifdriver -f test4
+#suifdriver -f test5
+#suifdriver -f test6
+#suifdriver -f test7
+#suifdriver -f test8
+#suifdriver -f test9

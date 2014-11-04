@@ -1,0 +1,7 @@
+import testpasses
+import basicnodes suifnodes
+testBuild 1
+execute {
+save x.suif2
+load x.suif2
+}

@@ -1,0 +1,516 @@
+#include "basicnodes/basic.hoof"
+#
+#      Copyright (c) 1998,1999 Stanford University
+#
+#      All rights reserved.
+#
+#      This software is provided under the terms described in
+#      the "suif_copyright.h" include file.
+
+
+module suif 
+  {
+  include "basicnodes/basic.h";
+  import basicnodes;
+
+##########################################################
+#
+# Type
+#
+##########################################################
+
+  concrete VoidType : DataType
+    {
+    };
+  
+  abstract NumericType : DataType
+    {
+    };
+
+  concrete BooleanType : NumericType # the only way to make Boolean constants DataType
+    {
+    };
+
+
+  concrete IntegerType : NumericType
+    {
+      bool is_signed;
+    };
+
+  concrete FloatingPointType : NumericType
+    {
+    };
+
+  concrete EnumeratedType : IntegerType
+    {
+      indexed_list<LString,IInteger> case;
+    };
+
+  concrete PointerType : DataType
+    {
+      # the referenced type should never be a DataType.
+      Type * reference reference_type;
+    };
+
+  # A reference type is like a pointer type except that pointer
+  # arithmetic is not valid on it. This is important for
+  # passing parameters. This is needed because of the
+  # following problem introduced by C.
+  # i) C passes array parameters as pointer to element_type.
+  #    If you do pointer arithmetic on the pointer it scales by
+  #    the size of the element type.
+  # ii) Stripping off the first array bound is not valid in general
+  #    because the low bound may not be zero
+  # iii) Fixing the type on C parameters to pointer to the array type
+  #    would break C pointer arithmetic.
+  # iv) ArrayReferencesExpressions take the address of the array (of type
+  #     pointer to array) as their left hand operands. One cannot simply
+  #     pass parameters as of array type (rather than some sort of pointer
+  #     to array type). Notice that their value is the address of the array.
+  #
+  #  NB. It is tempting to make this derive from PointerType. This would
+  #     tend to create the wrong behaviour in c_text.mac as objects of 
+  #     ReferenceType would dispatch the methods associated with Pointers 
+  #     when there were no explicit ReferenceType method 
+  #     and this would not be good.
+
+  concrete ReferenceType : DataType
+    {
+        Type * reference reference_type;
+    };
+
+  concrete ArrayType : DataType
+    {
+      QualifiedType * reference element_type;
+      Expression * owner  lower_bound;
+      Expression * owner  upper_bound;
+    };
+
+  # multidim arrays are no longer treated as an array of arrays
+  concrete MultiDimArrayType : DataType
+    {
+      QualifiedType * reference element_type;
+      vector<Expression * owner> lower_bounds;
+      vector<Expression * owner> upper_bounds;
+    };
+
+  concrete GroupType : DataType
+    {
+      bool is_complete build {false};
+      GroupSymbolTable * owner group_symbol_table 
+	build {::create_group_symbol_table(get_suif_environment())};
+    };
+
+  # A group type where fields are guaranteed to be in increasing order
+  # and guaranteed not to overlap.  There may be spaces between fields
+  # or as padding at the end of the structure.
+  concrete StructType : GroupType
+    {
+    };
+
+  # A group type where fields all have offset 0.
+  # initializers (ValueBlocks) will initialize the first field
+  concrete UnionType : GroupType
+    {
+    };
+
+  concrete CProcedureType : ProcedureType
+    {
+      vector <QualifiedType * reference> arguments;
+      DataType * reference result_type;
+      bool has_varargs;
+      bool arguments_known;
+      int  bit_alignment;
+    };
+
+#########################################################
+#
+# Symbols
+#
+#########################################################
+
+
+  concrete FieldSymbol : VariableSymbol
+    {
+      Expression * owner bit_offset;
+    };
+
+  concrete NestingVariableSymbol : VariableSymbol
+    {
+      NestingVariableSymbol * reference super_variable;
+      Expression * owner bit_offset;
+      list<NestingVariableSymbol *reference> child_variables;
+    };
+
+
+##################################################################
+#
+# Statements
+#
+##################################################################
+
+  concrete EvalStatement : Statement
+    {
+      list<Expression * owner> expressions in source_ops;
+    };
+
+  concrete CallStatement : Statement
+    {
+      VariableSymbol* reference destination in destination_vars;
+      Expression * owner callee_address in source_ops;
+      vector<Expression * owner> arguments in source_ops;
+    };
+
+  concrete IfStatement : Statement
+    {
+      Expression * owner condition in source_ops;
+      Statement * owner then_part in child_statements;
+      Statement * owner else_part in child_statements build {0};
+
+    };
+
+  concrete WhileStatement : Statement
+    {
+      Expression * owner condition in source_ops;
+      Statement * owner body in child_statements;
+      CodeLabelSymbol * reference break_label in defined_labels build {0};
+      CodeLabelSymbol * reference continue_label in defined_labels build {0};
+    };
+
+  concrete DoWhileStatement : Statement
+    {
+      Expression * owner condition in source_ops;
+      Statement * owner body in child_statements;
+      CodeLabelSymbol * reference break_label in defined_labels build {0};
+      CodeLabelSymbol * reference continue_label in defined_labels build {0};
+    };
+
+  concrete ForStatement : Statement
+    {
+      VariableSymbol * reference index;
+      Expression * owner lower_bound in source_ops;
+      Expression * owner upper_bound in source_ops;
+      Expression * owner step in source_ops;
+      LString comparison_opcode;
+      Statement * owner body in child_statements;
+      Statement * owner pre_pad in child_statements build {0};
+      CodeLabelSymbol * reference break_label in defined_labels build {0};
+      CodeLabelSymbol * reference continue_label in defined_labels build {0};
+    };
+
+  concrete ScopeStatement : Statement
+    {
+      Statement * owner body in child_statements build {create_statement_list( _suif_env )};
+      SymbolTable * owner symbol_table build {create_basic_symbol_table( _suif_env )};
+      DefinitionBlock * owner definition_block build {create_definition_block( _suif_env )};
+    };
+
+  concrete VaStartStatement : Statement
+    {
+      Expression * owner ap_address in source_ops;
+      ParameterSymbol * reference parmn;
+    };
+
+  concrete VaStartOldStatement : Statement
+    {
+      Expression * owner ap_address in source_ops;
+    };
+
+  concrete VaEndStatement : Statement
+    {
+      Expression * owner ap_address in source_ops;
+    };
+
+  # Indirect store to the destination_address
+  concrete StoreStatement : Statement
+    {
+      Expression * owner value in source_ops;
+      Expression * owner destination_address in source_ops;
+    };
+
+  # Direct store to the destination variable
+  concrete StoreVariableStatement : Statement 
+    {
+      VariableSymbol* reference destination in destination_vars;
+      Expression * owner value in source_ops;
+    };
+
+  concrete ReturnStatement : Statement
+    {
+      Expression * owner return_value in source_ops;
+    };
+
+  concrete JumpStatement : Statement
+    {
+      CodeLabelSymbol * reference target;
+    };
+
+  concrete JumpIndirectStatement : Statement
+    {
+      Expression * owner target in source_ops;
+    };
+
+  abstract BranchStatement : Statement
+    {
+      Expression * owner decision_operand in source_ops;
+      CodeLabelSymbol * reference target;
+    };
+
+  concrete MultiWayBranchStatement : Statement
+    {
+      Expression * owner decision_operand in source_ops;
+      CodeLabelSymbol * reference default_target;
+      indexed_list<IInteger,CodeLabelSymbol * reference> case;
+    };
+
+  concrete LabelLocationStatement : Statement
+    {
+      CodeLabelSymbol * definer defined_label in defined_labels;
+    };
+
+
+  concrete MarkStatement : Statement
+    {
+    };
+
+############################################################
+#
+# Expressions
+#
+############################################################
+
+  concrete BinaryExpression : Expression
+    {
+      LString opcode;
+      Expression * owner source1 in source_ops;
+      Expression * owner source2 in source_ops;
+    };
+
+  concrete UnaryExpression : Expression
+    {
+      LString opcode;
+      Expression * owner source in source_ops;
+    };
+
+
+  concrete SelectExpression : Expression
+    {
+      Expression * owner selector in source_ops;
+      Expression * owner selection1 in source_ops;
+      Expression * owner selection2 in source_ops;
+    };
+
+  # canonical form for an address calculation that looks like:
+  #   base_array_address + 
+  #      elem_size * (offset + index[0] + (bound[0] * (index[0+1] + ... )))
+  concrete MultiDimArrayExpression [array_reference] : Expression
+    {
+      # type of this base_array_address should be a MultiDimArrayType
+      # with appropriate dimensionality
+      #
+      # CAUTION: array_address is the address of the array
+      #          the address of the base is array_address + offset
+      Expression * owner array_address in source_ops;
+      Expression * owner offset in source_ops;
+      # element_size is calculated from the element type of the 
+      # MultiDimArrayType stored in the base_array_address result type. 
+      #Expression * owner elem_size in source_ops;
+      # there should be the one more index than bounds
+      #
+      # index 0 varies most rapidly (ie, Fortran like)
+      # elements gives number of elements in each dimension
+      # first entry is elements for second dimension
+      vector <Expression * owner> index in source_ops;
+      vector <Expression * owner> elements in source_ops;
+    };
+
+  concrete ArrayReferenceExpression : Expression
+    {
+      Expression * owner base_array_address in source_ops;
+      Expression * owner index in source_ops;
+    };
+
+  concrete FieldAccessExpression : Expression
+    {
+      Expression * owner base_group_address in source_ops;
+      FieldSymbol * reference field;
+    };
+
+  concrete VaArgExpression : Expression
+    {
+      Expression * owner ap_address in source_ops;
+    };
+
+  # Indirect load through the source address 
+  concrete LoadExpression : Expression
+    {
+      Expression * owner source_address in source_ops;
+    };
+
+  # Direct load of a variable
+  concrete LoadVariableExpression : Expression
+    {
+      VariableSymbol* reference source in source_vars;
+    };
+ 
+  concrete SymbolAddressExpression : Expression
+    {
+      Symbol * reference addressed_symbol;
+    };
+
+  # Added for ROCCC
+  concrete AddressExpression : Expression
+    {
+      Expression * owner addressed_expression;
+    };
+
+  # Added for ROCCC
+  concrete NonLvalueExpression : Expression
+    {
+      Expression * owner addressed_expression;
+    };
+
+  concrete LoadValueBlockExpression : Expression
+    {
+      ValueBlock * owner value_block;
+    };
+
+
+
+############################################################
+#
+# ValueBlock
+#
+############################################################
+
+
+  concrete ExpressionValueBlock : ValueBlock
+    {
+      Expression * owner expression in source_ops;
+      CPP_DECLARE
+        public:
+          virtual DataType *get_type(void) const;
+          virtual void set_type(DataType *) const;
+      CPP_DECLARE
+      CPP_BODY
+        DataType *ExpressionValueBlock::get_type(void) const {
+          return(_expression->get_result_type());
+        }
+        void ExpressionValueBlock::set_type(DataType *t) const {
+          suif_assert_message(0, ("Can not set the type of the expressionValueBlock"));
+        }
+      CPP_BODY
+  };
+
+  concrete MultiValueBlock : ValueBlock
+    {
+      indexed_list<IInteger,ValueBlock * owner> sub_blocks;
+      DataType * reference type;
+      CPP_DECLARE
+	public:
+		virtual void clear_sub_block_list();
+      CPP_DECLARE
+      CPP_BODY
+	void MultiValueBlock::clear_sub_block_list() {
+	    _sub_blocks.clear_list();
+	    }
+      CPP_BODY
+    };
+
+  concrete RepeatValueBlock : ValueBlock
+    {
+      int num_repetitions;
+      ValueBlock * owner sub_block;
+      DataType * reference type;
+    };
+
+  concrete UndefinedValueBlock : ValueBlock
+    {
+      DataType * reference type;
+    };
+
+############################################################
+#
+# SymbolTable
+#
+############################################################
+
+  concrete GroupSymbolTable : BasicSymbolTable
+    {
+      constrain symbol_table_objects to searchable_list<FieldSymbol* owner>;
+    };
+
+############################################################
+#
+# GlobalInformationBlock
+#
+############################################################
+
+  concrete TargetInformationBlock : GlobalInformationBlock
+    {
+      list<IntegerType * reference > integer_types;
+      list<FloatingPointType * reference>  floating_point_types;
+      LString pointer_size_calculation_rule  default {LString("")};
+      LString pointer_alignment_calculation_rule default {LString("")};
+      LString array_alignment_calculation_rule default {LString("")};
+      LString group_alignment_calculation_rule default {LString("")};
+      LString procedure_alignment_calculation_rule default {LString("")};
+      LString integer_representation_rule default {LString("")};
+      LString floating_point_representation_rule default {LString("")};
+
+
+      bool is_big_endian optional;
+      IInteger byte_size optional;
+      IntegerType * reference word_type optional;
+      BooleanType * reference default_boolean_type optional;
+      VoidType * reference default_void_type optional;
+   
+   
+      bool pointer_size_fixed optional;
+      IInteger pointer_size optional;
+   
+      bool pointer_alignment_fixed optional;
+      int  pointer_alignment optional;
+      bool array_alignment_calculation_is_standard optional;
+      int  array_alignment_minimum optional;
+      bool group_alignment_calculation_is_standard optional;
+      int  group_alignment_minimum optional;
+      bool procedure_alignment_fixed optional;
+      int  procedure_alignment optional;
+      bool integer_representation_is_twos_complement optional;
+
+    };
+
+  concrete CInformationBlock : GlobalInformationBlock
+    {
+      LString  va_start_builtin default {LString("")};
+      LString  va_start_old_builtin default {LString("")};
+      LString  va_arg_builtin default {LString("")};
+      LString  va_end_builtin default {LString("")};
+ 
+      IntegerType * reference  signed_char_type optional ;
+
+      IntegerType * reference  unsigned_char_type optional ;
+      IntegerType * reference  char_type optional ;
+      IntegerType * reference  signed_short_type optional ;
+      IntegerType * reference  unsigned_short_type optional ;
+      IntegerType * reference  signed_int_type optional ;
+      IntegerType * reference  unsigned_int_type optional ;
+      IntegerType * reference  signed_long_type optional ;
+      IntegerType * reference  unsigned_long_type optional ;
+      IntegerType * reference  signed_long_long_type optional ;
+      IntegerType * reference  unsigned_long_long_type optional ;
+      FloatingPointType * reference  float_type optional ;
+      FloatingPointType * reference  double_type optional ;
+      FloatingPointType * reference  long_double_type optional ;
+      Type *  reference file_type optional ;
+      IntegerType * reference ptrdiff_t_type optional ;
+      IntegerType * reference size_t_type optional ;
+   
+
+      Type *  reference va_list_type optional ;
+  
+      bool  plain_bit_field_is_signed optional ;
+  };
+
+ }

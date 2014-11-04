@@ -1,0 +1,481 @@
+#	===================================</-2>
+#	indexed_list
+#	===================================
+
+<def indexed_list_extra_constraints the_type field_id parent_type>
+  <notice_linefeeds>
+  <let  temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+	parent_temp_type be parent_type.type_spec.template_part.type_specifications.type_specification,
+        sing_name be [<!SING field_id>],
+        iter_type be [<sing_name>_pair],
+        par_type0 be [<suitable_par_type temp_type[0]>],
+        par_type1 be [<suitable_par_type temp_type[1]>],
+	parent_par_type0 be [<suitable_par_type temp_type[0]>],
+        parent_par_type1 be [<suitable_par_type temp_type[1]>]>
+    // overrides of parent mthods
+    virtual void add_<sing_name>(<parent_par_type0> key,<parent_par_type1> value);
+    virtual void insert_<sing_name>(<parent_par_type0> key,<parent_par_type1> value);
+
+    // new methods specialized to this class
+    virtual void add_<sing_name>(<par_type0> key,<par_type1> value);
+    virtual void insert_<sing_name>(<par_type0> key,<par_type1> value);
+
+    <type_spec temp_type[1]> remove_<sing_name>(<par_type0> key);
+    <type_spec temp_type[1]> lookup_<sing_name>(<par_type0>,int no) const;
+    <type_spec temp_type[1]> remove_<sing_name>(<par_type0>,int no);
+    <type_spec temp_type[1]> lookup_<sing_name>(<par_type0> key) const;
+    <endif>
+  <endlet>
+<enddef>
+
+
+
+<def indexed_list_extra_constraints_imp the_type field_id class_name parent_name parent_type>
+  <notice_linefeeds> 
+  <let  temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+        parent_temp_type be parent_type.type_spec.template_part.type_specifications.type_specification,
+        sing_name be [<!SING field_id>],
+        iter_type be [<sing_name>_pair],
+        par_type0 be [<suitable_par_type temp_type[0]>],
+        par_type1 be [<suitable_par_type temp_type[1]>],
+	key_type_id be temp_type[0].identifier,
+	value_type_id be temp_type[1].identifier,
+        parent_par_type0 be [<suitable_par_type temp_type[0]>],
+        parent_par_type1 be [<suitable_par_type temp_type[1]>]>
+    // overrides of parent methods with suitable type checks
+    void <class_name>::add_<sing_name>(<parent_par_type0> key,<parent_par_type1> value) {</+2>
+		suif_assert(is_kind_of\<<key_type>\>(key));
+		suif_assert(is_kind_of\<<value_type>\>(value));
+		<parent_name>::add_<sing_name>(key,value);
+		}</-2>
+    void <class_name>::insert_<sing_name>(<parent_par_type0> key,<parent_par_type1> value) {</+2>
+                suif_assert(is_kind_of\<<key_type>\>(key));
+                suif_assert(is_kind_of\<<value_type>\>(value));
+                <parent_name>::insert_<sing_name>(key,value);
+                }</-2>
+
+    // implementation of new methods for this class
+    void <class_name>::add_<sing_name>(<par_type0> key,<par_type1> value){<parent_name>::add_<sing_name>(key,value);}
+    void <class_name>::insert_<sing_name>(<par_type0> key,<par_type1> value){<parent_name>::insert_<sing_name>(key,value);}
+    <type_spec temp_type[1]> <class_name>::remove_<sing_name>(<par_type0> key){return <parent_name>::remove_<sing_name>(key);}
+    <type_spec temp_type[1]> <class_name>::lookup_<sing_name>(<par_type0> key,int no) const {return <parent_name>::lookup_<sing_name>(key,no);}
+    <type_spec temp_type[1]> <class_name>::remove_<sing_name>(<par_type0> key,int no){return <parent_name>::remove_<sing_name>(key,no);}
+    <type_spec temp_type[1]> <class_name>::lookup_<sing_name>(<par_type0> key) const {return <parent_name>::lookup_<sing_name>(key);}
+    <endif>
+  <endlet>
+<enddef> 
+
+
+
+
+<def indexed_list_extras_dec field_dec>
+  <notice_linefeeds>
+  <let  the_type be field_dec.type_specification,
+   	temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+	sing_name be [<!SING field_dec.identifier>],
+	iter_type be [<sing_name>_pair],
+	par_type0 be [<suitable_par_type temp_type[0]>],
+	par_type1 be [<suitable_par_type temp_type[1]>],
+	virtual   be [<?field_dec.virtual.text virtual >]>
+    virtual void add_<sing_name>(<par_type0> key,<par_type1> value);
+    virtual void insert_<sing_name>(<par_type0> key,<par_type1> value);
+    typedef <type_spec the_type>::pair <iter_type>;
+    <virtual>Iter\<<iter_type> \> get_<sing_name>_iterator() const;
+    <virtual><type_spec temp_type[1]> remove_<sing_name>(<par_type0> key);
+    <virtual>bool has_<sing_name>_member(<par_type0> key);
+    <virtual>int num_<sing_name>_with_key(<par_type0>);
+    <virtual><type_spec temp_type[1]> lookup_<sing_name>(<par_type0>,int no) const;
+    <virtual><type_spec temp_type[1]> remove_<sing_name>(<par_type0>,int no);
+    <type_spec temp_type[1]> lookup_<sing_name>(<par_type0> key) const;
+    <virtual>void remove_all_from_<sing_name>(<par_type1> value);
+    <virtual>int get_<sing_name>_count() const;
+    <virtual><iter_type> get_<sing_name>(int pos) const;
+
+#	These were thought to be useful at one point. They may be thought so again
+
+    # <virtual><type_spec the_type>::iterator get_<sing_name>_begin();
+    # <virtual><type_spec the_type>::iterator get_<sing_name>_end();
+    <endif>
+  <endlet>
+<enddef>
+
+#	Forward routine with given name rid from given field declaration field_dec
+
+<def indexed_list_forwarder trid fid field_dec>
+      <notice_linefeeds>
+  <let  the_type be field_dec.type_specification,
+	rid be trid.identifier,
+        temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+        sing_name be [<!SING field_dec.identifier>],
+        iter_type be [<sing_name>_pair],
+        par_type0 be [<suitable_par_type temp_type[0]>],
+        par_type1 be [<suitable_par_type temp_type[1]>]>
+    <if (rid = [add_<sing_name>])>
+	void <fproc_name trid>(<par_type0> key,<par_type1> value);
+    <if (rid = [insert_<sing_name>])>
+        void <fproc_name trid>(<par_type0> key,<par_type1> value);
+    <elseif (rid = [get_<sing_name>_iterator])>
+	Iter\<<iter_type> \> <fproc_name trid>();
+    <elseif (rid = [remove_<sing_name>])>
+	<type_spec temp_type[1]> <fproc_name trid>(<par_type0> key);
+    <elseif (rid = [has_<sing_name>_member])>
+	bool <fproc_name trid>(<par_type0> key);
+    <elseif (rid = [num_<sing_name>_with_key])>
+	int <fproc_name trid>(<par_type0>);
+    <elseif (rid = [lookup_<sing_name>])>
+	<type_spec temp_type[1]> <fproc_name trid>(<par_type0>,int no) const;
+    <elseif (rid = [remove_<sing_name>])>
+	<type_spec temp_type[1]> <fproc_name trid>(<par_type0>,int no);
+    <elseif (rid = [get_<sing_name>_count])>
+        int <fproc_name trid>() const;
+    <elseif (rid = [get_<sing_name>])>
+	<sing_name>_pair <fproc_name trid>(int no);
+    <endif>
+  <endlet>
+<enddef>
+
+<def indexed_list_forwarder_imp trid fid field_dec class_id>
+      <notice_linefeeds>
+  <let  the_type be field_dec.type_specification,
+	rid be trid.identifier,
+        temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+        sing_name be [<!SING field_dec.identifier>],
+        iter_type be [<sing_name>_pair],
+        par_type0 be [<suitable_par_type temp_type[0]>],
+        par_type1 be [<suitable_par_type temp_type[1]>]>
+    <if (rid = [add_<sing_name>])>
+        void <class_id>::<fproc_name trid>(<par_type0> key,<par_type1> value) {_<fid>add_<sing_name>(key,value);}
+    <if (rid = [insert_<sing_name>])>
+        void <class_id>::<fproc_name trid>(<par_type0> key,<par_type1> value) {_<fid>insert_<sing_name>(key,value);}
+
+    <elseif (rid = [get_<sing_name>_iterator])>
+        Iter\<<iter_type> \> <class_id>::<fproc_name trid>() {return _<fid>get_<sing_name>_iterator();}
+    <elseif (rid = [remove_<sing_name>])>
+        <type_spec temp_type[1]> <class_id>::<fproc_name trid>(<par_type0> key) {return _<fid>remove_<sing_name>(key);}
+    <elseif (rid = [has_<sing_name>_member])>
+        bool <class_id>::<fproc_name trid>(<par_type0> key) {return _<fid>has_<sing_name>_member(key);}
+    <elseif (rid = [num_<sing_name>_with_key])>
+        int <class_id>::<fproc_name trid>(<par_type0> key) {return _<fid>num_<sing_name>_with_key(key); }
+    <elseif (rid = [lookup_<sing_name>])>
+        <type_spec temp_type[1]> <class_id>::<fproc_name trid>(<par_type0> key,int no) const {return _<fid>lookup_<sing_name>(key,no);}
+    <elseif (rid = [remove_<sing_name>])>
+        <type_spec temp_type[1]> <class_id>::<fproc_name trid>(<par_type0> key,int no) {return _<fid>remove_<sing_name>(key,no);}
+   <elseif (rid = [get_<sing_name>_count])>
+      int <class_id>::<fproc_name trid>() const {return _<fid>get_<sing_name>_count();}
+   <elseif (rid = [get_<sing_name>])>
+      <iter_type> <class_id>::<fproc_name trid>(int pos) const {return _<fid>get_<sing_name>(pos);}
+    <endif>
+  <endlet>
+<enddef>
+
+
+<def indexed_list_extras_imp field_dec>
+    <notice_linefeeds>
+  <let  the_type be field_dec.type_specification,
+	class_id be [<!CPZ class_dec.identifier>],
+        temp_type be the_type.type_spec.template_part.type_specifications.type_specification,
+        sing_name be [<!SING field_dec.identifier>],
+        plural_name be [<field_dec.identifier>],
+        iter_type be [<sing_name>_pair],
+        par_type0 be [<suitable_par_type temp_type[0]>],
+        par_type1 be [<suitable_par_type temp_type[1]>]>
+
+	<if (exists field_dec.virtual.text)>
+            
+             void <class_id>::add_<sing_name>(<par_type0> key,<par_type1> value)
+ 		{ suif_assert_message(false, ( "attempting to add to virtual field" ) ); }
+	     void <class_id>::insert_<sing_name>(<par_type0> key,<par_type1> value)
+                { suif_assert_message(false, ( "attempting to add to virtual field" ) ); }
+             Iter\<<class_id>::<iter_type> \> <class_id>::get_<sing_name>_iterator() const
+ 		{return get_aggregate_meta_class()->get_virtual_iterator(this,"<plural_name>");
+             <type_spec temp_type[1]> <class_id>::remove_<sing_name>(<par_type0> key)
+ 		{ suif_assert_message(false,( "attempting to remove from a virtual field" ) );
+		  return remove_<sing_name>(key);}
+             bool <class_id>::has_<sing_name>_member(<par_type0> key)
+ 		{ suif_assert_message(false,( "attempting to perform has_member on virtual field") );return false}
+             <type_spec temp_type[1]> lookup_<sing_name>(
+                         <par_type0> key) const
+ 			{ suif_assert_message(false,( "attempting to lookup in a virtual field") );
+			  return lookup_<sing_name>(key);}
+     	    int <class_id>::num_<sing_name>_with_key(<par_type0> key)
+ 		{ suif_assert_message( false,( "attempting to lookup in a virtual field") );return 0;}
+ 	    <type_spec temp_type[1]> <class_id>::lookup_<sing_name>(<par_type0> key,int no) const
+ 		{ suif_assert_message(false,( "attempting to lookup in a virtual field") );
+		  return lookup_<sing_name>(key,no);}
+ 	    <type_spec temp_type[1]> <class_id>::remove_<sing_name>(<par_type0> key,int no)
+ 		{ suif_assert_message( false,( "attempting to remove from a virtual field") );
+		  return remove_<sing_name>(key,no);}
+	    void <class_id>::remove_all_from_<sing_name>(<par_type1> value)
+		{ suif_assert_message( false, ( "attempting to remove from a virtual field") );}
+	    int <class_id>::get_<sing_name>_count() const 
+		{ suif_assert_message(false, ( "attempting to get count from a virtual field" ) );
+		  return 0;}
+	    <class_id>::<iter_type> <class_id>::get_<sing_name>(int pos) const
+		{ suif_assert_message(false, ( "attempting to get nth from a virtual field" ) );
+		  return get_<sing_name>(pos);}
+
+#       These were thought to be useful at one point. They may be thought so again
+#	    <type_spec the_type>::iterator <class_id>::get_<sing_name>_begin()
+#		{ sf_assert(false,"attempting to get native in a virtual field");}
+#	    <type_spec the_type>::iterator <class_id>::get_<sing_name>_end()
+#                { sf_assert(false,"attempting to get native in a virtual field");}
+
+	<else>
+            void <class_id>::add_<sing_name>(<par_type0> key,<par_type1> value) {</+2>
+		_<field_dec.identifier>.push_back(key,value);
+		
+		<if ([<owns_object temp_type[0]>])>
+                      if(key)key->set_parent(this);
+                <elseif (exists is_value_class[<temp_type[0].type_spec.identifier>])>
+                      _<field_dec.identifier>.back().first.set_parent(this);
+                <endif>
+
+                <if ([<owns_object temp_type[1]>])>
+                      if(value)value->set_parent(this);
+                   <elseif (exists is_value_class[<temp_type[1].type_spec.identifier>])>
+                      _<field_dec.identifier>.back().second..set_parent(this);
+		<endif>
+                <if (exists field_dec.notify.text)>
+                    value<connector temp_type[1]>notifier(true,this);
+                <endif>
+		}</-2>
+
+            void <class_id>::insert_<sing_name>(<par_type0> key,<par_type1> value) {</+2>
+                <type_spec field_dec.type_specification>::iterator iter = _<field_dec.identifier>.begin();
+                while ((iter != _<field_dec.identifier>.end()) && ((*iter).first < key))
+                    iter ++;
+                _<field_dec.identifier>.insert(iter,<type_spec field_dec.type_specification>::pair(key,value));
+
+                <if ([<owns_object temp_type[0]>])>
+                      if(key)key->set_parent(this);
+                <elseif (exists is_value_class[<temp_type[0].type_spec.identifier>])>
+                      _<field_dec.identifier>.back().first.set_parent(this);
+                <endif>
+
+                <if ([<owns_object temp_type[1]>])>
+                      if(value)value->set_parent(this);
+                   <elseif (exists is_value_class[<temp_type[1].type_spec.identifier>])>
+                      _<field_dec.identifier>.back().second..set_parent(this);
+                <endif>
+                <if (exists field_dec.notify.text)>
+                    value<connector temp_type[1]>notifier(true,this);
+                <endif>
+                }</-2>
+
+
+              Iter\<<class_id>::<iter_type> \> <class_id>::get_<sing_name>_iterator() const {</+2>
+                          static const LString field_name("_<field_dec.identifier>");
+                          FieldDescription* field = ((AggregateMetaClass *)get_meta_class())->get_field_description(field_name);
+                          return new STLIterator\<<type_spec field_dec.type_specification> \> ( (Address)&_<field_dec.identifier>,field->get_meta_class());
+                          // a very inefficient way to do this?
+                          }</-2></>
+
+
+            <type_spec temp_type[1]> <class_id>::remove_<sing_name>(<par_type0> key) {</+2>
+		<type_spec field_dec.type_specification>::iterator iter = _<field_dec.identifier>.find(key);
+		suif_assert_message(iter != _<field_dec.identifier>.end(),( "Removing up a non-existant value") );
+		<if (exists field_dec.notify.text)>
+                    (*iter).second<connector temp_type[1]>notifier(false,this);
+                <endif>
+	 	<type_spec temp_type[1]> retval = _<field_dec.identifier>.remove(iter);
+                <if ([<owns_object temp_type[1]>])>
+		    retval->set_parent(NULL);
+		<endif>
+		return retval;
+		}</-2>
+
+            bool <class_id>::has_<sing_name>_member(<par_type0> key) {</+2>
+		return _<field_dec.identifier>.is_member(key);
+		}</-2>
+
+            <type_spec temp_type[1]> <class_id>::lookup_<sing_name>(<par_type0> key) const {</+2>
+		<type_spec field_dec.type_specification>::const_iterator iter = _<field_dec.identifier>.find(key);
+		<if (exists temp_type[1].pointer_qual.text)>
+		if (iter  == _<field_dec.identifier>.end()) return 0;
+	        <else>
+		suif_assert_message( iter != _<field_dec.identifier>.end(),( "Looking up a non-existant value") );
+		<endif>
+		return (*iter).second;
+		}</-2>
+
+	    int <class_id>::num_<sing_name>_with_key(<par_type0> key) {</+2>
+		return _<field_dec.identifier>.num_with_key(key);
+		}</-2>
+
+            <type_spec temp_type[1]> <class_id>::lookup_<sing_name>(<par_type0> key,int no) const {</+2>
+                <type_spec field_dec.type_specification>::const_iterator iter = _<field_dec.identifier>.find(key,no);
+                suif_assert_message(iter != _<field_dec.identifier>.end(),( "Looking up a non-existant value") );
+                return (*iter).second;
+                }</-2>
+
+            <type_spec temp_type[1]> <class_id>::remove_<sing_name>(<par_type0> key,int no) {</+2>
+                <type_spec field_dec.type_specification>::iterator iter = _<field_dec.identifier>.find(key,no);
+                suif_assert_message(iter != _<field_dec.identifier>.end(),( "Removing up a non-existant value") );
+		<if (exists field_dec.notify.text)>
+                    (*iter).second<connector temp_type[1]>notifier(false,this);
+                <endif>
+	 	<type_spec temp_type[1]> retval = _<field_dec.identifier>.remove(iter);
+                <if ([<owns_object temp_type[1]>])>
+		    retval->set_parent(NULL);
+		<endif>
+		return retval;
+                }</-2>
+
+	    void <class_id>::remove_all_from_<sing_name>(<par_type1> value)  {</+2>
+		<type_spec the_type>::iterator iter = _<field_dec.identifier>.begin();
+		<type_spec the_type>::iterator end = _<field_dec.identifier>.end();
+		while (iter != end) {
+                    if ((*iter).second == value) {</+2>
+                        <type_spec the_type>::iterator iter1 = iter;
+                        iter ++;
+	                <if ([<owns_object temp_type[1]>])>
+			    delete
+			<endif>
+                        _<field_dec.identifier>.remove(iter1);
+                        }</-2>
+                    else {</+2>
+                        iter ++;
+			}</-2>
+                    }
+		}
+
+	   int <class_id>::get_<sing_name>_count() const { return _<field_dec.identifier>.size(); }
+	   <class_id>::<iter_type> <class_id>::get_<sing_name>(int pos) const {
+		return _<field_dec.identifier>[pos]; }
+
+
+#       These were thought to be useful at one point. They may be thought so again
+#            <type_spec the_type>::iterator <class_id>::get_<sing_name>_begin() {</+2>
+#                return _<field_dec.identifier>.begin();
+#		}</-2>
+#
+#            <type_spec the_type>::iterator <class_id>::get_<sing_name>_end() {</+2>
+#                return _<field_dec.identifier>.end();
+#                }</-2>
+
+
+	  <endif>
+    <endlet>
+<enddef>
+
+#	And the print macros
+<def indexed_list_print field_dec>
+   <notice_linefeeds>
+   <let the_type be field_dec.type_specification>
+    <let temp_type be the_type.type_spec.template_part.type_specifications.type_specification>
+     {</+2>
+     int i = 0;
+     indexed_list\<<type_spec temp_type[0]><if (exists temp_type[1])>,<type_spec temp_type[1]>\>::const_iterator iter =<>
+                   _<field_dec.identifier>.begin();
+
+     while (iter != _<field_dec.identifier>.end()) {</+2>
+        <list_print_helper field_dec.identifier temp_type[0] "(*iter).first" "._first">
+	    {</+2>
+	    <list_print_helper field_dec.identifier temp_type[1] "(*iter).second" "._second">
+	    }</-2>
+        iter ++;
+        i ++;
+        }</-2>
+     }</-2>
+    <endlet>
+   <endlet>
+<enddef>
+
+#	and the list meta builder
+
+<def pair_meta_name temp_types>
+      meta_pair
+      <foreach type in temp_types>
+        _<meta_name_inner  type>
+      <endfor>
+<enddef>
+
+<def build_pair_descriptor temp_types>
+  <let the_meta_name be [<pair_meta_name temp_types>]>
+    typedef indexed_list\<<type_spec temp_types[0]>,<type_spec temp_types[1]>>::pair <the_meta_name>_type;</>
+     <if (exists module.descriptors[<the_meta_name>])>
+        <endmac>
+        <endif>
+
+     <foreach type in temp_types>
+	<output_descriptor_if_needed type>
+     <endfor>
+
+     <set module.descriptors[<the_meta_name>] to exists>
+
+     AggregateMetaClass* <the_meta_name> = mcof->find_aggregate_meta_class("<the_meta_name>");;</>
+     if (!<the_meta_name>) {</+4></>
+           <the_meta_name> = mcof->create_aggregate_meta_class("<the_meta_name>",sizeof(<the_meta_name>_type), (void (*)(void*))<the_meta_name>_type::constructorFunction );</>
+
+     	    <the_meta_name>-> add_field_description("_first",<meta_name temp_types[0]>,OFFSETOF(<the_meta_name>_type,first));</>
+     	    <the_meta_name>-> add_field_description("_second",<meta_name temp_types[1]>,OFFSETOF(<the_meta_name>_type,second));</>
+	    }</-4></>
+  <endlet>
+<enddef>
+
+
+<def indexed_list_meta_builder the_type>
+ <let temp_types be the_type.type_spec.template_part.type_specifications.type_specification>
+
+    <foreach type in temp_types>
+      <output_descriptor_if_needed type>
+    <endfor>
+    <build_pair_descriptor temp_types>
+   STLMetaClass* <meta_name the_type> = _object_factory->get_stl_meta_class
+	 (String("LIST:<the_type.type_spec.identifier>\<") + 
+	  <pair_meta_name temp_types>->get_instance_name() + 
+	  String("\>"),
+          new STLDescriptor\<<type_spec the_type> > 
+            (<pair_meta_name temp_types>) );</>
+   
+ <endlet>
+<enddef>
+
+#	and the list add_virtual fields builder
+
+<def indexed_list_add_virtual the_class the_type_spec field_id>
+  <let ctype be the_type_spec.template_part.type_specifications.type_specification>
+    <if (exists ctype[1].pointer_qual.text)>
+      <add_virtual_fields_inner the_class ctype.type_spec[1], [<field_id>/*/second/*]>
+    <else>
+      <add_virtual_fields_inner the_class ctype.type_spec[1], [<field_id>/*/second]>
+    <endif>
+  <endlet>
+<enddef>
+
+<def indexed_list_add_virtual_fields_in_clause the_class the_type_spec field_id in_id>
+  <let ctype be the_type_spec.template_part.type_specifications.type_specification>
+    <if (exists ctype.pointer_qual.text)>
+      <add_virtual_value the_class, in_id, [<field_id>/*]>
+    <else>
+      <add_virtual_value the_class,  in_id, [<field_id>/*]>
+    <endif>
+  <endlet>
+<enddef>
+
+<def indexed_list_delete_all_entries field_dec>
+  <notice_linefeeds>
+  <let  the_type be field_dec.type_specification,
+        temp_type be the_type.type_spec.template_part.type_specifications.type_specification>
+	<if (!([<owns_object temp_type[0]>] || [<owns_object temp_type[1]>]))>
+	    <endmac>
+	<endif>
+
+	{</+4>
+
+            <type_spec the_type>::iterator iter = _<field_dec.identifier>.begin();
+            <type_spec the_type>::iterator end = _<field_dec.identifier>.end();
+            while (iter != end) {</+4>
+		<if ([<owns_object temp_type[0]>])>
+		    delete (*iter).first;
+		<endif>
+                <if ([<owns_object temp_type[1]>])>
+                    delete (*iter).second;
+                <endif>
+
+                iter ++;
+                }</-4>
+	    }</-4>
+   <endlet>
+<enddef>
+

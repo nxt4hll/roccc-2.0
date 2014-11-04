@@ -1,0 +1,284 @@
+\def\heading#1{\bigbreak
+	\noindent{\bf#1}
+	\medskip}
+
+\def\nt#1{$<$#1$>$}
+
+\def\mps{\smallskip
+		 \noindent}
+
+\def\codefont{\tt}
+\def\startline{\par\noindent}
+
+\def\hugeskip{\bigskip\bigskip\bigskip}
+
+%\def\newpage{\vfil\eject}
+\def\newpage{}
+
+{\obeylines\obeyspaces%
+\global\def\beginCode{\mps%
+\begingroup%
+\obeylines\obeyspaces%
+\let^^M=\startline%
+\codefont}
+\global\def\endCode{\endgroup\mps}}
+
+\font\LARGEbf=cmr10 scaled\magstep4
+
+\centerline{{\LARGEbf Smgn Reference Manual}}
+\hugeskip
+\noindent
+\heading{A Quick Introduction to Smgn}
+\mps
+Smgn proceeds in three stages:
+\medskip
+\halign{#\hfil&	\quad#\hfil\cr
+
+i)&	Read in a grammar\cr
+ii)& 	Use the grammar to parse some text\cr
+iii)&	Use the results of the parse to process a macro file\cr}
+
+
+\heading{Format of the grammar}
+\noindent
+The grammar consists of productions of the form
+\medskip
+\advance\hoffset by .25in
+\nt{lhs} ::= \nt{rhs} $|$ \nt{rhs} $|$ \dots
+\advance\hoffset by -.25in
+\mps
+Terminal symbols are written literally. E.g.,
+\advance\hoffset by .25in
+\smallskip
+\beginCode
+    {\tt\nt{if\_stat} ::=  if \nt{expression} then \nt{statement} $|$ 
+		                    if \nt{expression} then \nt{statement} else \nt{else\_part}}
+\endCode
+\advance\hoffset by -.25in
+\mps
+There are some special pseudo-nonterminals which may be used in a grammar
+accepted by Smgn.  
+\mps
+\nt{identifier} which matches any identifier.
+\smallskip
+\noindent
+\nt{verbatim} which matches any text up to, but not including, the 
+terminal character that must appear to the right of \nt{verbatim} in
+the grammar.  An example of the use of \nt{verbatim}:
+\medskip
+\nt{friend} ::= friend \nt{verbatim} ;
+\mps
+With this production in a grammar, it would be possible to parse text
+such as
+\beginCode
+    friend class Foo;
+\endCode
+\noindent
+and access the text {\tt "class Foo"} via {\tt friend.verbatim.text}. 
+This feature can be very useful, for example, when generating forward 
+declarations of various constructs.
+\bigskip
+\heading{The Parser}
+\noindent
+The parser is a straight-forward back-tracking parser. See the README file
+for limitations of the current parser.  When a parse is successful, a tree 
+is generated representing the text parsed.  In this tree, terminals (except 
+for \nt{identifier}) are removed. Each node on the tree contains a list of 
+names, which are the names of the non-terminals matched by the production. 
+(This means that all the non-terminals in a production must have unique names!)
+\mps
+The text matched by a production is always present as the "text" field.
+\mps
+The -p option on smgn causes this structure to be printed out. Portions of it 
+can also be printed out with the {\bf show} macro command.
+
+\heading{The Macro Processor}
+
+\noindent
+The macro processor uses the tree created by the parse to expand some text 
+provided by the user. 
+\mps
+Parameters can be substituted in the text by enclosing the name of the 
+parameter in angle brackets. For example \nt{statement.if\_stat.expression.text} 
+would substitute the text of the if expression for this angle bracketed name.
+\mps
+It is not an error to expand a field that does not exist. If you do this, 
+nothing is output; you will get a warning message.
+\mps
+There are also a number of commands available. 
+\smallskip
+\nt{{\bf file} name}
+\mps
+This command sets the name of the current output file.  
+\smallskip
+\nt{{\bf if} (expression)} \dots  \nt{{\bf endif}}
+\mps
+The text inside the if is only expanded if the expression is true. The usual 
+binary boolean operators ($<$, $<=$, $=$, $>$, $>=$, $!=$) are implemented; 
+! is unary not. There is also an {\bf exists} predicate.
+\smallskip
+\nt{{\bf if} ({\bf exists} statement.if\_stat.else\_part)}
+\mps
+This is true if there is a node in the tree for the given name. Note that there 
+need not be anything in it! If you want to make sure it is not empty, the test
+\smallskip
+\nt{if (exists statement.if\_stat.else\_part.text)}
+\mps
+will work since the text field is only created if not empty.
+\mps
+Note the use of the round brackets inside the angle brackets -- they are required.
+\mps
+There are \nt{{\bf else}} and \nt{{\bf elseif} (expression)} clauses. These have not been 
+extensively tested.
+\smallskip
+\nt{{\bf let} id {\bf be} name} \dots \nt{{\bf endlet}}
+\mps
+This defines the {\tt id} to be the same as {\tt name}. This allows short-hand 
+forms.
+\newpage
+\nt{{\bf def} macro\_name p1 p2 ...}
+\mps
+Defines a macro. The names (p1, p2 etc) are the names by which parameters will 
+be known within the macro. You can expand macros by writing
+\smallskip
+\nt{macro\_name actual1 actual2 \dots} [{\bf NB} - no commas!]
+\mps
+The text inside a macro definition is not expanded until the macro is called. 
+All macros and variables (such as those set with {\bf let}) are accessible in 
+the macro.
+\mps
+There is a special command \nt{{\bf endmac}} which will immediately terminate 
+expansion of a macro when encountered. You can put this in an {\bf if} to 
+only terminate the macro if the condition is true.
+\smallskip
+\nt{{\bf foreach} id {\bf in} name} \dots \nt{{\bf endfor}}
+\mps
+Allows iteration through a list. Smgn handles list productions specially. 
+If you have a production of the form
+\smallskip
+\nt{lhs} ::= \nt{element} $|$ \nt{element} \nt{lhs}
+\mps
+{\bf NB} -- currently it must have exactly this form.
+\mps
+Then instead of a tree of elements you get a flattened list. This list can be 
+iterated across with {\bf foreach}.  The syntax would be:
+\smallskip
+\nt{{\bf foreach} element {\bf in} lhs}
+\mps
+Note that this points at the \nt{element} node. You must write 
+\nt{element.element} to actually get the fields of the element.
+\mps
+You can "look through" iterators. For example, I could write:
+\smallskip
+\nt{{\bf foreach} type\_dec {\bf in} lhs.element.type\_declarations.type\_dec}
+\mps
+And this would give me a list of type decs in elements. Any element that did 
+not contain a type\_dec would be ignored.
+\mps
+There is also a "such that" clause which can be used to further select items.
+\smallskip
+\nt{{\bf foreach} type\_dec {\bf in}  lhs.element.type\_declarations.type\_dec {\bf such that} (type\_dec.text {\bf $=$} "int")}
+\mps
+Which allows further selection of items.
+\medskip
+\nt{{\bf eval} ({\tt statement})}
+Evaluates {\tt statement}.
+\medskip
+\nt{{\bf pos} item}
+???
+\medskip
+\nt{{\bf echo} text}
+\mps
+Used for debugging. The text is printed to stdout. Note that the text is 
+expanded with the macro processor before output.
+\smallskip
+\nt{{\bf show} name}
+\mps
+Show the tree anchored at a name. This is useful inside macros when you 
+want to see exactly what has been passed.
+\smallskip
+\nt{{\bf set} name {\bf to} text}
+\mps
+This command allows you to put new nodes into the tree. name can be a multiple 
+level names (separated by dots). text is expanded before entry into the tree, 
+so you always get a string; you cannot copy subtrees this way (needs a setq).
+This command can be used to build tables because there is a second form of 
+specifying a name. You can give part of a name in square parentheses.
+\smallskip
+statement.if\_stat[else\_part]
+\mps
+This happens to be exactly equivalent to statement.if\_stat.else\_part. The 
+difference is that the text in the square brackets is macro expanded before 
+name lookup is done. This allows you to build tables.
+\mps
+\newpage
+\noindent
+For example, suppose we have a list of declarations and you want to find 
+duplicates. You could write:
+\smallskip
+\beginCode
+    \nt{foreach id in declarations}
+        \nt{if (exists declarations[<id.declaration.identifier>])}
+            \nt{echo \nt{id.declaration.identifier} already exists}
+        \nt{endif}
+        \nt{set declarations[\nt{id.declaration.identifier}] to 
+            \nt{declarations[\nt{id.declaration.type.identifier}}}]
+    \nt{endfor}
+\endCode
+\mps
+Note that the result of the macro expansion need not be a name. Any text string 
+can and will be entered into the tree.
+\mps
+\nt{$/$}
+\mps
+This outputs a newline in the output. Because of the intermixing of commands 
+and text, real newlines are not output. You have to use this command to get 
+one.
+\smallskip
+\nt{/=n}
+
+\nt{/+n}
+
+\nt{/-n}
+\mps
+These commands change the indentation of lines. Leading spaces are always 
+skipped. You must use these commands to control indentation of output text. 
+You must issue this command before the new line is requested for the 
+following line to be indented by the new amount. This could be considered a 
+bug.
+\smallskip
+\#
+\mps
+Not really a command. Any line starting with this is a comment line. If you 
+need a line of output to start with a \# (to output \#include, for example) 
+escape the \# with a $\backslash$.
+	
+\heading{Formatting Commands}
+\medskip
+\nt{{\bf !CAPS} {\tt name}}
+\mps
+This command causes {\tt name} to be printed in all uppercase.
+\smallskip
+\nt{{\bf !LOWS} {\tt name}}
+\mps
+This command causes {\tt name} to be printed in all lowercase.
+\smallskip
+\nt{{\bf !CPZ} {\tt name}}
+\mps
+This command will turn a {\bf word\_like\_this} into a {\bf WordLikeThis}.
+\smallskip
+\nt{{\bf !SING} {\tt name}}
+\mps
+Turns plurals into plural.
+\smallskip
+\nt{{\bf !UNL} {\tt name}}
+\mps
+Turns text to lowercase and puts an underline between capitals and their
+preceding character.
+\smallskip
+\nt{{\bf !LLC} {\tt name}}
+\mps
+Turns the leading character of {\tt name} into the lower-case equivalent.
+\mps
+
+\bye

@@ -1,0 +1,730 @@
+#
+#
+#		This file contains the standard definitions used by all NCI
+#		components. In addition, it reads options files with further
+#		options. 
+#
+#		It also contains standard rules
+#
+#		This file should be included by all make files as follows:
+#
+#		define overridable default values for variables
+#		include $(NCIHOME)/Makefile.std
+#		define non overridable values
+#
+#		options files are included as follows. These need not exist
+#
+#		Makefile.options.$(COMPILER_NAME)
+#
+#			options that are compiler dependent. See the header
+#			on a compiler options file for details.
+#
+#		Makefile.options.$(ARCH)
+#
+#			options that are architecture dependent. Normally
+#			not present.
+#
+#		Makefile.options.$(HOSTNAME)
+#
+#			options that are dependent upon a particular host. 
+#			Normally not present
+#
+#		Makefile.options.$(LOGNAME)
+#
+#			options for a particular user. This is a convenient 
+#			place to put in temporary overrides of definitions for
+#			your own purposes, even if you are sharing a source
+#			tower. Normally not present.
+#
+#		Note:	In large builds, to avoid reading these files many times,
+#			 the variable OPTIONS_ALREADY_READ is defined. 
+#
+#		Systematic overrides
+#
+#			The following variables should be overridden in 
+#			your environment if you dislike the defaults
+#
+#			variable	default		meaning
+#			========        =======		=======
+#			NCIHOME		$(HOME)/nci	root of NCI source tower
+#			MAKE		gmake		make to use
+#			LOCAL_BASE	$(NCIHOME)	directory under which
+#							bin lib solib will be
+#							created.
+#			NCI_DEST			target directory for
+#							 install
+#			NCI_DEST_INC	$(NCI_DEST)/include
+#							target directory for
+#							  install_inc
+#			NCI_DEST_BIN	$(NCI_DEST)/bin	target directory for
+#							  install_bin
+#			NCI_DEST_LIB	$(NCI_DEST)/lib	target directory for
+#							  install_lib
+
+
+# some default values that can be changed in the custom include files
+
+SHARED_LIB_FLAGS =	-shared
+DYNAMIC_LINKING_LIBRARY = -ldl
+
+# When compiling into a local space modify the LOCAL_BASE
+# in your Makefile
+ifeq (,$(LOCAL_BASE))
+#LOCAL_BASE = $(NCIHOME)
+LOCAL_BASE = $(ROCCC_HOME)
+endif
+
+SUIFDIR = $(NCIHOME)/suif/suif2b/basesuif
+SHAREDBINDIR = $(ROCCC_HOME)/bin
+SHAREDLIBDIR = $(ROCCC_HOME)/solib
+SHAREDINCDIR = $(ROCCC_HOME)/include
+
+SMGNDIR = $(NCIHOME)/suif/suif2b/tools/smgn
+BASETYPEDIR = $(NCIHOME)/suif/suif2b/common
+LIBDIR = $(LOCAL_BASE)/solib
+BINDIR = $(LOCAL_BASE)/bin
+#OBJDIR = $(LOCAL_BASE)/obj
+OBJDIR = $(NCIHOME)/obj
+INCDIR = $(LOCAL_BASE)/include
+#TEX = tex
+#LATEX = latex
+#DVIPS = dvips
+#LATEX2HTML = latex2html
+
+#ifeq (,$(GC_DIRS_SET))
+#GC_DIRS_SET=1
+#GC_INCLDIRS=-I/usr/local/ultra/include/gc
+#GC_LIBDIRS=-L/usr/local/ultra/lib
+#endif
+
+#ifeq (,$(TCL_SET))
+#TCL_INCLDIRS = -I/usr/local/ultra/include -I/usr/openwin/include
+#TCL_LIBDIRS = -L/usr/openwin/lib -L/usr/X11/lib -L/usr/X11R6/lib
+#endif
+
+# ifneq (,$(NCI_DEST))
+#   ifeq (,$(NCI_DEST_INC))
+#     NCI_DEST_INC = $(NCI_DEST)/include
+#   endif
+# endif
+
+# ifneq (,$(NCI_DEST))
+#   ifeq (,$(NCI_DEST_BIN))
+#     NCI_DEST_BIN = $(NCI_DEST)/bin
+#   endif
+# endif
+
+# ifneq (,$(NCI_DEST))
+#   ifeq (,$(NCI_DEST_LIB))
+#     NCI_DEST_LIB = $(NCI_DEST)/solib
+#   endif
+# endif
+
+#       If there is a list of headers, develop COPIED_HEADERS , a list of these
+#       headers in their copied location
+
+COPIED_HEADERS =
+ifneq (,$(HEADERS))
+COPIED_HEADERS= $(foreach h,$(HEADERS),$(INCDIR)/$(TARGET_LIB)/$(h))
+endif
+
+#	And make sure they can be recopied
+
+$(INCDIR)/$(TARGET_LIB)/%.h: $(INCDIR)/$(TARGET_LIB) %.h
+	cp $*.h $(INCDIR)/$(TARGET_LIB)/$*.h
+
+$(INCDIR)/$(TARGET_LIB)/%.cc: $(INCDIR)/$(TARGET_LIB) %.cc
+	cp $*.cc $(INCDIR)/$(TARGET_LIB)/$*.cc
+
+$(INCDIR)/$(TARGET_LIB)/%.cpp: $(INCDIR)/$(TARGET_LIB) %.cpp
+	cp $*.cpp $(INCDIR)/$(TARGET_LIB)/$*.cpp
+
+
+#
+#		STATIC_LIBEXT and DYNAMIC_LIBEXT are the extensions
+#		used on libraries. .a and .so on Unix. .lib and .dll on Windows
+#		(so windows must override in the ARCH file)
+STATIC_LIBEXT = a
+DYNAMIC_LIBEXT  = so
+
+#
+#		Here we set up some default defines for compilers etc
+#
+
+TOUCH = touch
+CP = cp
+MKDIR = mkdir
+
+CCFLAGS = -g
+#SYSINCLDIRS = -I$(SUIFDIR) -I. -I$(BASETYPEDIR)
+SYSINCLDIRS = -I. -I$(INCDIR) -I$(SHAREDINCDIR)
+
+#
+#	Define SUIF_INTERNAL to avoid getting the basesuif
+#	subdirectories added automatically to the include file list
+#
+#ifeq (,$(SUIF_INTERNAL))
+#SYSINCLDIRS+= -I$(SUIFDIR) -I$(SUIFDIR)/iokernel -I$(SUIFDIR)/suifkernel \
+#		-I$(SUIFDIR)/suifpasses -I$(SUIFDIR)/basicnodes \
+#		-I$(SUIFDIR)/suifnodes
+#endif
+
+DEPSFLAG = -M
+MAKEDEPEND = $(CC)
+MAKE_MAKEFILE_DEPS = $(AWK) -f $(NCIHOME)/dep2make.awk
+
+#	Make absolutely sure this will be first rule in makefile
+
+.PHONY: dummy all clean 
+
+ifneq (,$(SRCS))
+dummy:
+	@$(MAKE) INCLUDE_DEPS=1 all
+endif
+
+ifeq (,$(ALL_RULE))
+ALL_RULE = defined
+all: build_tools buildpackage
+endif
+
+build_tools:
+ifneq ($(NCIHOME),$(LOCAL_BASE))
+	cd $(NCIHOME)/suif/suif2b/common;$(MAKE) INCLUDE_DEPS=1 buildpackage
+	cd $(NCIHOME)/suif/suif2b/tools;$(MAKE) INCLUDE_DEPS=1 buildpackage
+endif
+
+
+ifeq (,$(OPTIONS_ALREADY_READ))
+OPTIONS_ALREADY_READ = true
+-include $(NCIHOME)/Makefile.options.$(COMPILER_NAME)
+-include $(NCIHOME)/Makefile.options.$(ARCH)
+-include $(NCIHOME)/Makefile.options.$(HOSTNAME)
+-include $(NCIHOME)/Makefile.options.$(LOGNAME)
+endif
+
+ifneq (,$(INCLUDE_DEPS))
+ifneq (,$(SRCS))
+-include Makefile.deps
+endif
+endif
+
+#	Definitions of standard rules
+#
+#	Each rule may be overridden by defining the variable that guards it
+#
+#	Caution - if you override any rule, you must override all first if
+#	you want that tio remain as the default rule
+
+
+ifeq (,$(SML_RULE))
+SML_RULE=defined
+ifneq (,$(SML_PROGRAM))
+SML_PROGRAM_FILE = $(BINDIR)/$(SML_PROGRAM)
+$(SML_PROGRAM_FILE) : $(SML_SRC)
+	$(SML_CM) < $(SML_BUILD)
+	mv $(SML_PROGRAM) $(BINDIR)
+endif
+endif
+
+ifeq (,$(ASDL_GEN_RULE))
+ASDL_GEN_RULE=defined
+ifneq (,$(ASDL_GENERATED_FILES))
+ifeq (,$(ASDLGEN))
+ASDLGEN = $(SML) @SMLload=$(BINDIR)/asdlGen.$(SML_HEAP_SUFFIX)
+endif
+
+$(ASDL_GENERATED_FILES) : $(ASDLSRCS)
+	$(ASDLGEN)  $(ASDL_FLAGS) $(ASDLSRCS)
+endif
+endif
+
+
+ifeq (,$(rt_TO_h_RULE))
+rt_TO_h_RULE = defined
+ifneq (,$(REGTOOL_GENERATED_FILES))
+%.h : %.rt
+	$(BINDIR)/regtool $(REGTOOLFLAGS) $< $@
+endif
+endif
+
+ifeq (,$(rtl_TO_c_RULE))
+rtl_TO_c_RULE = defined
+ifneq (,$(RTL_GENERATED_FILES))
+%.c : %.art
+	$(BINDIR)/rtlprep $< $@
+endif
+endif
+
+ifneq (,$(HOOF_GEN))
+ifeq (,$(HOOF_RULE))
+HOOF_RULE = defined
+$(HOOF_GEN): $(HOOF).hoof $(HOOF_DEP) $(HOOF_MAC) $(SMGN_INCLUDES)
+	LD_LIBRARY_PATH=$(LIBDIR):$(SHAREDLIBDIR):$(LD_LIBRARY_PATH); export LD_LIBRARY_PATH; \
+	$(SHAREDBINDIR)/smgn $(HOOF_INCL) $(DEBUGSMGN) -I$(SMGNDIR) -Dgenerating=$(HOOF) $(SMGNDIR)/suif.grm $(HOOF).hoof $(HOOF_MAC)
+endif
+endif
+
+#	If this is a library, define SUIF_MODULE to be the name of the library
+
+ifneq (,$(TARGET_LIB))
+SUIF_MODULE = "-DSUIF_MODULE=\"$(TARGET_LIB)\""
+endif 
+
+ifeq (,$(CC_TO_O_RULE))
+CC_TO_O_RULE = defined
+%.o: %.cc
+	$(CXX) -c -o $*.o $(EXTRA_CXXFLAGS) $(COMPILER_SPECIFIC_CXXFLAGS) \
+	$(CCFLAGS) $(INCLDIRS) $(SYSINCLDIRS) $(PREPROCESSORFLAGS) \
+	$(SUIF_MODULE) $<
+endif
+
+ifeq (,$(CPP_TO_O_RULE))
+CPP_TO_O_RULE = defined
+%.o: %.cpp %.cxx
+	$(CXX) -c -o $*.o $(EXTRA_CXXFLAGS) $(COMPILER_SPECIFIC_CXXFLAGS) \
+	$(CCFLAGS) $(INCLDIRS) $(SYSINCLDIRS) $(PREPROCESSORFLAGS) \
+	$(SUIF_MODULE) $<
+endif
+
+ifeq (,$(C_TO_O_RULE))
+C_TO_O_RULE = defined
+%.o: %.c
+	$(CC) -c -o $*.o  $(EXTRA_CFLAGS) \
+	$(COMPILER_SPECIFIC_CXXFLAGS) \
+	$(CCFLAGS) $(INCLDIRS) $(SYSINCLDIRS) $(PREPROCESSORFLAGS) \
+	$(SUIF_MODULE) $<
+endif
+
+#       gcc will invoke the preprocessor on (generate dependency information for)
+#       assembly language files only if they have a ".S" suffix.
+#
+#       Build a list of assembly language files with the ".S" suffix
+
+ifeq (,$(s_TO_S_RULE))
+s_TO_S_RULE = defined
+%.S: %.s
+	$(CP) $*.s  $*.S
+endif
+
+ifeq (,$(S_TO_o_RULE))
+S_TO_o_RULE = defined
+ifneq (,$(ASM_SRCS))
+s_ASM_FILES = $(filter %.s,$(ASM_SRCS))
+endif
+%.o: %.S
+	$(CC) -c -o $*.o $(EXTRA_ASMFLAGS) $(PROFILE_COMPILE) \
+	(ASMFLAG) $(INCLDIRS) $(SYSINCLDIRS) $(PREPROCESSORFLAGS) $<
+endif
+
+
+#
+# BISON
+#
+
+ifeq (,$(y_TO_c_RULE))
+y_TO_c_RULE = defined
+ifneq (,$(YACC_GENERATED_FILES))
+%.tab.cc: %.y
+	$(BISON) -d -o $*.tab.cc $<
+endif
+endif
+
+#ifeq (,$(y_TO_c_RULE))
+#y_TO_c_RULE = defined
+#ifneq (,$(YACC_GENERATED_FILES))
+#%.tab.c: %.y
+#	$(YACC) -b $* $(YACCFLAGS) $<
+#endif
+#endif
+
+
+#
+# FLEX
+#
+
+ifeq (,$(l_TO_c_RULE))
+l_TO_c_RULE = defined
+ifneq (,$(LEX_GENERATED_FILES))
+%.cc: %.fl
+	$(LEX) -o$@ $<
+endif
+endif
+
+#ifeq (,$(l_TO_c_RULE))
+#l_TO_c_RULE = defined
+#ifneq (,$(LEX_GENERATED_FILES))
+#%.c: %.l
+#	$(LEX) $(LEXFLAGS) $< > $@
+#endif
+#endif
+
+
+
+#	CAUTION - SLIB and or DLIB are used later. If libraries are to be
+#	built and you override this file, make sure the required SLIB and
+#	DLIB are defined. Each of these is define only if the corresponding
+#	library kind (static or dynamic) is to be built
+
+ifneq (,$(TARGET_LIB))
+ifeq (,$(TARGET_LIB_RULE))
+TARGET_LIB_RULE = defined
+
+ifneq (,$(STATIC_LIBS))
+ifneq (,$(OBJ_FILES))
+SLIB = $(LIBDIR)/lib$(TARGET_LIB).$(STATIC_LIBEXT)
+ifeq (,$(LIB_OBJ))
+LIB_OBJ = $(OBJ_FILES)
+endif
+$(SLIB): $(LIB_OBJ)
+	@rm -f $(SLIB)
+	ar cr $(SLIB) $(LIB_OBJ)
+endif
+endif
+
+# link with the C++ compile to import C++ libraries
+# do not include the STATIC libraries (like gc) here.
+ifeq (,$(NO_DYNAMIC_LIBS))
+ifneq (,$(OBJ_FILES))
+DLIB = $(LIBDIR)/lib$(TARGET_LIB).$(DYNAMIC_LIBEXT)
+$(DLIB): $(OBJ_FILES)
+	$(CXXLINK) $(SHARED_LIB_FLAGS) $(PROFILE_DYNAMIC_LIBRARY) -o $(DLIB) \
+	    $(OBJ_FILES) $(SYS_LIBS) $(LIBDIRFLAG) -L$(LIBDIR) \
+	    -L$(SHAREDLIBDIR) $(LIBS)
+endif
+endif
+
+endif
+endif
+
+
+#	CAUTION - PROGRAM_FILE is used later.
+#	If you override this rule, make sure PROGRAM_FILE is also
+#	defined
+ifneq (,$(PROGRAM))
+ifeq (,$(PROGRAM_RULE))
+PROGRAM_RULE = defined
+PROGRAM_FILE = $(BINDIR)/$(PROGRAM)$(PURIFY_SUFFIX)
+PROGRAM0_FILE = $(BINDIR)/$(PROGRAM)$(PURIFY_SUFFIX)
+$(PROGRAM_FILE): $(OBJ_FILES) $(MAIN_OBJ)
+	@rm -f $(PROGRAM0_FILE)
+	$(PURIFY) $(CXXLINK) -o $(PROGRAM0_FILE) $(PROFILE_PROGRAM) $(CXXFLAGS) $(CXXLINKFLAGS) $(MAIN_OBJ) $(OBJ_FILES) $(SYS_LIBS) $(LIBDIRFLAG) -L$(LIBDIR) -L$(SHAREDLIBDIR) $(LIBS) $(SLIBS)
+#	
+#		Support several other programs in one directory
+#
+ifneq (,$(PROGRAM2))
+
+PROGRAM2_FILE = $(BINDIR)/$(PROGRAM2)$(PURIFY_SUFFIX)
+$(PROGRAM2_FILE): $(OBJ_FILES) $(MAIN2_OBJ)
+	@rm -f $(PROGRAM2_FILE)
+	$(PURIFY) $(CXXLINK) -o $(PROGRAM2_FILE) $(PROFILE_PROGRAM) $(CXXFLAGS) $(CXXLINKFLAGS) $(MAIN2_OBJ) $(OBJ_FILES) $(SYS_LIBS) $(LIBDIRFLAG) -L$(LIBDIR) -L$(SHAREDLIBDIR) $(LIBS) $(SLIBS)
+PROGRAM_FILE += $(PROGRAM2_FILE)
+endif
+
+ifneq (,$(PROGRAM3))
+
+PROGRAM3_FILE = $(BINDIR)/$(PROGRAM3)$(PURIFY_SUFFIX)
+$(PROGRAM3_FILE): $(OBJ_FILES) $(MAIN3_OBJ)
+	@rm -f $(PROGRAM3_FILE)
+	$(PURIFY) $(CXXLINK) -o $(PROGRAM3_FILE) $(PROFILE_PROGRAM) $(CXXFLAGS) $(CXXLINKFLAGS) $(MAIN3_OBJ) $(OBJ_FILES) $(SYS_LIBS) $(LIBDIRFLAG) -L$(LIBDIR) -L$(SHAREDLIBDIR) $(LIBS) $(SLIBS)
+PROGRAM_FILE += $(PROGRAM3_FILE)
+endif
+
+endif
+endif
+
+#	PASS_DRIVER
+#       DLIB MUST be defined to use this
+#	If you override this rule, make sure PROGRAM_FILE is also
+#	defined
+ifneq (,$(PASS_DRIVER))
+ifeq (,$(PASS_DRIVER_RULE))
+PASS_DRIVER_RULE = defined
+PASS_DRIVER0_FILE = $(PASS_DRIVER)
+PASS_DRIVER0_STAMP = $(PASS_DRIVER)-stamp
+PROGRAM_FILE += $(PASS_DRIVER0_STAMP)
+$(PASS_DRIVER0_STAMP): $(DLIB) $(MAIN_OBJ)
+	@rm -f $(PASS_DRIVER0_FILE)
+	$(PURIFY) $(CXXLINK) -o $(PASS_DRIVER0_FILE) $(PROFILE_PROGRAM) $(CXXFLAGS) $(CXXLINKFLAGS) $(MAIN_OBJ) $(DLIB) $(SYS_LIBS) $(LIBDIRFLAG) -L$(LIBDIR) -L$(SHAREDLIBDIR) $(LIBS) $(SLIBS)
+	@rm -f $(PASS_DRIVER0_FILE)
+	touch $(PASS_DRIVER0_STAMP)
+
+pass_driver: $(PASS_DRIVER0_FILE)
+	echo $(PASS_DRIVER0_FILE)
+endif
+endif
+
+
+
+ifeq (,$(BUILDPACKAGE_RULE))
+BUILDPACKAGE_RULE = define
+buildpackage: $(HOOF_GEN) $(OBJ_FILES) $(SLIB) $(DLIB) $(PROGRAM_FILE) \
+	      $(DOCS) $(COPIED_HEADERS) $(LOCAL_HEADERS) $(SML_PROGRAM_FILE)
+ifneq (,$(PACKAGES))
+	for dir in $(PACKAGES); do	\
+	    ( if test -d $$dir ; then \
+		cd  $$dir; \
+		$(MAKE) INCLUDE_DEPS=1 buildpackage; \
+	      else echo "Directory $$dir not found"; \
+		test -d $$dir ; \
+		fi ) ; \
+	done;
+endif
+endif
+
+ifeq (,$(BUILD_HEADERS_RULE))
+BUILD_HEADERS_RULE = defined
+$(INCDIR)/$(TARGET_LIB) : $(HEADERS)
+  ifneq (,$(HEADERS))
+    ifneq (,$(TARGET_LIB))
+	@echo "Installing $? of [$(TARGET_LIB)]."
+	$(MKDIR) -p $(INCDIR)/$(TARGET_LIB)
+	$(CP) $? $(INCDIR)/$(TARGET_LIB)
+	$(TOUCH) $(INCDIR)/$(TARGET_LIB)
+    endif
+  endif
+endif
+
+ifeq (,$(INSTALL_RULE))
+INSTALL_RULE = defined
+install:	all install_inc install_bin install_lib
+endif
+
+ifeq (,$(INSTALL_INC_RULE))
+INSTALL_INC_RULE = defined
+install_inc:
+  ifneq (,$(NCI_DEST_INC))
+	$(MKDIR) -p $(NCI_DEST_INC)
+	$(CP) -r -p -f $(INCDIR)/* $(NCI_DEST_INC)
+  endif
+endif
+
+ifeq (,$(INSTALL_BIN_RULE))
+INSTALL_BIN_RULE = defined
+install_bin:
+  ifneq (,$(NCI_DEST_BIN))
+	$(MKDIR) -p $(NCI_DEST_BIN)
+	$(CP) -r -p -f $(BINDIR)/* $(NCI_DEST_BIN)
+  endif
+endif
+
+ifeq (,$(INSTALL_LIB_RULE))
+INSTALL_LIB_RULE = defined
+install_lib:
+  ifneq (,$(NCI_DEST_LIB))
+	$(MKDIR) -p $(NCI_DEST_LIB)
+	$(CP) -r -p -f $(LIBDIR)/* $(NCI_DEST_LIB)
+  endif
+endif
+
+
+ifeq (,$(CLEAN_RULE))
+CLEAN_RULE = defined
+clean: clean_doxygen
+	-rm -f *.o *.a *.so core Makefile.deps dependencies $(s_ASM_FILES:.s=.S) \
+		$(ASDL_GENERATED_FILES)  $(RTLSRCS:.art=.c) $(YACC_GENERATED_FILES) \
+		$(LEX_GENERATED_FILES) $(REGTOOL_GENERATED_FILES) $(RTL_GENERATED_FILES) \
+	$(HOOF_GEN)
+ifneq (,$(TARGET_LIB))
+	-rm -f -r $(INCDIR)/$(TARGET_LIB)
+ifeq (,$(NO_DYNAMIC_LIBS))
+	-rm -f $(DLIB)
+endif
+ifneq (,$(STATIC_LIBS))
+	-rm -f $(SLIB)
+endif
+endif
+ifneq (,$(BINSCRIPTS))
+	# ADDED : remove the pyc files (generated from BINSCRIPTS
+	for name in $(BINSCRIPTS); do	\
+	    rm -f $(BINDIR)/$$name ; \
+		pycfile=$$(basename $$name .py).pyc; \
+		if [ -f $(BINDIR)/$$pycfile ]; then \
+			echo "rm -f $(BINDIR)/$$pycfile" ;   \
+			rm -f $(BINDIR)/$$pycfile ; \
+		fi; \
+	done;
+endif
+ifneq (,$(PACKAGES))
+	for dir in $(PACKAGES); do        \
+	    ( if test -d $$dir ; then \
+		cd $$dir ; \
+		$(MAKE) clean; \
+	      else echo "Directory $$dir not found"; \
+		test -d $$dir ; \
+		fi ) ; \
+        done;
+endif
+endif
+
+ifeq (,$(DRY_CLEAN_RULE))
+DRY_CLEAN_RULE = defined
+dry_clean: clean clean_hoof
+
+clean_hoof:
+ifneq (,$(PACKAGES))
+	for dir in $(PACKAGES); do      \
+	    ( if test -d $$dir ; then \
+		cd $$dir ; \
+		$(MAKE) clean_hoof; \
+	      else echo "Directory $$dir not found"; \
+		test -d $$dir ; \
+		fi ) ; \
+	done;
+endif
+ifneq (,$(HOOF_GEN))
+	rm -f $(HOOF_GEN)
+endif
+ifneq (,$(PROGRAM))
+	rm -f $(BINDIR)/$(PROGRAM)
+endif
+ifneq (,$(PROGRAM2))
+	rm -f $(BINDIR)/$(PROGRAM2)
+endif
+endif
+
+
+ifeq (,$(REINSTALL_RULE))
+REINSTALL_RULE = defined
+reinstall: clean install
+endif
+
+ifeq (,$(MAKEFILE_DEPS_RULE))
+MAKEFILE_DEPS_RULE = defined
+Makefile.deps:  $(SRCS) $(HEADERS) Makefile $(INCDIR)/$(TARGET_LIB) \
+		$(COPIED_HEADERS)  $(LOCAL_HEADERS)
+ifneq (,$(SRCS))
+	@rm -f dependencies
+	$(MAKEDEPEND) $(DEPSFLAG) $(EXTRA_CFLAGS) \
+	$(COMPILER_SPECIFIC_CXXFLAGS) $(CCFLAGS) \
+	$(INCLDIRS) $(SYSINCLDIRS) $(PREPROCESSORFLAGS) $(SRCS) >> dependencies
+	@echo '# Dependencies for C files' > Makefile.deps
+	@echo >> Makefile.deps
+	$(MAKE_MAKEFILE_DEPS) < dependencies >> Makefile.deps
+endif
+endif
+
+###########
+# Commented out because causes too many SVN conflict errors when doing svn update on codes
+###########
+#ifeq (,$(STANDARD_MAIN_RULE))
+#standard_main.cpp : Makefile $(NCIHOME)/build_main.pl
+#	$(PERL) $(NCIHOME)/build_main.pl '$(LIBS)' > __junk.cpp
+#	mv __junk.cpp standard_main.cpp
+#endif
+
+# ifeq (,$(TEX_RULE))
+# TEX_RULE = defined
+# %.ps: %.tex
+# 	$(TEX) $<
+# 	$(DVIPS) -f < $*.dvi > $*.ps
+# 	rm -f $*.dvi
+# endif
+
+ifeq (,$(LATEX_RULE))
+LATEX_RULE = defined
+%.ps:	%.dvi
+	$(DVIPS) -f < $*.dvi > $*.ps
+
+%.dvi:	%.tex
+	rm -f $*.aux $*.toc $*.log
+	$(LATEX) $< < /dev/null
+	while grep -s 'Rerun to get cross' $*.log ; \
+	  do $(LATEX) $< < /dev/null ; done
+endif
+
+ifeq (,$(LATEX2HTML_RULE))
+LATEX2HTML_RULE = defined
+%.htmldir: %.dvi %.tex
+	rm -rf $*
+	$(LATEX2HTML) -dir $* $*.tex
+	touch $*.htmldir
+endif
+
+ifeq (,$(SETUP_RULE))
+SETUP_RULE = defined
+setup:
+	@mkdir -p $(BINDIR)
+	@mkdir -p $(LIBDIR)
+	@mkdir -p $(OBJDIR)
+	@mkdir -p $(INCDIR)
+endif
+
+ifeq (,$(NOWEB_HEADERS_RULE))
+NOWEB_HEADERS_RULE = defined
+# Pattern rule for deriving a header file from its noweb source file.
+# Leave the derived .h file write-protected as a reminder not to edit it
+# directly.  Quote underscores in a notangle root to match the
+# corresponding noweb chunk name.
+
+%.h: %.h.nw doc-end.nw
+	@echo Creating $@ from $< ; \
+	rm -f $@ ; \
+	notangle -R$(subst _,\\_,$@) $^ > $@ ; \
+	chmod 444 $@
+endif
+
+ifeq (,$(HTML_NOWEB_RULE))
+HTML_NOWEB_RULE = defined
+$(TARGET).html: $(NWSRCS)
+	noweave -filter l2h -x -html $(NWSRCS) | htmltoc > $(TARGET).html~~
+	title=`sed -ne 's/^\\\\title{\([^}]*\)}.*/\1/p' < doc-intro.nw` ; \
+	sed -e "s:<title>.*</title>:<title>$$title</title>:" \
+	  < $(TARGET).html~~ > $(TARGET).html
+	rm -f $(TARGET).html~~
+endif
+
+install_scripts: $(BINSCRIPTS)
+ifneq (,$(BINSCRIPTS))
+# process the scripts before installation to convert the @NCIHOME@ to
+# the NCIHOME path
+	for name in $(BINSCRIPTS); do	\
+	  ( if test -f $$name; then \
+	    rm -f $(BINDIR)/$$name ; \
+	    cat $$name | \
+		sed -e 's#@NCIHOME@#$(NCIHOME)#g' -e 's#@ROCCC_HOME@#$(ROCCC_HOME)#g' -e 's#@CXXPARSER@#$(CXXPARSER)#g' > $(BINDIR)/$$name ; \
+	    chmod +x $(BINDIR)/$$name; \
+	    fi ) ; \
+	done;
+endif
+
+
+#######################
+### DOCUMENTATION done through doxygen ###
+#######################
+doxygen: $(DOXYGENSCRIPTS)
+ifneq (,$(DOXYGENSCRIPTS))
+	for name in $(DOXYGENSCRIPTS); do	\
+	  ( if test -f $$name; then \
+		doxygen $$name; \
+	    fi ) ; \
+	done;
+endif
+
+clean_doxygen: $(DOXYGENSCRIPTS)
+ifneq (,$(DOXYGENSCRIPTS))
+	if test -d html; then \
+		rm -rf ./html; \
+	fi ; 
+endif
+#######################
+
+# ============================================================================================
+#  Some rules are useful but not part of the standard make system. These should be placed here.
+#  These will only be called if called explicitly
+# =============================================================================================
+
+#	Run an arbitrary .mac file through smgn. The mac file is assumed to reside in smgn
+#	assumes output is to stdout and a .smg file is wanted
+
+%.smg:	$(SMGNDIR)/%.mac
+	cat $(HOOF_DEP) $(HOOF).hoof> tmp.hoof
+	LD_LIBRARY_PATH=$(LIBDIR):$(SHAREDLIBDIR):$(LD_LIBRARY_PATH); export LD_LIBRARY_PATH; \
+	$(SHAREDBINDIR)/smgn $(DEBUGSMGN) -I$(SMGNDIR) $(SMGNDIR)/suif.grm tmp.hoof $(SMGNDIR)/$*.mac >& $*.smg
+	rm tmp.hoof
+
+test: 
+	$(NCIHOME)/bin/create_suif_hello_world
+	$(NCIHOME)/bin/suifdriver -f $(NCIHOME)/suif/suif2b/basesuif/test2.suif2
+
+
+

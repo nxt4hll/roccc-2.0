@@ -1,0 +1,124 @@
+diff -ru suifhome.orig/src/basesuif/scc/commands.def suifhome/src/basesuif/scc/commands.def
+--- suifhome.orig/src/basesuif/scc/commands.def	Thu Oct 28 23:15:37 1999
++++ suifhome/src/basesuif/scc/commands.def	Mon Jul 15 16:12:04 2002
+@@ -134,7 +134,9 @@
+ 	    (strcmp(target_machine, "alpha-dec-osf") == 0) ||
+ 	    (strcmp(target_machine, "alpha-dec-osf3.2") == 0) ||
+  	    (strcmp(target_machine, "mips-dec-ultrix") == 0) ||
+-	    (strcmp(target_machine, "i386-unknown-bsdos") == 0)) {
++	    (strcmp(target_machine, "i386-unknown-bsdos") == 0) ||
++	    (strcmp(target_machine, "i386-redhat-linux") == 0) ||
++	    (strcmp(target_machine, "ia64-redhat-linux") == 0)) {
+ 	    *p->flags[0] += "-T";
+ 	    *p->flags[0] += target_machine;
+ 	}
+diff -ru suifhome.orig/src/basesuif/snoot/config.h suifhome/src/basesuif/snoot/config.h
+--- suifhome.orig/src/basesuif/snoot/config.h	Thu Oct 28 23:15:39 1999
++++ suifhome/src/basesuif/snoot/config.h	Mon Jul 15 16:18:39 2002
+@@ -467,6 +467,106 @@
+ 
+ 
+ 
++                        TARGET  (i386-redhat-linux, i386_redhat_linux)
++
++   IS_BIG_ENDIAN  (FALSE)
++
++ADDRESSABLE_SIZE  ( 8)
++  CHAR_IS_SIGNED  (TRUE)
++
++       TYPE_SIZE  (char,  8)
++      TYPE_ALIGN  (char,  8)
++
++       TYPE_SIZE  (short, 16)
++      TYPE_ALIGN  (short, 16)
++
++       TYPE_SIZE  (int, 32)
++      TYPE_ALIGN  (int, 32)
++
++       TYPE_SIZE  (long, 32)
++      TYPE_ALIGN  (long, 32)
++
++       TYPE_SIZE  (longlong, 32)
++      TYPE_ALIGN  (longlong, 32)
++
++       TYPE_SIZE  (float, 32)
++      TYPE_ALIGN  (float, 32)
++
++       TYPE_SIZE  (double, 64)
++      TYPE_ALIGN  (double, 32)
++
++       TYPE_SIZE  (longdouble, 96)
++      TYPE_ALIGN  (longdouble, 32)
++
++       TYPE_SIZE  (ptr, 32)
++      TYPE_ALIGN  (ptr, 32)
++
++     ARRAY_ALIGN  ( 8)
++
++    STRUCT_ALIGN  ( 8)
++
++   PTR_DIFF_TYPE  (C_int)
++
++         BUILTIN  ("__builtin_stdarg_start")
++
++         BUILTIN  ("__builtin_va_end")
++
++         BUILTIN  ("__builtin_va_arg arg1")
++
++         BUILTIN  ("__builtin_va_copy")
++
++         BUILTIN  ("__builtin_next_arg")
++
++
++                        TARGET  (ia64-redhat-linux, ia64_redhat_linux)
++
++   IS_BIG_ENDIAN  (FALSE)
++
++ADDRESSABLE_SIZE  ( 8)
++  CHAR_IS_SIGNED  (TRUE)
++
++       TYPE_SIZE  (char,  8)
++      TYPE_ALIGN  (char,  8)
++
++       TYPE_SIZE  (short, 16)
++      TYPE_ALIGN  (short, 16)
++
++       TYPE_SIZE  (int, 32)
++      TYPE_ALIGN  (int, 32)
++
++       TYPE_SIZE  (long, 64)
++      TYPE_ALIGN  (long, 64)
++
++       TYPE_SIZE  (longlong, 64)
++      TYPE_ALIGN  (longlong, 64)
++
++       TYPE_SIZE  (float, 32)
++      TYPE_ALIGN  (float, 32)
++
++       TYPE_SIZE  (double, 64)
++      TYPE_ALIGN  (double, 64)
++
++       TYPE_SIZE  (longdouble, 128)
++      TYPE_ALIGN  (longdouble, 128)
++
++       TYPE_SIZE  (ptr, 64)
++      TYPE_ALIGN  (ptr, 64)
++
++     ARRAY_ALIGN  ( 8)
++
++    STRUCT_ALIGN  ( 8)
++
++   PTR_DIFF_TYPE  (C_long)
++
++         BUILTIN  ("__builtin_stdarg_start")
++
++         BUILTIN  ("__builtin_va_end")
++
++         BUILTIN  ("__builtin_va_arg arg1")
++
++         BUILTIN  ("__builtin_va_copy")
++
++
+                         TARGET  (mips-sgi-irix5-64bit, mips_sgi_irix5_64bit)
+ 
+    IS_BIG_ENDIAN  (TRUE)

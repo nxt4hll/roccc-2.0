@@ -1,0 +1,38 @@
+Supported Debuggers.
+
+It is tricky to get some debuggers to debug into the shared
+libraries that are loaded.  Here's a trick for making sure that
+your library has been loaded before trying to place a debugging
+symbol.  The following is in gdb syntax.
+
+
+break main
+run
+break dll_init_hook
+continue
+
+Continue until your library name has been loaded (the first argument
+to this function is the library name.)
+
+break your_function_deep_in_dll
+disable  the dll_init_hook breakpoint
+
+----------------------
+Gdb also seems to have problems with dynamic overload resolution
+If you get errors like this:
+
+Cannot resolve method String::c_str to any overloaded instance
+
+Try
+	set overload-resolution off
+
+---------------------
+Other useful things:
+	set print vtbl on
+for an ObjectWrapper  obj:
+	p obj.print_debug()
+---------------------
+To run purify on suifdriver:
+
+cd ${NCIHOME}/suif/suif2b/basesuif/driver/
+gmake PURIFY=/bigtemp1/dlheine/purify-5.1-solaris2/purify PURIFY_SUFFIX=.pure CXXLINK=g++
