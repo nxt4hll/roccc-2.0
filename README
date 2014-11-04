@@ -9,3 +9,9 @@ Using one of the precompiled distributions is the easiest way to install and use
 
    We recommend that users compile all ROCCC code through Eclipse with the provided plugin instead of through the command line. Source code for the plugin can be found under the eclipse-plugin/ folder, but the JAR files can be found in any precompiled distribution. The plugin requires a very specific setup in the ROCCC installation directory.  We recommend anybody wishing to compile from source to install a precompiled distribution in a separate folder. Then update its bin/ and lib/ folders with the compiled execution files, and object files. This will ensure the install directory is correctly setup.
 
+
+----- ----- ----- ----- -----
+KNOWN BUGS
+----- ----- ----- ----- -----
+   * The temporal common subexpression elimination (TCSE) has not been fully tested with other optimization. Usage may cause valid C code to not compile through ROCCC.
+
