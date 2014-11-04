@@ -1,0 +1,692 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.eclipse.ui.views">
+      <view
+            category="ROCCCplugin.views.category"
+            class="rocccplugin.views.ROCCC_IPCores"
+            icon="icons/ipcores.png"
+            id="rocccplugin.views.ROCCC_IPCores"
+            name="ROCCC Library">
+      </view>
+      <category
+            id="ROCCCplugin.views.category"
+            name="ROCCC">
+      </category>
+      <view
+            category="ROCCCplugin.views.category"
+            class="rocccplugin.views.DebugVariables"
+            icon="icons/debug.png"
+            id="rocccplugin.views.debugVariables"
+            name="Debug Variables">
+      </view>
+   </extension>
+   <extension
+         point="org.eclipse.ui.commands">
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Create a new ROCCC Module"
+            id="rocccplugin.commands.createModule"
+            name="Create New Module">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Imports a component into the ROCCC database."
+            id="rocccplugin.commands.addComponent"
+            name="Add Component">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Resets the ROCCC compiler"
+            id="rocccplugin.commands.ResetCompiler"
+            name="Reset Compiler">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Build to Hardware"
+            id="rocccplugin.commands.compileIntoHardware"
+            name="Build to Hardware">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Opens the Preference Menu"
+            id="rocccplugin.commands.openPreferences"
+            name="Preferences">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="View your license information"
+            id="rocccplugin.commands.ViewLicenseInformation"
+            name="View License Information">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Opens the view that shows the IPCores"
+            id="rocccplugin.commands.showIPCores"
+            name="Open IPCores View">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Create New System"
+            id="rocccplugin.commands.createSystem"
+            name="Create New System">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Import ROCCC Module"
+            id="rocccplugin.commands.importModule"
+            name="Import Module">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Import ROCCC System"
+            id="rocccplugin.commands.importSystem"
+            name="Import System">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Opens roccc-library.h in the editor."
+            id="rocccplugin.commands.openRocccLibraryH"
+            name="Open roccc-library.h">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Opens Debug view on the side"
+            id="rocccplugin.commands.openDebugView"
+            name="Open Debug view">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Cancel the current compilations."
+            id="rocccplugin.commands.cancelCompile"
+            name="Cancel Compile">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Opens the list of platform connections for the given ROCCC system."
+            id="rocccplugin.commands.openPlatformConnections"
+            name="Open Platform Connections">
+      </command>
+      <command
+            description="Opens the ROCCC homepage in Eclipse"
+            id="rocccplugin.commands.ViewROCCCSite"
+            name="ROCCC Webpage">
+      </command>
+      <category
+            id="rocccplugin.commands.category"
+            name="ROCCCCommands">
+      </category>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Generates a VHDL testbench for the compiled ROCCC system."
+            id="rocccplugin.commands.generateTestbench"
+            name="Generate VHDL Testbench">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Creates a new instrinsic module for ROCCC."
+            id="rocccplugin.commands.createNewIntrinsic"
+            name="Create New Intrinsic">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Import a ROCCC intrinsic to the database."
+            id="rocccplugin.commands.importIntrinsic"
+            name="Import Intrinsic">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="View the list of intrinsic cores."
+            id="rocccplugin.commands.viewIntrinsics"
+            name="View Intrinsics">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            description="Check online for updates for ROCCC."
+            id="rocccplugin.commands.checkForUpdates"
+            name="Check for Updates">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            id="rocccplugin.commands.aboutROCCC"
+            name="About ROCCC">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            id="rocccplugin.commands.toggleDebugVariable"
+            name="Toggle Debug Value">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            id="rocccplugin.commands.viewDebugVariables"
+            name="View Debug Variables">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            id="rocccplugin.commands.viewUserManual"
+            name="User Manual">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            id="rocccplugin.commands.importExamples"
+            name="Load Examples">
+      </command>
+      <command
+            categoryId="rocccplugin.commands.category"
+            id="rocccplugin.commands.newProject"
+            name="New Project">
+      </command>
+   </extension>
+   <extension
+         id="ROCCC"
+         name="ROCCC"
+         point="org.eclipse.ui.menus">
+      <menuContribution
+            locationURI="menu:org.eclipse.ui.main.menu?after=additions">
+         <menu
+               id="ROCCCplugin.menus.ROCCCmenu"
+               label="ROCCC">
+            <command
+                  commandId="rocccplugin.commands.compileIntoHardware"
+                  icon="icons/buildToHardware.png"
+                  id="ROCCCplugin.menus.compileIntoHardwareButton"
+                  label="Build">
+            </command>
+            <separator
+                  name="ROCCCplugin.separator1"
+                  visible="true">
+            </separator>
+            <menu
+                  id="ROCCCplugin.menus.ROCCCNewMenu"
+                  label="New">
+               <command
+                     commandId="rocccplugin.commands.newProject"
+                     icon="icons/newProject.png"
+                     id="ROCCCplugin.menus.newProjectButton"
+                     label="Project"
+                     style="push">
+               </command>
+               <separator
+                     name="ROCCCplugin.separator5"
+                     visible="true">
+               </separator>
+               <command
+                     commandId="rocccplugin.commands.createModule"
+                     icon="icons/newModule.png"
+                     id="ROCCCplugin.menus.createModuleButton"
+                     label="Module"
+                     style="push">
+               </command>
+               <command
+                     commandId="rocccplugin.commands.createSystem"
+                     icon="icons/newSystem.png"
+                     id="ROCCCplugin.menus.createSystemButton"
+                     label="System"
+                     style="push">
+               </command>
+            </menu>
+            <menu
+                  id="ROCCCplugin.menus.ROCCCAddMenu"
+                  label="Add"
+                  mnemonic="I"
+                  tooltip="Import ROCCC Files">
+               <command
+                     commandId="rocccplugin.commands.addComponent"
+                     icon="icons/addIPCore.png"
+                     id="ROCCCplugin.menus.addComponentButton"
+                     label="IP Core"
+                     style="push">
+               </command>
+            </menu>
+            <menu
+                  id="ROCCCplugin.menus.ROCCCImportMenu"
+                  label="Import">
+               <command
+                     commandId="rocccplugin.commands.importModule"
+                     icon="icons/importModule.png"
+                     id="ROCCCplugin.menus.importModule"
+                     label="Module">
+               </command>
+               <command
+                     commandId="rocccplugin.commands.importSystem"
+                     icon="icons/importSystem.png"
+                     id="ROCCCplugin.menus.importSystem"
+                     label="System">
+               </command>
+            </menu>
+            <separator
+                  name="ROCCCplugin.separator2"
+                  visible="true">
+            </separator>
+            <menu
+                  id="ROCCCplugin.menus.ROCCCViewMenu"
+                  label="View">
+               <command
+                     commandId="rocccplugin.commands.showIPCores"
+                     icon="icons/ipcores.png"
+                     id="ROCCCplugin.menus.showIPCoresButton"
+                     label="ROCCC Library"
+                     style="push">
+               </command>
+               <command
+                     commandId="rocccplugin.commands.openRocccLibraryH"
+                     icon="icons/roccclibrary.png"
+                     id="ROCCCplugin.menus.openRocccLibraryHButton"
+                     label="roccc-library.h"
+                     style="push">
+               </command>
+               <command
+                     commandId="rocccplugin.commands.openDebugView"
+                     icon="icons/debug.png"
+                     id="ROCCCplugin.menus.openDebugViewButton"
+                     label="Debug View"
+                     style="push">
+               </command>
+            </menu>
+            <menu
+                  id="ROCCCplugin.menus.ROCCCManageMenu"
+                  label="Manage">
+               <command
+                     commandId="rocccplugin.commands.viewIntrinsics"
+                     icon="icons/intrinsics.png"
+                     id="ROCCCplugin.menus.viewIntrinsicsButton"
+                     label="Intrinsics"
+                     style="push">
+               </command>
+            </menu>
+            <menu
+                  id="ROCCCplugin.menus.ROCCCGenerateMenu"
+                  label="Generate">
+               <command
+                     commandId="rocccplugin.commands.generateTestbench"
+                     icon="icons/testbench.png"
+                     id="ROCCCplugin.menus.generateTestbenchButton"
+                     label="Testbench"
+                     style="push">
+               </command>
+            </menu>
+            <separator
+                  name="ROCCCplugin.separator3"
+                  visible="true">
+            </separator>
+            <menu
+                  label="Settings">
+               <command
+                     commandId="rocccplugin.commands.ResetCompiler"
+                     icon="icons/resetcompiler.png"
+                     id="ROCCCplugin.menus.resetCompilerMenuButton"
+                     label="Reset Database"
+                     style="push">
+               </command>
+               <command
+                     commandId="rocccplugin.commands.openPreferences"
+                     icon="icons/preferences.png"
+                     id="ROCCCplugin.menus.openPreferencesButton"
+                     style="push">
+               </command>
+            </menu>
+            <separator
+                  name="ROCCCplugin.separator4"
+                  visible="true">
+            </separator>
+            <menu
+                  id="ROCCCplugin.menus.ROCCCHelpMenu"
+                  label="Help"
+                  mnemonic="H">
+               <command
+                     commandId="rocccplugin.commands.viewUserManual"
+                     icon="icons/userManual.png"
+                     id="ROCCCplugin.menus.viewUserManualButton"
+                     style="push">
+               </command>
+               
+               <command
+                     commandId="rocccplugin.commands.importExamples"
+                     icon="icons/rocccexamples.png"
+                     id="ROCCCplugin.menus.importExamplesButton"
+                     style="push">
+               </command>
+               <separator
+                     name="ROCCCplugin.separator6"
+                     visible="true">
+               </separator>
+               <command
+                     commandId="rocccplugin.commands.checkForUpdates"
+                     icon="icons/update.png"
+                     id="ROCCCplugin.menus.checkForUpdatesButton"
+                     style="push">
+               </command>
+               <command
+                     commandId="rocccplugin.commands.ViewROCCCSite"
+                     icon="icons/homepage.png"
+                     id="ROCCCplugin.menus.viewROCCCSiteButton"
+                     style="push">
+               </command>
+               <command
+                     commandId="rocccplugin.commands.aboutROCCC"
+                     icon="icons/ROCCC_Mini_Icon.png"
+                     id="ROCCCplugin.menus.aboutROCCCButton"
+                     style="push">
+               </command>
+            </menu>
+         </menu>
+      </menuContribution>
+      <menuContribution
+            locationURI="toolbar:org.eclipse.ui.main.toolbar?after=additions">
+         <toolbar
+               id="rocccplugin.toolbars.main">
+            <command
+                  commandId="rocccplugin.commands.compileIntoHardware"
+                  icon="icons/buildToHardware.png"
+                  id="rocccplugin.toolbars.compileIntoHardwareButton"
+                  style="push"
+                  tooltip="Build to Hardware">
+            </command>
+            <command
+                  commandId="rocccplugin.commands.cancelCompile"
+                  icon="icons/cancelBuild.png"
+                  id="rocccplugin.toolbars.cancelCompileButton"
+                  style="push"
+                  tooltip="Cancel the current ROCCC compilation.">
+            </command>
+            <separator
+                  name="ROCCCplugin.toolbar.seperator1"
+                  visible="true">
+            </separator>
+            <command
+                  commandId="rocccplugin.commands.createModule"
+                  icon="icons/newModule.png"
+                  id="rocccplugin.toolbars.createModuleButton"
+                  style="push"
+                  tooltip="Create ROCCC Module">
+            </command>
+            <command
+                  commandId="rocccplugin.commands.createSystem"
+                  icon="icons/newSystem.png"
+                  id="rocccplugin.toolbars.createSystemButton"
+                  style="push"
+                  tooltip="Create ROCCC System">
+            </command>
+            <separator
+                  name="ROCCCplugin.toolbar.seperator2"
+                  visible="true">
+            </separator>
+            <command
+                  commandId="rocccplugin.commands.viewIntrinsics"
+                  icon="icons/intrinsics.png"
+                  id="rocccplugin.toolbars.manageIntrinsicsButton"
+                  style="push"
+                  tooltip="Manage Intrinsics">
+            </command>
+         </toolbar>
+      </menuContribution>
+      <menuContribution
+            locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+         <menu
+               icon="icons/ROCCC_Mini_Icon.png"
+               id="ROCCCplugin.menus.ROCCCcontextmenu"
+               label="ROCCC">
+            <command
+                  commandId="rocccplugin.commands.compileIntoHardware"
+                  icon="icons/buildToHardware.png"
+                  id="ROCCCplugin.menus.compileIntoHardwareContextButton"
+                  label="Build"
+                  style="push">
+            </command>
+            <command
+                  commandId="rocccplugin.commands.toggleDebugVariable"
+                  id="ROCCCplugin.menues.toggleDebugVariableButton"
+                  label="Toggle Debug Value"
+                  style="push">
+            </command>
+         </menu>
+      </menuContribution>
+   </extension>
+   <extension
+         point="org.eclipse.ui.handlers">
+      <handler
+            class="rocccplugin.handlers.ResetCompilerHandler"
+            commandId="rocccplugin.commands.ResetCompiler">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ViewLicenseInformationHandler"
+            commandId="rocccplugin.commands.ViewLicenseInformation">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.CompileIntoHardwareHandler"
+            commandId="rocccplugin.commands.compileIntoHardware">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.AddComponentHandler"
+            commandId="rocccplugin.commands.addComponent">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.OpenPreferenceHandler"
+            commandId="rocccplugin.commands.openPreferences">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ShowIPCoresHandler"
+            commandId="rocccplugin.commands.showIPCores">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.CreateModuleHandler"
+            commandId="rocccplugin.commands.createModule">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.CreateSystemHandler"
+            commandId="rocccplugin.commands.createSystem">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ImportModuleHandler"
+            commandId="rocccplugin.commands.importModule">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.OpenROCCCLibraryHandler"
+            commandId="rocccplugin.commands.openRocccLibraryH">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ViewDebugVariables"
+            commandId="rocccplugin.commands.openDebugView">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ImportSystemHandler"
+            commandId="rocccplugin.commands.importSystem">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.CancelCompileHandler"
+            commandId="rocccplugin.commands.cancelCompile">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.OpenPlatformConnectionsHandler"
+            commandId="rocccplugin.commands.openPlatformConnections">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ViewROCCCSiteHandler"
+            commandId="rocccplugin.commands.ViewROCCCSite">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.GenerateTestbenchHandler"
+            commandId="rocccplugin.commands.generateTestbench">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ImportIntrinsicHandler"
+            commandId="rocccplugin.commands.importIntrinsic">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ViewIntrinsicsHandler"
+            commandId="rocccplugin.commands.viewIntrinsics">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.CreateNewIntrinsicHandler"
+            commandId="rocccplugin.commands.createNewIntrinsic">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.CheckForUpdatesHandler"
+            commandId="rocccplugin.commands.checkForUpdates">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.AboutROCCCHandler"
+            commandId="rocccplugin.commands.aboutROCCC">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ToggleDebugVariable"
+            commandId="rocccplugin.commands.toggleDebugVariable">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ViewDebugVariables"
+            commandId="rocccplugin.commands.viewDebugVariables">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ViewUserManualHandler"
+            commandId="rocccplugin.commands.viewUserManual">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.ImportExamplesHandler"
+            commandId="rocccplugin.commands.importExamples">
+      </handler>
+      <handler
+            class="rocccplugin.handlers.NewProjectHandler"
+            commandId="rocccplugin.commands.newProject">
+      </handler>
+   </extension>
+   <extension
+         point="org.eclipse.ui.newWizards">
+      <wizard
+            class="rocccplugin.wizards.AddComponentWizard"
+            descriptionImage="icons/addIPCore.png"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.addComponent"
+            name="Add Component Wizard"
+            project="false">
+         <description>
+            Add a new ROCCC component.
+         </description>
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.CreateModuleWizard"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.createModule"
+            name="Create Module Wizard"
+            project="false">
+         <description>
+            Create a new ROCCC module.
+         </description>
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.CreateSystemWizard"
+            descriptionImage="icons/ROCCC_Mini_Icon.png"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.createSystem"
+            name="Create System Wizard"
+            project="false">
+         <description>
+            Create a new ROCCC system.
+         </description>
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.ImportSystemWizard"
+            descriptionImage="icons/ROCCC_Mini_Icon.png"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.importSystem"
+            name="Import ROCCC System"
+            project="false">
+         <description>
+            Import a ROCCC System into a Project.
+         </description>
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.ImportModuleWizard"
+            descriptionImage="icons/ROCCC_Mini_Icon.png"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.importModule"
+            name="Import ROCCC Module"
+            project="false">
+         <description>
+            Import a ROCCC Module into a Project
+         </description>
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.CompileWizard"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.compilerFlagsWizard"
+            name="Compiler Flags Wizard"
+            project="false">
+         <description>
+            Select Compile Flags
+         </description>
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.PlatformConnectionsWizard"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.PlatformConnectionsWizard"
+            name="Platform Connections Wizard"
+            project="false">
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.ImportIntrinsicWizard"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.ImportIntrinsicWizard"
+            name="Import Instrinsic Wizard"
+            project="false">
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.GenerateTestbenchWizard"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.GenerateTestbenchWizard"
+            name="Generate Testbench Wizard"
+            project="false">
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.ViewIntrinsicsWizard"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.ViewIntrinsicsWizard"
+            name="View Intrinsics Wizard"
+            project="false">
+      </wizard>
+      <wizard
+            class="rocccplugin.wizards.CreateNewIntrinsicWizard"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.wizards.CreateNewIntrinsicWizard"
+            name="Create New Intrinsic Wizard"
+            project="true">
+      </wizard>
+   </extension>
+   <extension
+         id="rocccplugin.preferences.view"
+         point="org.eclipse.ui.preferencePages">
+      <page
+            class="rocccplugin.preferences.ROCCCPreferencePage"
+            id="rocccplugin.preferences.ROCCCPreferencePage"
+            name="ROCCC">
+      </page>
+   </extension>
+   <extension
+         point="org.eclipse.ui.startup">
+      <startup
+            class="rocccplugin.Activator">
+      </startup>
+   </extension>
+   <extension
+         point="org.eclipse.ui.perspectives">
+      <perspective
+            class="rocccplugin.perspectives.Perspective"
+            icon="icons/ROCCC_Mini_Icon.png"
+            id="ROCCCplugin.ROCCCPerspective"
+            name="ROCCC Development">
+         <description>
+            Set up for ROCCC development.
+         </description>
+      </perspective>
+   </extension>
+   <extension
+         point="org.eclipse.ui.perspectiveExtensions">
+      <perspectiveExtension
+            targetID="ROCCCplugin.ROCCCPerspective">
+         <hiddenToolBarItem
+               id="th">
+         </hiddenToolBarItem>
+      </perspectiveExtension>
+   </extension>
+
+</plugin>
