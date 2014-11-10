@@ -1,51 +1,61 @@
-Installing ROCCC:
+The steps provided here are for install the source code on CentOS.
 
-1.) Install a valid ROCCC Binary
-   $ tar -zxvf roccc-0.7.5-distribution-CentOS64.tar.gz
-   $ cd roccc-0.7.5-distribution-CentOS64/
+0.) Create a directory to install the source code
+$ mkdir roccc/
+$ cd roccc/
+$ export DIR=$PWD
 
-2.) Install the modified gcc-4.0.2 compiler
-   $ export DIR=$PWD
-   $ tar -zxvf gcc-4.0.2.modified.tar.gz
-   $ mkdir gcc-4.0.2-build gcc-4.0.2-install
-   $ cd gcc-4.0.2-build
-   $ ../gcc-4.0.2/configure --enable-languages=c,c++ --prefix=$DIR/gcc-4.0.2-install --disable-multilib
-   $ make
-   $ make install
+1.) Install and verify a pre-compiled distribution. This step is 
+   recommended to interface with the Eclipse GUI.
 
-3.) Install the llvm-gcc4.2 compiler
-   $ cd $DIR
-   $ tar -zxvf llvm-gcc4.2-2.3-x86_64-linux-CentOS.tar.gz
-   $ export LLVM_GCC_EXE=$DIR/llvm-gcc4.2-2.3-x86_64-linux-CentOS/bin/x86_64-unknown-linux-gnu-llvm-gcc
+2.) Copy the dependency and source files to the install directory
+$ cp gcc-4.0.2.modified.tar.gz $DIR
+$ cp llvm-gcc4.2-2.3-x86_64-linux-CentOS.tar.gz $DIR
+$ cp -r roccc-compiler/ $DIR
 
-4.) Compile Hi-CIRRF code
-   $ cd $DIR
-   $ cd chat-compiler-X.X.X/src/
-   $ ./install-roccc --with-CC_CXX_PATH=$DIR/gcc-4.0.2-install/bin/ --FORCE
-   $ source ../use_suif.sh
-   $ make
+3.) Install the modified gcc-4.0.2 compiler
+$ cd $DIR
+$ tar -zxvf gcc-4.0.2.modified.tar.gz
+$ mkdir gcc-4.0.2-build gcc-4.0.2-install
+$ cd gcc-4.0.2-build
+$ ../gcc-4.0.2/configure --enable-languages=c,c++ --prefix=$DIR/gcc-4.0.2-install --disable-multilib
+$ make
+$ make install
 
-5.) Compile SQLite database
-   $ cd $DIR
-   $ cd chat-compiler-X.X.X/src/llvm-2.3/sqlite-3.6.11
-   $ ./configure
-   $ make
+4.) Install the llvm-gcc4.2 compiler
+$ cd $DIR
+$ tar -zxvf llvm-gcc4.2-2.3-x86_64-linux-CentOS.tar.gz
+$ export LLVM_GCC_EXE=$DIR/llvm-gcc4.2-2.3-x86_64-linux-CentOS/bin/x86_64-unknown-linux-gnu-llvm-gcc
 
-6.) Compile Lo-CIRRF code
-   $ cd $DIR
-   $ cd chat-compiler-X.X.X/src/llvm-2.3
-   $ export LLVM_PATH=$PWD
-   $ ./configure --enable-optimized --enable-targets=cbe,cpp
-   $ make
+5.) Compile Hi-CIRRF code
+$ cd $DIR
+$ cd roccc-compiler/src/
+$ ./install-roccc --with-CC_CXX_PATH=$DIR/gcc-4.0.2-install/bin/
+$ source ../use_suif.sh
+$ make
+$ make
 
-7.) Compile tools
-   $ cd $DIR
-   $ cd chat-compiler-X.X.X/tools/8.) Compile tools
-   $ make
+6.) Compile SQLite database
+$ cd $DIR
+$ cd roccc-compiler/src/llvm-2.3/sqlite-3.6.11
+$ ./configure
+$ make
 
-8.) Overwrite the bin/ and lib/ directories from the binary install with the compiled versions.
+7.) Compile Lo-CIRRF code
+$ cd $DIR
+$ cd roccc-compiler/src/llvm-2.3
+$ export LLVM_PATH=$PWD
+$ ./configure --enable-optimized --enable-targets=cbe,cpp
+$ make
 
-9.) Final setups
-   * Source use_suif.sh in the .bashrc file
-   * export LLVM_PATH in the .bashrc file
-   * update eclipses .JAR file with the one from CHAT
+8.) Compile tools
+$ cd $DIR
+$ cd roccc-compiler/src/tools/
+$ make
+
+9.) Update the bin/ and lib/ files
+* do not change gcc2suif
+
+10.) Final setups
+* Source use_suif.sh in the .bashrc file
+* export LLVM_PATH in the .bashrc file
