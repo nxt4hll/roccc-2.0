@@ -53,8 +53,9 @@ $ cd $DIR
 $ cd roccc-compiler/src/tools/
 $ make
 
-9.) Update the bin/ and lib/ files
-* do not change gcc2suif
+9.) Update the bin/ and lib/ files found in the pre-compiled install directory
+* Helper scripts can be found under roccc-compiler/src/scripts/transfer_files
+* Do not change gcc2suif
 
 10.) Final setups
 * Source use_suif.sh in the .bashrc file
