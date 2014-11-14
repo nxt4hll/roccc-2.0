@@ -451,7 +451,7 @@ void ScriptGenerator::OutputScriptFile()
   fout << "#! /bin/bash" << std::endl ;
   fout << std::endl ;
   
-  fout << "gcc2suif " << compileFile << ".c " //<< outputDirectory
+  fout << "gcc2suif " << outputDirectory << " " << compileFile << ".c "
        << std::endl ;
   fout << std::endl ;
 
