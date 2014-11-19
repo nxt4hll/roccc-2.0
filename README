@@ -5,7 +5,10 @@ Using one of the precompiled distributions is the easiest way to install and use
    Ubuntu   (14.04 Trusty Tahr)
    CentOS   (5.x, 6.x)
 
-   The source code can be found under the roccc-compiler/ folder, and the compilation steps are outlined in the INSTALL file. Installation from source has only been verified on OS X Snow Leopard, and CentOS 5.9. 
+   The source code can be found under the roccc-compiler/ folder, and the compilation steps are outlined in the INSTALL file. Installation from source has only been verified on OS X Snow Leopard, and CentOS 5.9, CentOS 5.11. 
+
+   A CentOS 5.11 virtual machine has been created with ROCCC installed from source. It can be downloaded from:
+   http://www.jacquardcomputing.com/virtual_machines/index.html
 
    We recommend that users compile all ROCCC code through Eclipse with the provided plugin instead of through the command line. Source code for the plugin can be found under the eclipse-plugin/ folder, but the JAR files can be found in any precompiled distribution. The plugin requires a very specific setup in the ROCCC installation directory.  We recommend anybody wishing to compile from source to install a precompiled distribution in a separate folder. Then update its bin/ and lib/ folders with the compiled execution files, and object files. This will ensure the install directory is correctly setup.
 
